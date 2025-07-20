@@ -1,49 +1,50 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { v4 as uuidV4 } from "uuid"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Plus, Users, Sparkles, ArrowRight } from "lucide-react"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { v4 as uuidV4 } from "uuid";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Plus, Users, Sparkles, ArrowRight } from "lucide-react";
+import Sparkle from "./assets/sparkle";
 
 export default function Home() {
-  const router = useRouter()
-  const [roomId, setRoomId] = useState("")
-  const [isCreating, setIsCreating] = useState(false)
-  const [isJoining, setIsJoining] = useState(false)
+  const router = useRouter();
+  const [roomId, setRoomId] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
   const createAndJoin = async () => {
-    setIsCreating(true)
-    const newRoomId = uuidV4()
+    setIsCreating(true);
+    const newRoomId = uuidV4();
 
     // Add a small delay for better UX
     setTimeout(() => {
-      router.push(`/${newRoomId}`)
-    }, 500)
-  }
+      router.push(`/${newRoomId}`);
+    }, 500);
+  };
 
   const joinRoom = async () => {
     if (roomId.trim()) {
-      setIsJoining(true)
+      setIsJoining(true);
       setTimeout(() => {
-        router.push(`/${roomId.trim()}`)
-      }, 500)
+        router.push(`/${roomId.trim()}`);
+      }, 500);
     } else {
       // Add shake animation for invalid input
-      const input = document.querySelector("input")
-      input?.classList.add("animate-pulse")
-      setTimeout(() => input?.classList.remove("animate-pulse"), 500)
+      const input = document.querySelector("input");
+      input?.classList.add("animate-pulse");
+      setTimeout(() => input?.classList.remove("animate-pulse"), 500);
     }
-  }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      joinRoom()
+      joinRoom();
     }
-  }
+  };
 
   return (
     <main className="relative min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden">
@@ -59,15 +60,14 @@ export default function Home() {
           {/* Header Section */}
           <div className="space-y-4 animate-fade-in">
             <div className="flex items-center justify-center space-x-2 mb-2">
-              <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl shadow-lg transform rotate-12 hover:rotate-0 transition-transform duration-300">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
+              <Sparkle />
               <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Pockets
               </h1>
             </div>
             <p className="text-lg text-gray-600 max-w-sm mx-auto leading-relaxed">
-              Create instant collaborative spaces or join existing ones with your friends
+              Create instant collaborative spaces or join existing ones with
+              your friends
             </p>
           </div>
 
@@ -80,7 +80,9 @@ export default function Home() {
                   <Plus className="w-5 h-5" />
                   <span className="font-semibold">Create New Room</span>
                 </div>
-                <p className="text-sm text-gray-500">Start a fresh collaborative space</p>
+                <p className="text-sm text-gray-500">
+                  Start a fresh collaborative space
+                </p>
                 <Button
                   onClick={createAndJoin}
                   disabled={isCreating}
@@ -109,7 +111,9 @@ export default function Home() {
                   <Users className="w-5 h-5" />
                   <span className="font-semibold">Join Existing Room</span>
                 </div>
-                <p className="text-sm text-gray-500">Enter a room ID to join others</p>
+                <p className="text-sm text-gray-500">
+                  Enter a room ID to join others
+                </p>
                 <div className="space-y-3">
                   <Input
                     type="text"
@@ -144,7 +148,9 @@ export default function Home() {
 
           {/* Footer */}
           <div className="pt-8 text-center">
-            <p className="text-sm text-gray-400">Secure • Fast • Collaborative</p>
+            <p className="text-sm text-gray-400">
+              Secure • Fast • Collaborative
+            </p>
           </div>
         </div>
       </div>
@@ -160,11 +166,11 @@ export default function Home() {
             transform: translateY(0);
           }
         }
-        
+
         .animate-fade-in {
           animation: fade-in 0.6s ease-out;
         }
       `}</style>
     </main>
-  )
+  );
 }
