@@ -17,13 +17,7 @@ export async function getDb(): Promise<Database> {
       driver: sqlite3.Database,
     });
 
-    // rooms, here only have a window of 2 peers
-    // so we can store the offer and answer in the same table
-    // and the ice candidates for both peers
-    // will be stored in the same table as well
-    // this is a simple implementation for the sake of this example
-    // in a real-world application, you might want to have a more complex structure
-    // or use a different database system
+    // we will be storing 
 
     await db.exec(`
       CREATE TABLE IF NOT EXISTS rooms (
