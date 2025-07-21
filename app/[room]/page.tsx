@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useEffect, useRef, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Mic,
   MicOff,
@@ -22,83 +22,195 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
-} from "lucide-react"
+} from "lucide-react";
 
 interface ChatMessage {
-  id: string
-  user: string
-  message: string
-  timestamp: Date
+  id: string;
+  user: string;
+  message: string;
+  timestamp: Date;
+}
+
+interface IceCandidate {
+  candidate: string;
+  sdpMid: string | null;
+  sdpMLineIndex: number | null;
 }
 
 export default function Room() {
-  const localVideoRef = useRef<HTMLVideoElement>(null)
-  const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  const chatContainerRef = useRef<HTMLDivElement>(null)
-  const params = useParams()
-  const router = useRouter()
-  const roomId = params.room as string
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  const pc = useRef<RTCPeerConnection | null>(null);
+
+  const localStream = useRef<MediaStream | null>(null);
+
+  const dataChannel = useRef<RTCDataChannel | null>(null);
+
+  const params = useParams();
+  const router = useRouter();
+  const roomId = params.room as string;
 
   // States
-  const [isMuted, setIsMuted] = useState(false)
-  const [isVideoOff, setIsVideoOff] = useState(false)
-  const [isSpeakerOff, setIsSpeakerOff] = useState(false)
-  const [showChat, setShowChat] = useState(false)
-  const [isMinimized, setIsMinimized] = useState(false)
-  const [chatMessage, setChatMessage] = useState("")
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isSpeakerOff, setIsSpeakerOff] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
       user: "System",
-      message: "Welcome to the room! Share the room ID with others to invite them.",
+      message:
+        "Welcome to the room! Share the room ID with others to invite them.",
       timestamp: new Date(),
     },
-  ])
-  const [participantCount, setParticipantCount] = useState(1)
-  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting")
-  const [roomCopied, setRoomCopied] = useState(false)
+  ]);
+  const [participantCount, setParticipantCount] = useState(1);
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("connecting");
+  const [roomCopied, setRoomCopied] = useState(false);
+
+  const isCaller = useRef(false);
+  // State to track which ICE candidates have already been processed
+  const processedIceCandidates = useRef(new Set<string>());
+
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // WebRTC logic will go here
-    console.log(`Joining room: ${roomId}`)
+    pc.current = new RTCPeerConnection({
+      iceServers: [
+        {
+          urls: [
+            "stun:stun.l.google.com:19302",
+            "stun:stun1.l.google.com:19302",
+            "stun:stun2.l.google.com:19302",
+          ],
+        },
+      ],
+      iceCandidatePoolSize: 10,
+    });
 
-    // Simulate connection
-    setTimeout(() => {
-      setConnectionStatus("connected")
-    }, 2000)
-  }, [roomId])
+    pc.current.onicecandidate = (eve) => {
+      if (eve.candidate) {
+        // Send the new ICE candidate to the signaling server
+        fetch("api/signaling", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            roomId,
+            type: isCaller.current
+              ? "offer_ice_candidates"
+              : "answer_ice_candidates",
+            data: eve.candidate.toJSON(),
+          }),
+        });
+      }
+    };
+
+    pc.current.ontrack = (eve) => {
+      if (remoteVideoRef.current && eve.streams.length > 0) {
+        remoteVideoRef.current.srcObject = eve.streams[0];
+      }
+    };
+
+    pc.current.ondatachannel = (eve) => {
+      dataChannel.current = eve.channel;
+      setupDataChannel();
+    };
+
+    const startConnection = async () => {
+      try {
+        localStream.current = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream.current;
+        }
+
+        localStream.current.getTracks().forEach((track) => {
+          pc.current?.addTrack(track, localStream.current!);
+        });
+
+        pollForSignalingData();
+      } catch (error) {
+        console.error("Error accessing media devices.", error);
+        alert(
+          "Could not access camera or microphone. Please check permissions and try again."
+        );
+        router.push("/"); // Redirect to home on error
+      }
+
+      startConnection();
+
+      return () => {
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current);
+        }
+
+        // Stop all media tracks
+        localStream.current?.getTracks().forEach((track) => track.stop());
+        // Close the peer connection
+        pc.current?.close();
+      };
+    };
+  }, [roomId, router]);
+
+
+
+  const pollForSignalingData = () => {
+    
+  }
+
+  // useEffect(() => {
+  //   // WebRTC logic will go here
+  //   console.log(`Joining room: ${roomId}`)
+
+  //   // Simulate connection
+  //   setTimeout(() => {
+  //     setConnectionStatus("connected")
+  //   }, 2000)
+  // }, [roomId])
 
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
     }
-  }, [chatMessages])
+  }, [chatMessages]);
 
   const toggleMute = () => {
-    setIsMuted(!isMuted)
-  }
+    setIsMuted(!isMuted);
+  };
 
   const toggleVideo = () => {
-    setIsVideoOff(!isVideoOff)
-  }
+    setIsVideoOff(!isVideoOff);
+  };
 
   const toggleSpeaker = () => {
-    setIsSpeakerOff(!isSpeakerOff)
-  }
+    setIsSpeakerOff(!isSpeakerOff);
+  };
 
   const leaveRoom = () => {
-    router.push("/")
-  }
+    router.push("/");
+  };
 
   const copyRoomId = async () => {
     try {
-      await navigator.clipboard.writeText(roomId)
-      setRoomCopied(true)
-      setTimeout(() => setRoomCopied(false), 2000)
+      await navigator.clipboard.writeText(roomId);
+      setRoomCopied(true);
+      setTimeout(() => setRoomCopied(false), 2000);
     } catch (err) {
-      console.error("Failed to copy room ID:", err)
+      console.error("Failed to copy room ID:", err);
     }
-  }
+  };
 
   const sendMessage = () => {
     if (chatMessage.trim()) {
@@ -107,18 +219,18 @@ export default function Room() {
         user: "You",
         message: chatMessage.trim(),
         timestamp: new Date(),
-      }
-      setChatMessages([...chatMessages, newMessage])
-      setChatMessage("")
+      };
+      setChatMessages([...chatMessages, newMessage]);
+      setChatMessage("");
     }
-  }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+      e.preventDefault();
+      sendMessage();
     }
-  }
+  };
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white overflow-hidden">
@@ -139,8 +251,8 @@ export default function Room() {
                     connectionStatus === "connected"
                       ? "bg-green-400"
                       : connectionStatus === "connecting"
-                        ? "bg-yellow-400 animate-pulse"
-                        : "bg-red-400"
+                      ? "bg-yellow-400 animate-pulse"
+                      : "bg-red-400"
                   }`}
                 ></div>
                 <span className="capitalize">{connectionStatus}</span>
@@ -170,19 +282,32 @@ export default function Room() {
       {/* Main Content */}
       <div className="flex-1 flex pt-20">
         {/* Video Area */}
-        <div className={`flex-1 relative transition-all duration-300 ${showChat ? "mr-80" : ""}`}>
+        <div
+          className={`flex-1 relative transition-all duration-300 ${
+            showChat ? "mr-80" : ""
+          }`}
+        >
           <div className="h-full flex flex-col">
             {/* Remote Video */}
             <div className="flex-1 relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg m-4 overflow-hidden shadow-2xl">
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center space-y-4">
                   <div className="w-24 h-24 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
                     <Users className="w-12 h-12 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-300">Waiting for others...</h2>
-                    <p className="text-sm text-gray-500 mt-1">Share the room ID to invite participants</p>
+                    <h2 className="text-xl font-semibold text-gray-300">
+                      Waiting for others...
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Share the room ID to invite participants
+                    </p>
                   </div>
                 </div>
               </div>
@@ -199,7 +324,13 @@ export default function Room() {
                 isMinimized ? "w-16 h-12" : ""
               }`}
             >
-              <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
               {isVideoOff && (
                 <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
                   <VideoOff className="w-8 h-8 text-gray-400" />
@@ -216,7 +347,11 @@ export default function Room() {
                 size="sm"
                 className="absolute top-2 right-2 w-6 h-6 p-0 bg-black/50 hover:bg-black/70 transition-colors"
               >
-                {isMinimized ? <Maximize2 className="w-3 h-3" /> : <Minimize2 className="w-3 h-3" />}
+                {isMinimized ? (
+                  <Maximize2 className="w-3 h-3" />
+                ) : (
+                  <Minimize2 className="w-3 h-3" />
+                )}
               </Button>
             </div>
           </div>
@@ -236,22 +371,41 @@ export default function Room() {
               </h3>
             </div>
 
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto p-4 space-y-3"
+            >
               {chatMessages.map((msg) => (
-                <div key={msg.id} className={`${msg.user === "You" ? "ml-4" : msg.user === "System" ? "" : "mr-4"}`}>
+                <div
+                  key={msg.id}
+                  className={`${
+                    msg.user === "You"
+                      ? "ml-4"
+                      : msg.user === "System"
+                      ? ""
+                      : "mr-4"
+                  }`}
+                >
                   <div
                     className={`rounded-lg p-3 ${
                       msg.user === "You"
                         ? "bg-indigo-600 ml-auto max-w-[80%]"
                         : msg.user === "System"
-                          ? "bg-gray-700 text-center text-sm"
-                          : "bg-gray-700 max-w-[80%]"
+                        ? "bg-gray-700 text-center text-sm"
+                        : "bg-gray-700 max-w-[80%]"
                     }`}
                   >
-                    {msg.user !== "System" && <div className="text-xs text-gray-300 mb-1">{msg.user}</div>}
+                    {msg.user !== "System" && (
+                      <div className="text-xs text-gray-300 mb-1">
+                        {msg.user}
+                      </div>
+                    )}
                     <div className="text-sm">{msg.message}</div>
                     <div className="text-xs text-gray-400 mt-1">
-                      {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {msg.timestamp.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </div>
                   </div>
                 </div>
@@ -267,7 +421,11 @@ export default function Room() {
                   placeholder="Type a message..."
                   className="flex-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-indigo-500"
                 />
-                <Button onClick={sendMessage} size="sm" className="bg-indigo-600 hover:bg-indigo-700 transition-colors">
+                <Button
+                  onClick={sendMessage}
+                  size="sm"
+                  className="bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                >
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
@@ -289,7 +447,11 @@ export default function Room() {
                 : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
             }`}
           >
-            {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isMuted ? (
+              <MicOff className="w-5 h-5" />
+            ) : (
+              <Mic className="w-5 h-5" />
+            )}
           </Button>
 
           <Button
@@ -302,7 +464,11 @@ export default function Room() {
                 : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
             }`}
           >
-            {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+            {isVideoOff ? (
+              <VideoOff className="w-5 h-5" />
+            ) : (
+              <Video className="w-5 h-5" />
+            )}
           </Button>
 
           <Button
@@ -315,7 +481,11 @@ export default function Room() {
                 : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
             }`}
           >
-            {isSpeakerOff ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            {isSpeakerOff ? (
+              <VolumeX className="w-5 h-5" />
+            ) : (
+              <Volume2 className="w-5 h-5" />
+            )}
           </Button>
 
           <Button
@@ -358,5 +528,5 @@ export default function Room() {
         <div className="font-mono text-sm text-white">{roomId}</div>
       </div>
     </div>
-  )
+  );
 }
