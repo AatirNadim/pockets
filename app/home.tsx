@@ -42,10 +42,10 @@ export default function Home() {
         console.log("WebSocket message received --> ", message);
 
         switch (message.type) {
-          case "join-room":
+          case "user-joined":
             toast.success(
               `Joined room ${message.roomId} as ${
-                message.userName || message.userId
+                message.user.name || message.user.id
               }`
             );
             break;
@@ -67,7 +67,7 @@ export default function Home() {
     };
   }, [roomId]);
 
-  const sendWsMessage = (message: any) => {
+  const sendWsMessage = (message: WebSocketMessage) => {
     try {
       if (ws.current?.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify(message));
@@ -79,34 +79,49 @@ export default function Home() {
     }
   };
 
-  // const createAndJoin = async () => {
-  //   setIsCreating(true);
-  //   const newRoomId = uuidV4();
+  const createAndJoin = async () => {
+    try {
+      setIsCreating(true);
+      const newRoomId = uuidV4();
 
-  //   // Add a small delay for better UX
-  //   setTimeout(() => {
-  //     router.push(`/${newRoomId}`);
-  //   }, 500);
+      setRoomId(() => newRoomId);
 
-  // const joinRoom = async () => {
-  //   if (roomId.trim()) {
-  //     setIsJoining(true);
-  //     setTimeout(() => {
-  //       router.push(`/${roomId.trim()}`);
-  //     }, 500);
-  //   } else {
-  //     // Add shake animation for invalid input
-  //     const input = document.querySelector("input");
-  //     input?.classList.add("animate-pulse");
-  //     setTimeout(() => input?.classList.remove("animate-pulse"), 500);
-  //   }
-  // };
+      const userId = uuidV4();
 
-  // const handleKeyPress = (e: React.KeyboardEvent) => {
-  //   if (e.key === "Enter") {
-  //     joinRoom();
-  //   }
-  // };
+      sendWsMessage({
+        type: "join-room",
+        roomId: newRoomId,
+        userId,
+        userName: `User-${userId.slice(0, 8)}`,
+      });
+    } catch (error) {
+      console.error("Error creating room:", error);
+      toast.error("Failed to create room. Please try again.");
+    } finally {
+      setIsCreating(false);
+      setRoomId(roomId);
+    }
+  };
+
+  const joinRoom = async () => {
+    if (roomId.trim()) {
+      setIsJoining(true);
+      setTimeout(() => {
+        router.push(`/${roomId.trim()}`);
+      }, 500);
+    } else {
+      // Add shake animation for invalid input
+      const input = document.querySelector("input");
+      input?.classList.add("animate-pulse");
+      setTimeout(() => input?.classList.remove("animate-pulse"), 500);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      joinRoom();
+    }
+  };
 
   return (
     <main className="relative min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden">
@@ -153,7 +168,7 @@ export default function Home() {
                   Start a fresh collaborative space
                 </p>
                 <Button
-                  // onClick={createAndJoin}
+                  onClick={createAndJoin}
                   disabled={isCreating}
                   className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
