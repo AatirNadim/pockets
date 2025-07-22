@@ -1,0 +1,21 @@
+{
+  "name": "pockets-signaling-server",
+  "version": "1.0.0",
+  "description": "WebSocket signaling server for Pockets WebRTC app",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "tsx watch index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

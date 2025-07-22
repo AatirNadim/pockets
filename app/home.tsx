@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuidV4 } from "uuid";
 import { Button } from "@/components/ui/button";
@@ -16,35 +16,85 @@ export default function Home() {
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  const createAndJoin = async () => {
-    setIsCreating(true);
-    const newRoomId = uuidV4();
+  const ws = useRef<WebSocket | null>(null);
 
-    // Add a small delay for better UX
-    setTimeout(() => {
-      router.push(`/${newRoomId}`);
-    }, 500);
-  };
+  const serverPort = process.env.NEXT_PUBLIC_SERVER_PORT || "8080";
 
-  const joinRoom = async () => {
-    if (roomId.trim()) {
-      setIsJoining(true);
-      setTimeout(() => {
-        router.push(`/${roomId.trim()}`);
-      }, 500);
-    } else {
-      // Add shake animation for invalid input
-      const input = document.querySelector("input");
-      input?.classList.add("animate-pulse");
-      setTimeout(() => input?.classList.remove("animate-pulse"), 500);
+  const serverPath = `${
+    process.env.NEXT_PUBLIC_SERVER_PATH || "localhost"
+  }:${serverPort}`;
+
+  useEffect(() => {
+    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+    ws.current = new WebSocket(`${wsProtocol}://${serverPath}`);
+
+    ws.current.onopen = (eve) => {
+      console.log("WebSocket connection established --> ", eve);
+
+      ws.current?.send(JSON.stringify({ type: "ping" }));
+    };
+
+    ws.current.onmessage = (eve) => {
+      const message = JSON.parse(eve.data);
+      console.log("WebSocket message received --> ", message);
+
+      if (message.type === "pong") {
+        console.log("Pong received from server");
+      } else {
+        console.warn("Unknown message type:", message.type);
+      }
+    };
+
+    ws.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.current.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+  }, [roomId]);
+
+  const sendWsMessage = (message: any) => {
+    try {
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify(message));
+      } else {
+        console.error("WebSocket is not open. Cannot send message.");
+      }
+    } catch (error) {
+      console.error("Error sending WebSocket message:", error);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      joinRoom();
-    }
-  };
+  // const createAndJoin = async () => {
+  //   setIsCreating(true);
+  //   const newRoomId = uuidV4();
+
+  //   // Add a small delay for better UX
+  //   setTimeout(() => {
+  //     router.push(`/${newRoomId}`);
+  //   }, 500);
+  // };
+
+  // const joinRoom = async () => {
+  //   if (roomId.trim()) {
+  //     setIsJoining(true);
+  //     setTimeout(() => {
+  //       router.push(`/${roomId.trim()}`);
+  //     }, 500);
+  //   } else {
+  //     // Add shake animation for invalid input
+  //     const input = document.querySelector("input");
+  //     input?.classList.add("animate-pulse");
+  //     setTimeout(() => input?.classList.remove("animate-pulse"), 500);
+  //   }
+  // };
+
+  // const handleKeyPress = (e: React.KeyboardEvent) => {
+  //   if (e.key === "Enter") {
+  //     joinRoom();
+  //   }
+  // };
 
   return (
     <main className="relative min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden">
@@ -69,6 +119,13 @@ export default function Home() {
               Create instant collaborative spaces or join existing ones with
               your friends
             </p>
+            <Button
+              onClick={() => {
+                sendWsMessage(JSON.stringify({ type: "ping" }));
+              }}
+            >
+              Press here!
+            </Button>
           </div>
 
           {/* Action Cards */}
@@ -84,7 +141,7 @@ export default function Home() {
                   Start a fresh collaborative space
                 </p>
                 <Button
-                  onClick={createAndJoin}
+                  // onClick={createAndJoin}
                   disabled={isCreating}
                   className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
@@ -119,12 +176,12 @@ export default function Home() {
                     type="text"
                     value={roomId}
                     onChange={(e) => setRoomId(e.target.value)}
-                    onKeyPress={handleKeyPress}
+                    // onKeyPress={handleKeyPress}
                     className="w-full h-12 px-4 bg-white/50 border-2 border-gray-200 rounded-xl text-center font-mono tracking-wider focus:border-green-400 focus:ring-2 focus:ring-green-200 transition-all duration-200 placeholder:text-gray-400"
                     placeholder="Enter Room ID"
                   />
                   <Button
-                    onClick={joinRoom}
+                    // onClick={joinRoom}
                     disabled={isJoining}
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   >
