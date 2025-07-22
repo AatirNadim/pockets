@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Users, Sparkles, ArrowRight } from "lucide-react";
 import Sparkle from "./assets/sparkle";
+import { WebSocketMessage } from "@/shared/types";
+import { toast } from "sonner";
 
 export default function Home() {
   const router = useRouter();
@@ -35,13 +37,24 @@ export default function Home() {
     };
 
     ws.current.onmessage = (eve) => {
-      const message = JSON.parse(eve.data);
-      console.log("WebSocket message received --> ", message);
+      try {
+        const message: WebSocketMessage = JSON.parse(eve.data);
+        console.log("WebSocket message received --> ", message);
 
-      if (message.type === "pong") {
-        console.log("Pong received from server");
-      } else {
-        console.warn("Unknown message type:", message.type);
+        switch (message.type) {
+          case "join-room":
+            toast.success(
+              `Joined room ${message.roomId} as ${
+                message.userName || message.userId
+              }`
+            );
+            break;
+          default:
+            console.warn("Unhandled message type:", message.type);
+            break;
+        }
+      } catch (error) {
+        console.error("Error handling WebSocket message:", error);
       }
     };
 
@@ -74,7 +87,6 @@ export default function Home() {
   //   setTimeout(() => {
   //     router.push(`/${newRoomId}`);
   //   }, 500);
-  // };
 
   // const joinRoom = async () => {
   //   if (roomId.trim()) {
