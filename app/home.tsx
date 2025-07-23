@@ -18,91 +18,6 @@ export default function Home() {
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  const ws = useRef<WebSocket | null>(null);
-
-  const serverPort = process.env.NEXT_PUBLIC_SERVER_PORT || "8080";
-
-  const serverPath = `${
-    process.env.NEXT_PUBLIC_SERVER_PATH || "localhost"
-  }:${serverPort}`;
-
-  useEffect(() => {
-    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-    ws.current = new WebSocket(`${wsProtocol}://${serverPath}`);
-
-    ws.current.onopen = (eve) => {
-      console.log("WebSocket connection established --> ", eve);
-
-      ws.current?.send(JSON.stringify({ type: "ping" }));
-    };
-
-    ws.current.onmessage = (eve) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(eve.data);
-        console.log("WebSocket message received --> ", message);
-
-        switch (message.type) {
-          case "user-joined":
-            toast.success(
-              `Joined room ${message.roomId} as ${
-                message.user.name || message.user.id
-              }`
-            );
-            break;
-          default:
-            console.warn("Unhandled message type:", message.type);
-            break;
-        }
-      } catch (error) {
-        console.error("Error handling WebSocket message:", error);
-      }
-    };
-
-    ws.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    ws.current.onclose = () => {
-      console.log("WebSocket connection closed");
-    };
-  }, [roomId]);
-
-  const sendWsMessage = (message: WebSocketMessage) => {
-    try {
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify(message));
-      } else {
-        console.error("WebSocket is not open. Cannot send message.");
-      }
-    } catch (error) {
-      console.error("Error sending WebSocket message:", error);
-    }
-  };
-
-  const createAndJoin = async () => {
-    try {
-      setIsCreating(true);
-      const newRoomId = uuidV4();
-
-      setRoomId(() => newRoomId);
-
-      const userId = uuidV4();
-
-      sendWsMessage({
-        type: "join-room",
-        roomId: newRoomId,
-        userId,
-        userName: `User-${userId.slice(0, 8)}`,
-      });
-    } catch (error) {
-      console.error("Error creating room:", error);
-      toast.error("Failed to create room. Please try again.");
-    } finally {
-      setIsCreating(false);
-      setRoomId(roomId);
-    }
-  };
-
   const joinRoom = async () => {
     if (roomId.trim()) {
       setIsJoining(true);
@@ -114,6 +29,21 @@ export default function Home() {
       const input = document.querySelector("input");
       input?.classList.add("animate-pulse");
       setTimeout(() => input?.classList.remove("animate-pulse"), 500);
+    }
+  };
+
+  const createAndJoin = () => {
+    try {
+      console.debug("Creating new room...");
+      const newRoomId = uuidV4();
+      setRoomId(newRoomId);
+      setIsJoining(true);
+      router.push(`/${newRoomId}`);
+    } catch (error) {
+      console.error("Error creating room:", error);
+      toast.error("Failed to create room. Please try again.");
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -146,13 +76,13 @@ export default function Home() {
               Create instant collaborative spaces or join existing ones with
               your friends
             </p>
-            <Button
+            {/* <Button
               onClick={() => {
                 sendWsMessage(JSON.stringify({ type: "ping" }));
               }}
             >
               Press here!
-            </Button>
+            </Button> */}
           </div>
 
           {/* Action Cards */}
@@ -208,7 +138,7 @@ export default function Home() {
                     placeholder="Enter Room ID"
                   />
                   <Button
-                    // onClick={joinRoom}
+                    onClick={joinRoom}
                     disabled={isJoining}
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   >

@@ -29,7 +29,7 @@ const wss = new WebSocketServer({ port: PORT });
 console.log(`🚀 Signaling server running on port ${PORT}`);
 
 wss.on("connection", (ws: ExtendedWebSocket) => {
-  console.log("New client connected --> ");
+  console.debug("New client connected");
 
   ws.on("message", (data) => {
     console.debug("Received message");
@@ -68,7 +68,6 @@ const handleMessage = (ws: ExtendedWebSocket, message: WebSocketMessage) => {
         break;
       case "ice-candidate":
         handleIceCandidate(message);
-
         break;
       default:
         console.warn("Unknown message type:", message.type);
@@ -93,6 +92,7 @@ const joinRoom = (ws: ExtendedWebSocket, message: JoinRoomMessage) => {
   };
 
   ws.userId = userId;
+  
   ws.roomId = roomId;
   userSockets.set(userId, ws);
 
@@ -103,14 +103,16 @@ const joinRoom = (ws: ExtendedWebSocket, message: JoinRoomMessage) => {
 
   rooms.set(roomId, room);
 
+  console.log("\nuser", userId, "joined room", roomId);
+  console.info(`Current users in room: ${roomId}, are ${Array.from(userSockets.keys())}`);
+  console.info("Rooms :", rooms, "\n");
+
   broadcastToRoom(roomId, {
     roomId,
-    type : "user-joined",
+    type: "user-joined",
     user,
-  } as UserJoinedMessage)
-
+  } as UserJoinedMessage);
 };
-
 
 const broadcastToRoom = (roomId: string, message: WebSocketMessage) => {
   try {
@@ -126,12 +128,11 @@ const broadcastToRoom = (roomId: string, message: WebSocketMessage) => {
         socket.send(JSON.stringify(message));
       }
     });
-
   } catch (error) {
     console.error("Error broadcasting message:", error);
     throw error;
   }
-}
+};
 
 const leaveRoom = (ws: ExtendedWebSocket, message: LeaveRoomMessage) => {
   const { roomId, userId } = message;

@@ -23,6 +23,10 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { WebSocketMessage } from "@/shared/types";
+
+import { v4 as uuidV4 } from "uuid";
+import { toast } from "sonner";
 
 interface ChatMessage {
   id: string;
@@ -59,6 +63,10 @@ export default function Room() {
   const [showChat, setShowChat] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  const [userId] = useState(() => uuidV4());
+
+  const [isCreating, setIsCreating] = useState(false);
+
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -74,100 +82,205 @@ export default function Room() {
   >("connecting");
   const [roomCopied, setRoomCopied] = useState(false);
 
+  const ws = useRef<WebSocket | null>(null);
+
+  const serverPort = process.env.NEXT_PUBLIC_SERVER_PORT || "8080";
+
+  const serverPath = `${
+    process.env.NEXT_PUBLIC_SERVER_PATH || "localhost"
+  }:${serverPort}`;
+
   const isCaller = useRef(false);
   // State to track which ICE candidates have already been processed
   const processedIceCandidates = useRef(new Set<string>());
 
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    pc.current = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: [
-            "stun:stun.l.google.com:19302",
-            "stun:stun1.l.google.com:19302",
-            "stun:stun2.l.google.com:19302",
-          ],
-        },
-      ],
-      iceCandidatePoolSize: 10,
-    });
+  const createAndJoinRoom = async () => {
+    try {
+      await createWSConnection();
+    } catch (error) {
+      console.error("Error creating room:", error);
+      toast.error("Failed to create room. Please try again.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
-    pc.current.onicecandidate = (eve) => {
-      if (eve.candidate) {
-        // Send the new ICE candidate to the signaling server
-        fetch("api/signaling", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            roomId,
-            type: isCaller.current
-              ? "offer_ice_candidates"
-              : "answer_ice_candidates",
-            data: eve.candidate.toJSON(),
-          }),
+  const createWSConnection = async () => {
+    try {
+      const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+      ws.current = new WebSocket(`${wsProtocol}://${serverPath}`);
+
+      console.log("WebSocket connection created successfully!!");
+
+      // register event listeners
+
+      ws.current.onopen = (eve) => {
+        console.log("WebSocket connection established --> ", eve);
+
+        console.debug("Creating new room...");
+
+        sendWsMessage({
+          type: "join-room",
+          roomId,
+          userId,
+          userName: `User-${userId.slice(0, 8)}`,
         });
-      }
-    };
+        console.debug("new room creation message sent to signaling server");
 
-    pc.current.ontrack = (eve) => {
-      if (remoteVideoRef.current && eve.streams.length > 0) {
-        remoteVideoRef.current.srcObject = eve.streams[0];
-      }
-    };
-
-    pc.current.ondatachannel = (eve) => {
-      dataChannel.current = eve.channel;
-      setupDataChannel();
-    };
-
-    const startConnection = async () => {
-      try {
-        localStream.current = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = localStream.current;
-        }
-
-        localStream.current.getTracks().forEach((track) => {
-          pc.current?.addTrack(track, localStream.current!);
-        });
-
-        pollForSignalingData();
-      } catch (error) {
-        console.error("Error accessing media devices.", error);
-        alert(
-          "Could not access camera or microphone. Please check permissions and try again."
-        );
-        router.push("/"); // Redirect to home on error
-      }
-
-      startConnection();
-
-      return () => {
-        if (pollingInterval.current) {
-          clearInterval(pollingInterval.current);
-        }
-
-        // Stop all media tracks
-        localStream.current?.getTracks().forEach((track) => track.stop());
-        // Close the peer connection
-        pc.current?.close();
+        // ws.current?.send(JSON.stringify({ type: "ping" }));
       };
+
+      ws.current.onmessage = (eve) => {
+        try {
+          const message: WebSocketMessage = JSON.parse(eve.data);
+          console.log("WebSocket message received --> ", message);
+
+          switch (message.type) {
+            case "user-joined":
+              console.debug("User joined room:", message.roomId);
+              toast.success(
+                `Joined room ${message.roomId} as ${
+                  message.user.name || message.user.id
+                }`
+              );
+              break;
+            default:
+              console.warn("Unhandled message type:", message.type);
+              break;
+          }
+        } catch (error) {
+          console.error("Error handling WebSocket message:", error);
+        }
+      };
+
+      ws.current.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      ws.current.onclose = () => {
+        console.log("WebSocket connection closed");
+      };
+
+      console.log("Registered WebSocket event listeners successfully");
+    } catch (error) {
+      console.error("Error creating WebSocket connection:", error);
+      toast.error("Failed to connect to signaling server. Please try again.");
+      return;
+    }
+  };
+
+  useEffect(() => {
+    createAndJoinRoom();
+
+    return () => {
+      if (ws.current) {
+        sendWsMessage({
+          type: "leave-room",
+          roomId,
+          userId,
+        });
+        ws.current.close();
+      }
+      localStream.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [roomId, router]);
+  }, [roomId]);
 
+  // useEffect(() => {
+  //   pc.current = new RTCPeerConnection({
+  //     iceServers: [
+  //       {
+  //         urls: [
+  //           "stun:stun.l.google.com:19302",
+  //           "stun:stun1.l.google.com:19302",
+  //           "stun:stun2.l.google.com:19302",
+  //         ],
+  //       },
+  //     ],
+  //     iceCandidatePoolSize: 10,
+  //   });
 
+  //   pc.current.onicecandidate = (eve) => {
+  //     if (eve.candidate) {
+  //       // Send the new ICE candidate to the signaling server
+  //       fetch("api/signaling", {
+  //         method: "POST",
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify({
+  //           roomId,
+  //           type: isCaller.current
+  //             ? "offer_ice_candidates"
+  //             : "answer_ice_candidates",
+  //           data: eve.candidate.toJSON(),
+  //         }),
+  //       });
+  //     }
+  //   };
 
-  const pollForSignalingData = () => {
-    
-  }
+  //   pc.current.ontrack = (eve) => {
+  //     if (remoteVideoRef.current && eve.streams.length > 0) {
+  //       remoteVideoRef.current.srcObject = eve.streams[0];
+  //     }
+  //   };
+
+  //   pc.current.ondatachannel = (eve) => {
+  //     dataChannel.current = eve.channel;
+  //     setupDataChannel();
+  //   };
+
+  //   const startConnection = async () => {
+  //     try {
+  //       localStream.current = await navigator.mediaDevices.getUserMedia({
+  //         audio: true,
+  //         video: true,
+  //       });
+
+  //       if (localVideoRef.current) {
+  //         localVideoRef.current.srcObject = localStream.current;
+  //       }
+
+  //       localStream.current.getTracks().forEach((track) => {
+  //         pc.current?.addTrack(track, localStream.current!);
+  //       });
+
+  //       pollForSignalingData();
+  //     } catch (error) {
+  //       console.error("Error accessing media devices.", error);
+  //       alert(
+  //         "Could not access camera or microphone. Please check permissions and try again."
+  //       );
+  //       router.push("/"); // Redirect to home on error
+  //     }
+
+  //     startConnection();
+
+  //     return () => {
+  //       if (pollingInterval.current) {
+  //         clearInterval(pollingInterval.current);
+  //       }
+
+  //       // Stop all media tracks
+  //       localStream.current?.getTracks().forEach((track) => track.stop());
+  //       // Close the peer connection
+  //       pc.current?.close();
+  //     };
+  //   };
+  // }, [roomId, router]);
+
+  const sendWsMessage = (message: WebSocketMessage) => {
+    try {
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify(message));
+      } else {
+        console.error("WebSocket is not open. Cannot send message.");
+      }
+    } catch (error) {
+      console.error("Error sending WebSocket message:", error);
+    }
+  };
 
   // useEffect(() => {
   //   // WebRTC logic will go here
@@ -231,6 +344,8 @@ export default function Room() {
       sendMessage();
     }
   };
+
+  // return <div>stuff</div>;
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white overflow-hidden">
