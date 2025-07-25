@@ -137,6 +137,9 @@ export default function Room() {
     }
   };
 
+
+
+  // a dedicated rtc connection will be established for each remote user
   const createRTCConnection = async (remoteUserId: string) => {
     try {
       console.debug("Creating new RTCPeerConnection...");
@@ -157,6 +160,8 @@ export default function Room() {
       // register peer connection event listeners
 
       pc.onicecandidate = (event) => {
+
+        // this event is triggered when a new ICE candidate is created and discovered to be sent to the remote user
         if (event.candidate) {
           const candidate: RTCIceCandidateInit = event.candidate.toJSON();
           console.debug("New ICE candidate created:", candidate);
@@ -224,6 +229,8 @@ export default function Room() {
         // setupDataChannel();
       };
 
+
+      // adding local audio and video tracks to be sent to the remote user via the established peer connection
       if (localStream.current) {
         localStream.current.getTracks().forEach((track) => {
           pc.addTrack(track, localStream.current!);
