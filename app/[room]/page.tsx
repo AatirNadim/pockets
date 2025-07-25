@@ -23,7 +23,12 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { OfferMessage, WebSocketMessage } from "@/shared/types";
+import {
+  AnswerMessage,
+  IceCandidateMessage,
+  OfferMessage,
+  WebSocketMessage,
+} from "@/shared/types";
 
 import { v4 as uuidV4 } from "uuid";
 import { toast } from "sonner";
@@ -97,6 +102,10 @@ export default function Room() {
   const isCaller = useRef(false);
   // State to track which ICE candidates have already been processed
   const processedIceCandidates = useRef(new Set<string>());
+
+  useEffect(() => {
+    console.info("Current peer connections:", peerConnections.current);
+  }, [peerConnections]);
 
   const createVideoStream = async () => {
     try {
@@ -243,6 +252,11 @@ export default function Room() {
         offerToReceiveVideo: true,
       });
 
+      console.debug(
+        `Offer created to send to the user ${remoteUserId}:\n`,
+        offer
+      );
+
       await pc.setLocalDescription(offer);
 
       sendWsMessage({
@@ -265,6 +279,8 @@ export default function Room() {
       const { offer, fromUserId } = message as OfferMessage;
 
       console.debug("Handling offer from user:", fromUserId);
+
+      console.debug(`Offer received from userId ${fromUserId}:\n`, offer);
 
       // if(!peerConnections.current?.[fromUserId]) {
       //   await createRTCConnection(fromUserId);
@@ -299,6 +315,59 @@ export default function Room() {
     }
   };
 
+  const handleAnswer = async (message: WebSocketMessage) => {
+    try {
+      const { answer, fromUserId } = message as AnswerMessage;
+
+      console.debug("Handling answer from user:", fromUserId);
+
+      if (!peerConnections.current?.[fromUserId]) {
+        await createRTCConnection(fromUserId);
+      }
+
+      const pc = peerConnections.current[fromUserId];
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+      console.info("Answer handled successfully for user:", fromUserId);
+      console.info(
+        "Remote description set for the remote id:",
+        fromUserId,
+        "for the user id:",
+        userId
+      );
+    } catch (error) {
+      console.error("Error handling answer:", error);
+      toast.error("Failed to handle answer. Please try again.");
+    }
+  };
+
+  const handleIceCandidate = async (message: WebSocketMessage) => {
+    try {
+      const { candidate, fromUserId } = message as IceCandidateMessage;
+
+      console.debug("Handling ICE candidate from user:", fromUserId);
+
+      if (!peerConnections.current?.[fromUserId]) {
+        await createRTCConnection(fromUserId);
+      }
+
+      const pc = peerConnections.current[fromUserId];
+      if (pc.remoteDescription) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.debug(`Added ICE candidate for ${fromUserId}`);
+      } else {
+        console.warn(
+          `Remote description not set for ${fromUserId}, queuing ICE candidate`
+        );
+        // You might want to queue candidates here
+      }
+
+      console.info("ICE candidate handled successfully for user:", fromUserId);
+    } catch (error) {
+      console.error("Error handling ICE candidate:", error);
+      toast.error("Failed to handle ICE candidate. Please try again.");
+    }
+  };
 
   const createWSConnection = async () => {
     try {
@@ -323,7 +392,7 @@ export default function Room() {
         console.debug("new room creation message sent to signaling server");
       };
 
-      ws.current.onmessage = (eve) => {
+      ws.current.onmessage = async (eve) => {
         try {
           const message: WebSocketMessage = JSON.parse(eve.data);
           console.log("WebSocket message received --> ", message);
@@ -338,7 +407,33 @@ export default function Room() {
                   message.user.name || message.user.id
                 }`
               );
+              console.debug(
+                "Creating rtc connection for the joined user: ",
+                message.user.id
+              );
+              await createRTCConnection(message.user.id);
+
+              console.debug(
+                "Extending offer to the new user:",
+                message.user.id
+              );
+
+              await createOffer(message.user.id);
+
               break;
+
+            case "offer":
+              await handleOffer(message);
+              break;
+
+            case "answer":
+              await handleAnswer(message);
+              break;
+
+            case "ice-candidate":
+              await handleIceCandidate(message);
+              break;
+
             default:
               console.warn("Unhandled message type:", message.type);
               break;
@@ -384,92 +479,25 @@ export default function Room() {
 
       removeWSConnection();
 
+      for (const pc in peerConnections.current) {
+        peerConnections.current[pc].close();
+        delete peerConnections.current[pc];
+      }
+
+      peerConnections.current = {};
+
+      console.debug("Stopping all remote streams...");
+      for (const streamId in remoteStreams) {
+        remoteStreams[streamId].getTracks().forEach((track) => track.stop());
+      }
+
+      console.debug("removed all remote streams");
+      setRemoteStreams({});
+
+      console.debug("Stopping local video stream...");
       localStream.current?.getTracks().forEach((track) => track.stop());
     };
   }, [roomId, userId]);
-
-  // useEffect(() => {
-  //   pc.current = new RTCPeerConnection({
-  //     iceServers: [
-  //       {
-  //         urls: [
-  //           "stun:stun.l.google.com:19302",
-  //           "stun:stun1.l.google.com:19302",
-  //           "stun:stun2.l.google.com:19302",
-  //         ],
-  //       },
-  //     ],
-  //     iceCandidatePoolSize: 10,
-  //   });
-
-  //   pc.current.onicecandidate = (eve) => {
-  //     if (eve.candidate) {
-  //       // Send the new ICE candidate to the signaling server
-  //       fetch("api/signaling", {
-  //         method: "POST",
-  //         headers: {
-  //           "Content-Type": "application/json",
-  //         },
-  //         body: JSON.stringify({
-  //           roomId,
-  //           type: isCaller.current
-  //             ? "offer_ice_candidates"
-  //             : "answer_ice_candidates",
-  //           data: eve.candidate.toJSON(),
-  //         }),
-  //       });
-  //     }
-  //   };
-
-  //   pc.current.ontrack = (eve) => {
-  //     if (remoteVideoRef.current && eve.streams.length > 0) {
-  //       remoteVideoRef.current.srcObject = eve.streams[0];
-  //     }
-  //   };
-
-  //   pc.current.ondatachannel = (eve) => {
-  //     dataChannel.current = eve.channel;
-  //     setupDataChannel();
-  //   };
-
-  //   const startConnection = async () => {
-  //     try {
-  //       localStream.current = await navigator.mediaDevices.getUserMedia({
-  //         audio: true,
-  //         video: true,
-  //       });
-
-  //       if (localVideoRef.current) {
-  //         localVideoRef.current.srcObject = localStream.current;
-  //       }
-
-  //       localStream.current.getTracks().forEach((track) => {
-  //         pc.current?.addTrack(track, localStream.current!);
-  //       });
-
-  //       pollForSignalingData();
-  //     } catch (error) {
-  //       console.error("Error accessing media devices.", error);
-  //       alert(
-  //         "Could not access camera or microphone. Please check permissions and try again."
-  //       );
-  //       router.push("/"); // Redirect to home on error
-  //     }
-
-  //     startConnection();
-
-  //     return () => {
-  //       if (pollingInterval.current) {
-  //         clearInterval(pollingInterval.current);
-  //       }
-
-  //       // Stop all media tracks
-  //       localStream.current?.getTracks().forEach((track) => track.stop());
-  //       // Close the peer connection
-  //       pc.current?.close();
-  //     };
-  //   };
-  // }, [roomId, router]);
 
   const sendWsMessage = (message: WebSocketMessage) => {
     try {
@@ -482,16 +510,6 @@ export default function Room() {
       console.error("Error sending WebSocket message:", error);
     }
   };
-
-  // useEffect(() => {
-  //   // WebRTC logic will go here
-  //   console.log(`Joining room: ${roomId}`)
-
-  //   // Simulate connection
-  //   setTimeout(() => {
-  //     setConnectionStatus("connected")
-  //   }, 2000)
-  // }, [roomId])
 
   useEffect(() => {
     if (chatContainerRef.current) {
