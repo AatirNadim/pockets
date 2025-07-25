@@ -23,7 +23,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { WebSocketMessage } from "@/shared/types";
+import { OfferMessage, WebSocketMessage } from "@/shared/types";
 
 import { v4 as uuidV4 } from "uuid";
 import { toast } from "sonner";
@@ -46,7 +46,7 @@ export default function Room() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  const pc = useRef<RTCPeerConnection | null>(null);
+  const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
 
   const localStream = useRef<MediaStream | null>(null);
 
@@ -62,8 +62,12 @@ export default function Room() {
   const [isSpeakerOff, setIsSpeakerOff] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isLocalVideoExpanded, setIsLocalVideoExpanded] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
-  const [userId] = useState(() => uuidV4());
+  const [userId] = useState(uuidV4());
+  const [remoteStreams, setRemoteStreams] = useState<
+    Record<string, MediaStream>
+  >({});
 
   const [isCreating, setIsCreating] = useState(false);
 
@@ -94,11 +98,28 @@ export default function Room() {
   // State to track which ICE candidates have already been processed
   const processedIceCandidates = useRef(new Set<string>());
 
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const createVideoStream = async () => {
+    try {
+      localStream.current = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      if (localVideoRef.current) {
+        console.debug("Accessing local video stream...");
+        localVideoRef.current.srcObject = localStream.current;
+      }
+    } catch (error) {
+      console.error("Error accessing media devices:", error);
+      toast.error(
+        "Could not access camera or microphone. Please check permissions and try again."
+      );
+      router.push("/"); // Redirect to home on error
+    }
+  };
 
   const createAndJoinRoom = async () => {
     try {
-      await createWSConnection();
+      await Promise.all([createVideoStream(), createWSConnection()]);
     } catch (error) {
       console.error("Error creating room:", error);
       toast.error("Failed to create room. Please try again.");
@@ -106,6 +127,178 @@ export default function Room() {
       setIsCreating(false);
     }
   };
+
+  const createRTCConnection = async (remoteUserId: string) => {
+    try {
+      console.debug("Creating new RTCPeerConnection...");
+
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          {
+            urls: [
+              "stun:stun.l.google.com:19302",
+              "stun:stun1.l.google.com:19302",
+              "stun:stun2.l.google.com:19302",
+            ],
+          },
+        ],
+        iceCandidatePoolSize: 10,
+      });
+
+      // register peer connection event listeners
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          const candidate: RTCIceCandidateInit = event.candidate.toJSON();
+          console.debug("New ICE candidate created:", candidate);
+
+          // Send the new ICE candidate to the signaling server
+          sendWsMessage({
+            type: "ice-candidate",
+            roomId,
+            fromUserId: userId,
+            toUserId: remoteUserId,
+            candidate,
+          });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        console.debug(
+          "Remote track received:",
+          event,
+          "from user:",
+          remoteUserId
+        );
+
+        // TODO: update for multiple remote streams
+
+        if (remoteVideoRef.current && event.streams.length > 0) {
+          console.debug("Remote video track received");
+          remoteVideoRef.current.srcObject = event.streams[0];
+
+          setRemoteStreams((prev) => ({
+            ...prev,
+            [remoteUserId]: event.streams[0],
+          }));
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        console.debug(
+          `Connection state with remote user ${remoteUserId} changed: ${pc.connectionState}`
+        );
+
+        if (
+          pc.connectionState === "disconnected" ||
+          pc.connectionState === "failed"
+        ) {
+          console.warn(
+            `Connection with remote user ${remoteUserId} lost. Attempting to reconnect...`
+          );
+
+          setRemoteStreams((prev) => {
+            prev[remoteUserId]?.getTracks().forEach((track) => track.stop());
+            delete prev[remoteUserId];
+            return { ...prev };
+          });
+        }
+
+        setConnectionStatus(
+          pc.connectionState as "connecting" | "connected" | "disconnected"
+        );
+      };
+
+      pc.ondatachannel = (eve) => {
+        console.debug("Data channel created with remote user:", remoteUserId);
+        dataChannel.current = eve.channel;
+        // setupDataChannel();
+      };
+
+      if (localStream.current) {
+        localStream.current.getTracks().forEach((track) => {
+          pc.addTrack(track, localStream.current!);
+        });
+      }
+
+      // adding new remote stream to the map of remote streams
+      if (peerConnections.current) peerConnections.current[remoteUserId] = pc;
+    } catch (error) {
+      console.error("Error creating RTC connection:", error);
+      toast.error("Failed to create RTC connection. Please try again.");
+    }
+  };
+
+  const createOffer = async (remoteUserId: string) => {
+    try {
+      if (!peerConnections.current?.[remoteUserId]) {
+        throw new Error(`No peer connection found for user ${remoteUserId}`);
+      }
+      const pc = peerConnections.current[remoteUserId];
+
+      console.debug("Creating offer for remote user:", remoteUserId);
+
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+
+      await pc.setLocalDescription(offer);
+
+      sendWsMessage({
+        type: "offer",
+        fromUserId: userId,
+        toUserId: remoteUserId,
+        offer,
+        roomId,
+      });
+
+      console.debug("Offer created and sent to signaling server");
+    } catch (error) {
+      console.error("Error creating offer:", error);
+      toast.error("Failed to create offer. Please try again.");
+    }
+  };
+
+  const handleOffer = async (message: WebSocketMessage) => {
+    try {
+      const { offer, fromUserId } = message as OfferMessage;
+
+      console.debug("Handling offer from user:", fromUserId);
+
+      // if(!peerConnections.current?.[fromUserId]) {
+      //   await createRTCConnection(fromUserId);
+      // }
+
+      let pc = peerConnections.current[fromUserId];
+
+      if (!pc) {
+        await createRTCConnection(fromUserId);
+        pc = peerConnections.current[fromUserId];
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+
+      await pc.setLocalDescription(answer);
+
+      sendWsMessage({
+        type: "answer",
+        fromUserId: userId,
+        toUserId: fromUserId,
+        answer,
+        roomId,
+      });
+    } catch (error) {
+      console.error("Error handling offer:", error);
+      toast.error("Failed to handle offer. Please try again.");
+    }
+  };
+
 
   const createWSConnection = async () => {
     try {
@@ -128,8 +321,6 @@ export default function Room() {
           userName: `User-${userId.slice(0, 8)}`,
         });
         console.debug("new room creation message sent to signaling server");
-
-        // ws.current?.send(JSON.stringify({ type: "ping" }));
       };
 
       ws.current.onmessage = (eve) => {
@@ -139,7 +330,9 @@ export default function Room() {
 
           switch (message.type) {
             case "user-joined":
-              console.debug("User joined room:", message.roomId);
+              console.debug(
+                `User ${message.user.id} joined room: ${message.roomId}`
+              );
               toast.success(
                 `Joined room ${message.roomId} as ${
                   message.user.name || message.user.id
@@ -171,21 +364,29 @@ export default function Room() {
     }
   };
 
+  const removeWSConnection = () => {
+    if (!ws.current) return;
+    sendWsMessage({
+      type: "leave-room",
+      roomId,
+      userId,
+    });
+    ws.current.close();
+  };
+
   useEffect(() => {
     createAndJoinRoom();
 
+    window.addEventListener("beforeunload", removeWSConnection);
+
     return () => {
-      if (ws.current) {
-        sendWsMessage({
-          type: "leave-room",
-          roomId,
-          userId,
-        });
-        ws.current.close();
-      }
+      window.removeEventListener("beforeunload", removeWSConnection);
+
+      removeWSConnection();
+
       localStream.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [roomId]);
+  }, [roomId, userId]);
 
   // useEffect(() => {
   //   pc.current = new RTCPeerConnection({
@@ -435,8 +636,8 @@ export default function Room() {
 
             {/* Local Video (Picture-in-Picture) */}
             <div
-              className={`absolute bottom-24 right-8 w-48 h-36 bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg overflow-hidden shadow-xl border-2 border-white/20 transition-all duration-300 ${
-                isMinimized ? "w-16 h-12" : ""
+              className={`absolute bottom-24 right-8 bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg overflow-hidden shadow-xl border-2 border-white/20 transition-all duration-300 ${
+                isMinimized ? "w-16 h-12" : "w-48 h-36"
               }`}
             >
               <video
@@ -448,12 +649,22 @@ export default function Room() {
               />
               {isVideoOff && (
                 <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                  <VideoOff className="w-8 h-8 text-gray-400" />
+                  <VideoOff
+                    className={`text-gray-400 ${
+                      isMinimized ? "w-4 h-4" : "w-8 h-8"
+                    }`}
+                  />
                 </div>
               )}
 
               <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm rounded px-2 py-1">
-                <span className="text-xs font-medium">You</span>
+                <span
+                  className={`font-medium ${
+                    isMinimized ? "text-[10px]" : "text-xs"
+                  }`}
+                >
+                  You
+                </span>
               </div>
 
               <Button

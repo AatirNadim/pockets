@@ -58,7 +58,11 @@ const handleMessage = (ws: ExtendedWebSocket, message: WebSocketMessage) => {
         joinRoom(ws, message);
         break;
       case "leave-room":
-        leaveRoom(ws, message);
+        console.log(
+          "received message to leave the room with id:",
+          message.roomId
+        );
+        handleLeaveRoom(ws, message);
         break;
       case "offer":
         handleOffer(message);
@@ -80,6 +84,9 @@ const handleMessage = (ws: ExtendedWebSocket, message: WebSocketMessage) => {
       message: "An error occurred while processing your request.",
     };
     ws.send(JSON.stringify(errorMessage));
+  } finally {
+    console.log("\nroom details:", Array.from(rooms.keys()));
+    console.log("user sockets:", Array.from(userSockets.keys()), "\n");
   }
 };
 
@@ -92,7 +99,7 @@ const joinRoom = (ws: ExtendedWebSocket, message: JoinRoomMessage) => {
   };
 
   ws.userId = userId;
-  
+
   ws.roomId = roomId;
   userSockets.set(userId, ws);
 
@@ -102,10 +109,6 @@ const joinRoom = (ws: ExtendedWebSocket, message: JoinRoomMessage) => {
   }
 
   rooms.set(roomId, room);
-
-  console.log("\nuser", userId, "joined room", roomId);
-  console.info(`Current users in room: ${roomId}, are ${Array.from(userSockets.keys())}`);
-  console.info("Rooms :", rooms, "\n");
 
   broadcastToRoom(roomId, {
     roomId,
@@ -134,9 +137,9 @@ const broadcastToRoom = (roomId: string, message: WebSocketMessage) => {
   }
 };
 
-const leaveRoom = (ws: ExtendedWebSocket, message: LeaveRoomMessage) => {
-  const { roomId, userId } = message;
-};
+// const leaveRoom = (ws: ExtendedWebSocket, message: LeaveRoomMessage) => {
+//   const { roomId, userId } = message;
+// };
 
 const handleOffer = (message: OfferMessage) => {
   const { toUserId } = message;
@@ -251,31 +254,36 @@ const handleIceCandidate = (message: IceCandidateMessage) => {
 //   broadcastToRoom(roomId, userJoinedMessage);
 // }
 
-// function handleLeaveRoom(ws: ExtendedWebSocket, message: LeaveRoomMessage) {
-//   const { roomId, userId } = message;
+function handleLeaveRoom(ws: ExtendedWebSocket, message: LeaveRoomMessage) {
+  const { roomId, userId } = message;
 
-//   const room = rooms.get(roomId);
-//   if (room) {
-//     room.users = room.users.filter(u => u.id !== userId);
+  const room = rooms.get(roomId);
+  if (room) {
+    room.users = room.users.filter((u) => u.id !== userId);
 
-//     // Remove empty rooms
-//     if (room.users.length === 0) {
-//       rooms.delete(roomId);
-//     } else {
-//       // Notify remaining users
-//       const userLeftMessage: UserLeftMessage = {
-//         type: 'user-left',
-//         roomId,
-//         userId,
-//         users: room.users
-//       };
-//       broadcastToRoom(roomId, userLeftMessage);
-//     }
-//   }
+    // Remove empty rooms
+    if (room.users.length === 0) {
+      rooms.delete(roomId);
+    } else {
+      room.users = room.users.filter((u) => u.id !== userId);
 
-//   userSockets.delete(userId);
-//   console.log(`User ${userId} left room ${roomId}`);
-// }
+      rooms.set(roomId, room);
+
+      // Notify remaining users
+      const userLeftMessage: UserLeftMessage = {
+        type: "user-left",
+        roomId,
+        userId,
+        users: room.users,
+      };
+      broadcastToRoom(roomId, userLeftMessage);
+    }
+  }
+
+  userSockets.delete(userId);
+
+  console.log(`User ${userId} left room ${roomId}`);
+}
 
 // function handleOffer(message: OfferMessage) {
 //   const { toUserId } = message;
