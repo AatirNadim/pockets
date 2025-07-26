@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
+
 import {
   WebSocketMessage,
   Room,
@@ -10,6 +11,7 @@ import {
   IceCandidateMessage,
   UserJoinedMessage,
   UserLeftMessage,
+  ErrorMessage,
 } from "../shared/types";
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -60,7 +62,9 @@ const handleMessage = (ws: ExtendedWebSocket, message: WebSocketMessage) => {
       case "leave-room":
         console.log(
           "received message to leave the room with id:",
-          message.roomId
+          message.roomId,
+          "by the user id: ",
+          message.userId
         );
         handleLeaveRoom(ws, message);
         break;
@@ -79,7 +83,7 @@ const handleMessage = (ws: ExtendedWebSocket, message: WebSocketMessage) => {
     }
   } catch (error) {
     console.error("Error handling message:", error);
-    const errorMessage = {
+    const errorMessage: ErrorMessage = {
       type: "error",
       message: "An error occurred while processing your request.",
     };
@@ -103,9 +107,17 @@ const joinRoom = (ws: ExtendedWebSocket, message: JoinRoomMessage) => {
   ws.roomId = roomId;
   userSockets.set(userId, ws);
 
-  const room = rooms.get(roomId) || { id: roomId, users: [] };
+  let room = rooms.get(roomId);
+  if (!room) {
+    console.log("No existing room with the id:", roomId, "creating a new room");
+    room = { id: roomId, users: [] };
+  }
+
   if (!room.users.find((u) => u.id === userId)) {
     room.users.push(user);
+  } else {
+    console.log("User already in room:", userId);
+    return;
   }
 
   rooms.set(roomId, room);
@@ -113,24 +125,80 @@ const joinRoom = (ws: ExtendedWebSocket, message: JoinRoomMessage) => {
   broadcastToRoom(roomId, {
     roomId,
     type: "user-joined",
-    user,
+    userId,
   } as UserJoinedMessage);
+};
+
+const sendSocketMessageUtil = (
+  userIds: string[],
+  message: WebSocketMessage
+) => {
+  userIds.forEach((userId) => {
+    const userSocket = userSockets.get(userId);
+    if (userSocket && userSocket.readyState === WebSocket.OPEN) {
+      userSocket.send(JSON.stringify(message));
+    } else {
+      console.warn(`Socket for user ${userId} is not available or not ready.`);
+      throw new Error(
+        `Socket for user ${userId} is not available or not ready.`
+      );
+    }
+  });
 };
 
 const broadcastToRoom = (roomId: string, message: WebSocketMessage) => {
   try {
     const room = rooms.get(roomId);
+
     if (!room) {
       throw new Error(`Room with ID ${roomId} does not exist.`);
     }
     // for now, send user-join notification to all users in the room
-    room.users.forEach((user) => {
-      // if(user.id === message..id)
-      const socket = userSockets.get(user.id);
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(message));
-      }
-    });
+
+    switch (message.type) {
+      case "user-joined":
+        console.log(`Broadcasting user-joined message to room ${roomId}`);
+        sendSocketMessageUtil(
+          room.users.filter((u) => u.id !== message.userId).map((u) => u.id),
+          message
+        );
+        break;
+      case "user-left":
+        console.log(`Broadcasting user-left message to room ${roomId}`);
+        sendSocketMessageUtil(
+          room.users.filter((u) => u.id !== message.userId).map((u) => u.id),
+          message
+        );
+        break;
+      case "offer":
+        console.log(`Broadcasting offer message to room ${roomId}`);
+        sendSocketMessageUtil(
+          room.users.filter((u) => u.id === message.toUserId).map((u) => u.id),
+          message
+        );
+        break;
+      case "answer":
+        console.log(`Broadcasting answer message to room ${roomId}`);
+        sendSocketMessageUtil(
+          room.users.filter((u) => u.id === message.toUserId).map((u) => u.id),
+          message
+        );
+        break;
+      case "ice-candidate":
+        console.log(`Broadcasting ice-candidate message to room ${roomId}`);
+        sendSocketMessageUtil(
+          room.users.filter((u) => u.id === message.toUserId).map((u) => u.id),
+          message
+        );
+        break;
+      default:
+        console.warn(
+          `Broadcasting unknown message type ${message.type} to room ${roomId}`
+        );
+        throw new Error(
+          `Unknown message type: ${message.type} for room ${roomId}`
+        );
+    }
   } catch (error) {
     console.error("Error broadcasting message:", error);
     throw error;
@@ -145,18 +213,16 @@ const handleOffer = (message: OfferMessage) => {
   const { toUserId } = message;
   const targetSocket = userSockets.get(toUserId);
 
-  if (targetSocket) {
-    targetSocket.send(JSON.stringify(message));
-  }
+  console.debug("Sending offer to user:", toUserId, "message:", message);
+  targetSocket?.send(JSON.stringify(message));
 };
 
 const handleAnswer = (message: AnswerMessage) => {
   const { toUserId } = message;
   const targetSocket = userSockets.get(toUserId);
 
-  if (targetSocket) {
-    targetSocket.send(JSON.stringify(message));
-  }
+  console.debug("Sending answer to user:", toUserId, "message:", message);
+  targetSocket?.send(JSON.stringify(message));
 };
 
 const handleIceCandidate = (message: IceCandidateMessage) => {
@@ -172,26 +238,29 @@ function handleLeaveRoom(ws: ExtendedWebSocket, message: LeaveRoomMessage) {
   const { roomId, userId } = message;
 
   const room = rooms.get(roomId);
-  if (room) {
+
+  if (!room) {
+    console.warn(`Room with ID ${roomId} does not exist.`);
+    return;
+  }
+
+  room.users = room.users.filter((u) => u.id !== userId);
+
+  // Remove empty rooms
+  if (room.users.length === 0) {
+    rooms.delete(roomId);
+  } else {
     room.users = room.users.filter((u) => u.id !== userId);
 
-    // Remove empty rooms
-    if (room.users.length === 0) {
-      rooms.delete(roomId);
-    } else {
-      room.users = room.users.filter((u) => u.id !== userId);
+    rooms.set(roomId, room);
 
-      rooms.set(roomId, room);
-
-      // Notify remaining users
-      const userLeftMessage: UserLeftMessage = {
-        type: "user-left",
-        roomId,
-        userId,
-        users: room.users,
-      };
-      broadcastToRoom(roomId, userLeftMessage);
-    }
+    // Notify remaining users
+    const userLeftMessage: UserLeftMessage = {
+      type: "user-left",
+      roomId,
+      userId,
+    };
+    broadcastToRoom(roomId, userLeftMessage);
   }
 
   userSockets.delete(userId);

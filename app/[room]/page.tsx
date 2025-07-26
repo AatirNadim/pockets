@@ -137,8 +137,6 @@ export default function Room() {
     }
   };
 
-
-
   // a dedicated rtc connection will be established for each remote user
   const createRTCConnection = async (remoteUserId: string) => {
     try {
@@ -160,7 +158,6 @@ export default function Room() {
       // register peer connection event listeners
 
       pc.onicecandidate = (event) => {
-
         // this event is triggered when a new ICE candidate is created and discovered to be sent to the remote user
         if (event.candidate) {
           const candidate: RTCIceCandidateInit = event.candidate.toJSON();
@@ -228,7 +225,6 @@ export default function Room() {
         dataChannel.current = eve.channel;
         // setupDataChannel();
       };
-
 
       // adding local audio and video tracks to be sent to the remote user via the established peer connection
       if (localStream.current) {
@@ -407,25 +403,20 @@ export default function Room() {
           switch (message.type) {
             case "user-joined":
               console.debug(
-                `User ${message.user.id} joined room: ${message.roomId}`
+                `User ${message.userId} joined room: ${message.roomId}`
               );
               toast.success(
-                `Joined room ${message.roomId} as ${
-                  message.user.name || message.user.id
-                }`
+                `Joined room ${message.roomId} as ${message.userId}`
               );
               console.debug(
                 "Creating rtc connection for the joined user: ",
-                message.user.id
+                message.userId
               );
-              await createRTCConnection(message.user.id);
+              await createRTCConnection(message.userId);
 
-              console.debug(
-                "Extending offer to the new user:",
-                message.user.id
-              );
+              console.debug("Extending offer to the new user:", message.userId);
 
-              await createOffer(message.user.id);
+              await createOffer(message.userId);
 
               break;
 
@@ -439,6 +430,11 @@ export default function Room() {
 
             case "ice-candidate":
               await handleIceCandidate(message);
+              break;
+
+            case "error":
+              console.error("Error message received from server:", message);
+              toast.error(`Error: ${message.message}`);
               break;
 
             default:
@@ -474,6 +470,24 @@ export default function Room() {
       userId,
     });
     ws.current.close();
+
+    for (const pc in peerConnections.current) {
+      peerConnections.current[pc].close();
+      delete peerConnections.current[pc];
+    }
+
+    peerConnections.current = {};
+
+    console.debug("Stopping all remote streams...");
+    for (const streamId in remoteStreams) {
+      remoteStreams[streamId].getTracks().forEach((track) => track.stop());
+    }
+
+    console.debug("removed all remote streams");
+    setRemoteStreams({});
+
+    console.debug("Stopping local video stream...");
+    localStream.current?.getTracks().forEach((track) => track.stop());
   };
 
   useEffect(() => {
@@ -485,24 +499,6 @@ export default function Room() {
       window.removeEventListener("beforeunload", removeWSConnection);
 
       removeWSConnection();
-
-      for (const pc in peerConnections.current) {
-        peerConnections.current[pc].close();
-        delete peerConnections.current[pc];
-      }
-
-      peerConnections.current = {};
-
-      console.debug("Stopping all remote streams...");
-      for (const streamId in remoteStreams) {
-        remoteStreams[streamId].getTracks().forEach((track) => track.stop());
-      }
-
-      console.debug("removed all remote streams");
-      setRemoteStreams({});
-
-      console.debug("Stopping local video stream...");
-      localStream.current?.getTracks().forEach((track) => track.stop());
     };
   }, [roomId, userId]);
 
@@ -538,6 +534,8 @@ export default function Room() {
   };
 
   const leaveRoom = () => {
+    // all the local streams and remote connections will be cleaned up in the useEffect cleanup function
+    // current room details will also be removed from the signalling server
     router.push("/");
   };
 

@@ -11,7 +11,7 @@ export interface Room {
 }
 
 // WebSocket message types
-export type WebSocketMessage = 
+export type WebSocketMessage =
   | JoinRoomMessage
   | LeaveRoomMessage
   | OfferMessage
@@ -22,20 +22,20 @@ export type WebSocketMessage =
   | ErrorMessage;
 
 export interface JoinRoomMessage {
-  type: 'join-room';
+  type: "join-room";
   roomId: string;
   userId: string;
   userName?: string;
 }
 
 export interface LeaveRoomMessage {
-  type: 'leave-room';
+  type: "leave-room";
   roomId: string;
   userId: string;
 }
 
 export interface OfferMessage {
-  type: 'offer';
+  type: "offer";
   roomId: string;
   fromUserId: string;
   toUserId: string;
@@ -43,7 +43,7 @@ export interface OfferMessage {
 }
 
 export interface AnswerMessage {
-  type: 'answer';
+  type: "answer";
   roomId: string;
   fromUserId: string;
   toUserId: string;
@@ -51,7 +51,7 @@ export interface AnswerMessage {
 }
 
 export interface IceCandidateMessage {
-  type: 'ice-candidate';
+  type: "ice-candidate";
   roomId: string;
   fromUserId: string;
   toUserId: string;
@@ -59,20 +59,18 @@ export interface IceCandidateMessage {
 }
 
 export interface UserJoinedMessage {
-  type: 'user-joined';
+  type: "user-joined";
   roomId: string;
-  user: User;
-  users: User[];
+  userId: string;
 }
 
 export interface UserLeftMessage {
-  type: 'user-left';
+  type: "user-left";
   roomId: string;
   userId: string;
-  users: User[];
 }
 
 export interface ErrorMessage {
-  type: 'error';
+  type: "error";
   message: string;
 }
