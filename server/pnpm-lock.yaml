@@ -18,6 +18,9 @@ importers:
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
+      '@types/webrtc':
+        specifier: ^0.0.46
+        version: 0.0.46
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
@@ -192,6 +195,9 @@ packages:
   '@types/uuid@10.0.0':
     resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
 
+  '@types/webrtc@0.0.46':
+    resolution: {integrity: sha512-cvCnjKy0ma9ODWbVYBTMMB+WkocwLcscCwn2/caDVdb9MWaesS8PYGapIIHFsAaIBXRFlH1Fc7ZjIBO6pH0HKA==}
+
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
@@ -325,6 +331,8 @@ snapshots:
       undici-types: 7.8.0
 
   '@types/uuid@10.0.0': {}
+
+  '@types/webrtc@0.0.46': {}
 
   '@types/ws@8.18.1':
     dependencies:

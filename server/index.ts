@@ -12,7 +12,7 @@ import {
   UserJoinedMessage,
   UserLeftMessage,
   ErrorMessage,
-} from "../shared/types";
+} from "./util/types";
 
 const PORT = Number(process.env.PORT) || 8080;
 
