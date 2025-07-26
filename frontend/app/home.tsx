@@ -2,14 +2,13 @@
 
 import type React from "react";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuidV4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Users, Sparkles, ArrowRight } from "lucide-react";
+import { Plus, Users, ArrowRight } from "lucide-react";
 import Sparkle from "./assets/sparkle";
-import { WebSocketMessage } from "../../shared/types";
 import { toast } from "sonner";
 
 export default function Home() {
