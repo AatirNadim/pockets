@@ -577,11 +577,11 @@ export default function Room() {
       <div className="absolute top-0 left-0 right-0 z-20 bg-black/20 backdrop-blur-md border-b border-white/10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center space-x-3">
-            <div className="p-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg">
+            <div className="p-1.5 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-lg">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+              <h1 className="text-lg font-bold bg-gradient-to-r from-[#635bff] to-[#00d4ff] bg-clip-text text-transparent">
                 Pockets
               </h1>
               <div className="flex items-center space-x-2 text-xs text-gray-400">
@@ -637,7 +637,7 @@ export default function Room() {
               />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center space-y-4">
-                  <div className="w-24 h-24 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
+                  <div className="w-24 h-24 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-full flex items-center justify-center mx-auto">
                     <Users className="w-12 h-12 text-white" />
                   </div>
                   <div>
@@ -738,7 +738,7 @@ export default function Room() {
                   <div
                     className={`rounded-lg p-3 ${
                       msg.user === "You"
-                        ? "bg-indigo-600 ml-auto max-w-[80%]"
+                        ? "bg-[#635bff] ml-auto max-w-[80%]"
                         : msg.user === "System"
                         ? "bg-gray-700 text-center text-sm"
                         : "bg-gray-700 max-w-[80%]"
@@ -773,7 +773,7 @@ export default function Room() {
                 <Button
                   onClick={sendMessage}
                   size="sm"
-                  className="bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                  className="bg-[#635bff] hover:bg-[#544dc9] transition-colors"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
@@ -843,7 +843,7 @@ export default function Room() {
             size="lg"
             className={`w-12 h-12 rounded-full transition-all duration-200 ${
               showChat
-                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                ? "bg-[#635bff] hover:bg-[#544dc9] text-white"
                 : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
             }`}
           >
