@@ -1,7 +1,17 @@
 import type { Metadata } from "next";
-import "@fontsource/archivo/variable.css";
-import "@fontsource/montserrat/variable.css";
+import { Archivo, Montserrat } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
+
+const archivo = Archivo({
+  variable: "--font-archivo",
+  subsets: ["latin"],
+});
+
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: "Pockets",
@@ -15,8 +25,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body
+        className={`${archivo.variable} ${montserrat.variable} antialiased`}
+      >
         {children}
+        <Toaster closeButton position="top-right" richColors duration={2000} />
       </body>
     </html>
   );
