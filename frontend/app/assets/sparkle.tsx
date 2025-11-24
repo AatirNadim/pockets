@@ -1,11 +1,17 @@
 import { Sparkles } from "lucide-react";
 import React from "react";
+import { motion } from "framer-motion";
 
 function Sparkle() {
   return (
-    <div className="p-2 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-xl shadow-lg transform rotate-12 hover:rotate-0 transition-transform duration-300">
+    <motion.div
+      className="p-2 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-xl shadow-lg"
+      initial={{ rotate: 12, scale: 0.95 }}
+      whileHover={{ rotate: 0, scale: 1.05 }}
+      transition={{ type: "spring", stiffness: 260, damping: 18 }}
+    >
       <Sparkles className="w-6 h-6 text-white" />
-    </div>
+    </motion.div>
   );
 }
 

@@ -13,6 +13,9 @@ import { toast } from "sonner";
 import { useUserStore } from "@/lib/stores/userStore";
 import { isValidUUID } from "@/lib/utils";
 import { ThemeToggle } from "@/components/custom/themeToggle";
+import { motion } from "framer-motion";
+
+const MotionButton = motion(Button);
 
 export default function Home() {
   const router = useRouter();
@@ -62,14 +65,24 @@ export default function Home() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden font-sans bg-stripe-gradient text-slate-900 dark:bg-gradient-to-br dark:from-gray-950 dark:via-gray-900 dark:to-black dark:text-white">
+    <motion.main
+      className="relative min-h-screen overflow-hidden font-sans bg-stripe-gradient text-slate-900 dark:bg-gradient-to-br dark:from-gray-950 dark:via-gray-900 dark:to-black dark:text-white"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       <div className="absolute top-6 right-6 z-20">
         <ThemeToggle />
       </div>
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8 text-center">
           {/* Header Section */}
-          <div className="space-y-4 animate-fade-in">
+          <motion.div
+            className="space-y-4"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, type: "spring", stiffness: 120 }}
+          >
             <div className="flex items-center justify-center space-x-2 mb-2">
               <Sparkle />
               <h1 className="text-5xl font-bold font-heading text-white drop-shadow-md">
@@ -80,20 +93,29 @@ export default function Home() {
               Create instant collaborative spaces or join existing ones with
               your friends
             </p>
-          </div>
+          </motion.div>
 
           {/* Create/Join Room */}
-          <div className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 border border-white/60 dark:border-white/10">
+          <motion.div
+            className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.5, type: "spring", stiffness: 140 }}
+            whileHover={{ scale: 1.02 }}
+          >
             <div className="space-y-5">
               <div className="flex items-center justify-center space-x-2 text-[#635bff]">
                 <Plus className="w-5 h-5" />
                 <Users className="w-5 h-5" />
                 <span className="font-semibold">Create or Join a Room</span>
               </div>
-              <Button
+              <MotionButton
                 onClick={createAndJoin}
                 disabled={isCreating}
-                className="w-full bg-[#635bff] hover:bg-[#544dc9] text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="w-full bg-[#635bff] hover:bg-[#544dc9] text-white font-semibold py-3 px-6 rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={{ scale: 1.015 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
                 {isCreating ? (
                   <div className="flex items-center space-x-2">
@@ -107,7 +129,7 @@ export default function Home() {
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
                   </div>
                 )}
-              </Button>
+              </MotionButton>
               <p className="text-sm text-gray-500 dark:text-gray-300">
                 Spin up a brand-new collaborative space or jump into an existing
                 one with a room ID.
@@ -124,11 +146,14 @@ export default function Home() {
                 <div className="text-xs font-semibold tracking-[0.3em] text-gray-400 dark:text-gray-500 text-center">
                   OR
                 </div>
-                <Button
+                <MotionButton
                   onClick={joinRoom}
                   disabled={isJoining}
                   variant="outline"
-                  className="w-full border-2 border-[#635bff] text-[#635bff] hover:bg-[#f5f3ff] font-semibold py-3 px-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed dark:border-white dark:text-white dark:hover:bg-white/10"
+                  className="w-full border-2 border-[#635bff] text-[#635bff] hover:bg-[#f5f3ff] font-semibold py-3 px-6 rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed dark:border-white dark:text-white dark:hover:bg-white/10"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 18 }}
                 >
                   {isJoining ? (
                     <div className="flex items-center space-x-2 text-[#635bff] dark:text-white">
@@ -142,10 +167,10 @@ export default function Home() {
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
                     </div>
                   )}
-                </Button>
+                </MotionButton>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Footer */}
           <div className="pt-8 text-center">
@@ -155,23 +180,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fade-in 0.6s ease-out;
-        }
-      `}</style>
-    </main>
+    </motion.main>
   );
 }

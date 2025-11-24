@@ -5,6 +5,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../../lib/stores/chatStore";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
+import { AnimatePresence, motion } from "framer-motion";
+
+const MotionButton = motion(Button);
 
 const ChatComponent = () => {
   const { chatMessages, sendMessage } = useChatStore();
@@ -38,37 +41,46 @@ const ChatComponent = () => {
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-3 bg-white/60 dark:bg-transparent"
       >
-        {chatMessages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`${
-              msg.user === "You" ? "ml-4" : msg.user === "System" ? "" : "mr-4"
-            }`}
-          >
-            <div
-              className={`rounded-lg p-3 shadow-sm ${
+        <AnimatePresence initial={false}>
+          {chatMessages.map((msg) => (
+            <motion.div
+              key={msg.id}
+              className={`${
                 msg.user === "You"
-                  ? "bg-[#635bff] text-white ml-auto max-w-[80%]"
+                  ? "ml-4"
                   : msg.user === "System"
-                  ? "bg-slate-100 text-slate-700 text-center text-sm dark:bg-gray-800 dark:text-gray-200"
-                  : "bg-slate-100 text-slate-800 max-w-[80%] dark:bg-gray-800 dark:text-white"
+                  ? ""
+                  : "mr-4"
               }`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              layout
             >
-              {msg.user !== "System" && (
-                <div className="text-xs text-slate-600 dark:text-gray-300 mb-1">
-                  {msg.user}
+              <div
+                className={`rounded-lg p-3 ${
+                  msg.user === "You"
+                    ? "bg-[#635bff] ml-auto max-w-[80%]"
+                    : msg.user === "System"
+                    ? "bg-gray-700 text-center text-sm"
+                    : "bg-gray-700 max-w-[80%]"
+                }`}
+              >
+                {msg.user !== "System" && (
+                  <div className="text-xs text-gray-300 mb-1">{msg.user}</div>
+                )}
+                <div className="text-sm">{msg.message}</div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {msg.timestamp.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </div>
-              )}
-              <div className="text-sm">{msg.message}</div>
-              <div className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-                {msg.timestamp.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
               </div>
-            </div>
-          </div>
-        ))}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-white/80 dark:bg-transparent">
@@ -80,13 +92,15 @@ const ChatComponent = () => {
             placeholder="Type a message..."
             className="flex-1 bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-[#635bff] dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
           />
-          <Button
+          <MotionButton
             onClick={() => sendMessage(chatMessage)}
             size="sm"
             className="bg-[#635bff] hover:bg-[#544dc9] transition-colors text-white"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
             <Send className="w-4 h-4" />
-          </Button>
+          </MotionButton>
         </div>
       </div>
     </div>
