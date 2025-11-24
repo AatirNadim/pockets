@@ -2,7 +2,7 @@
 
 // WebRTC type definitions
 interface RTCSessionDescriptionInit {
-  type: 'offer' | 'answer' | 'pranswer' | 'rollback';
+  type: "offer" | "answer" | "pranswer" | "rollback";
   sdp: string;
 }
 
@@ -86,4 +86,9 @@ export interface UserLeftMessage {
 export interface ErrorMessage {
   type: "error";
   message: string;
+}
+
+export interface ExtendedWebSocket extends WebSocket {
+  userId?: string;
+  roomId?: string;
 }
