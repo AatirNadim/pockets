@@ -23,7 +23,7 @@ const MediaControl = () => {
   const [isMuted, setIsMuted] = useState(false);
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-black/40 backdrop-blur-md border-t border-white/10">
+    <div className="absolute bottom-0 left-0 right-0 bg-white/80 text-slate-700 backdrop-blur-md border-t border-slate-200 dark:bg-black/40 dark:text-white dark:border-white/10">
       <div className="flex items-center justify-center space-x-4 p-6">
         <Button
           onClick={() => {
@@ -34,7 +34,7 @@ const MediaControl = () => {
           className={`w-12 h-12 rounded-full transition-all duration-200 ${
             isMuted
               ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
+              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
           }`}
         >
           {isMuted ? (
@@ -51,7 +51,7 @@ const MediaControl = () => {
           className={`w-12 h-12 rounded-full transition-all duration-200 ${
             isVideoOff
               ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
+              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
           }`}
         >
           {isVideoOff ? (
@@ -68,7 +68,7 @@ const MediaControl = () => {
           className={`w-12 h-12 rounded-full transition-all duration-200 ${
             isSpeakerOff
               ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
+              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
           }`}
         >
           {isSpeakerOff ? (
@@ -85,7 +85,7 @@ const MediaControl = () => {
           className={`w-12 h-12 rounded-full transition-all duration-200 ${
             showChat
               ? "bg-[#635bff] hover:bg-[#544dc9] text-white"
-              : "bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
+              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
           }`}
         >
           <MessageSquare className="w-5 h-5" />
@@ -94,12 +94,12 @@ const MediaControl = () => {
         <Button
           variant="ghost"
           size="lg"
-          className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-all duration-200"
+          className="w-12 h-12 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 transition-all duration-200 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
         >
           <Settings className="w-5 h-5" />
         </Button>
 
-        <div className="w-px h-8 bg-white/20 mx-2"></div>
+        <div className="w-px h-8 bg-slate-300 dark:bg-white/20 mx-2"></div>
 
         <Button
           onClick={leaveRoom}

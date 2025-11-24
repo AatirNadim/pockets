@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Archivo, Montserrat } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { ThemeProvider } from "@/components/custom/theme-provider";
 
 const archivo = Archivo({
   variable: "--font-archivo",
@@ -24,12 +25,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${archivo.variable} ${montserrat.variable} antialiased`}
       >
-        {children}
-        <Toaster closeButton position="top-right" richColors duration={2000} />
+        <ThemeProvider>
+          {children}
+          <Toaster
+            closeButton
+            position="top-right"
+            richColors
+            duration={2000}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );

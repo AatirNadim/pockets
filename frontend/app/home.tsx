@@ -12,6 +12,7 @@ import Sparkle from "./assets/sparkle";
 import { toast } from "sonner";
 import { useUserStore } from "@/lib/stores/userStore";
 import { isValidUUID } from "@/lib/utils";
+import { ThemeToggle } from "@/components/custom/themeToggle";
 
 export default function Home() {
   const router = useRouter();
@@ -61,7 +62,10 @@ export default function Home() {
   };
 
   return (
-    <main className="relative min-h-screen bg-stripe-gradient overflow-hidden font-sans">
+    <main className="relative min-h-screen overflow-hidden font-sans bg-stripe-gradient text-slate-900 dark:bg-gradient-to-br dark:from-gray-950 dark:via-gray-900 dark:to-black dark:text-white">
+      <div className="absolute top-6 right-6 z-20">
+        <ThemeToggle />
+      </div>
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8 text-center">
           {/* Header Section */}
@@ -72,14 +76,14 @@ export default function Home() {
                 Pockets
               </h1>
             </div>
-            <p className="text-lg text-white/90 max-w-sm mx-auto leading-relaxed font-medium">
+            <p className="text-lg text-white/90 dark:text-white/80 max-w-sm mx-auto leading-relaxed font-medium">
               Create instant collaborative spaces or join existing ones with
               your friends
             </p>
           </div>
 
           {/* Create/Join Room */}
-          <div className="group p-6 bg-white rounded-2xl shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300">
+          <div className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 border border-white/60 dark:border-white/10">
             <div className="space-y-5">
               <div className="flex items-center justify-center space-x-2 text-[#635bff]">
                 <Plus className="w-5 h-5" />
@@ -104,7 +108,7 @@ export default function Home() {
                   </div>
                 )}
               </Button>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-300">
                 Spin up a brand-new collaborative space or jump into an existing
                 one with a room ID.
               </p>
@@ -114,21 +118,21 @@ export default function Home() {
                   value={roomId || ""}
                   onChange={(e) => setRoomId(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  className="w-full h-12 px-4 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-mono tracking-wider focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 transition-all duration-200 placeholder:text-gray-400"
+                  className="w-full h-12 px-4 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-mono tracking-wider focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 transition-all duration-200 placeholder:text-gray-400 dark:bg-gray-900/60 dark:border-gray-700 dark:text-white"
                   placeholder="Enter Room ID"
                 />
-                <div className="text-xs font-semibold tracking-[0.3em] text-gray-400 text-center">
+                <div className="text-xs font-semibold tracking-[0.3em] text-gray-400 dark:text-gray-500 text-center">
                   OR
                 </div>
                 <Button
                   onClick={joinRoom}
                   disabled={isJoining}
                   variant="outline"
-                  className="w-full border-2 border-[#635bff] text-[#635bff] hover:bg-[#f5f3ff] font-semibold py-3 px-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full border-2 border-[#635bff] text-[#635bff] hover:bg-[#f5f3ff] font-semibold py-3 px-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed dark:border-white dark:text-white dark:hover:bg-white/10"
                 >
                   {isJoining ? (
-                    <div className="flex items-center space-x-2 text-[#635bff]">
-                      <div className="w-4 h-4 border-2 border-[#635bff] border-t-transparent rounded-full animate-spin"></div>
+                    <div className="flex items-center space-x-2 text-[#635bff] dark:text-white">
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                       <span>Joining...</span>
                     </div>
                   ) : (
@@ -145,7 +149,7 @@ export default function Home() {
 
           {/* Footer */}
           <div className="pt-8 text-center">
-            <p className="text-sm text-white/60">
+            <p className="text-sm text-white/60 dark:text-white/70">
               Secure • Fast • Collaborative
             </p>
           </div>

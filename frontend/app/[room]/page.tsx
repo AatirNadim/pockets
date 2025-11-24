@@ -20,6 +20,7 @@ import ChatComponent from "@/components/custom/chatComponent";
 import MediaControl from "@/components/custom/mediaControl";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useMediaStore } from "@/lib/hooks/mediaHook";
+import { ThemeToggle } from "@/components/custom/themeToggle";
 
 export default function Room() {
   const { showChat } = useChatStore();
@@ -99,9 +100,9 @@ export default function Room() {
   }, [roomId]);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-white via-indigo-50 to-purple-100 text-slate-900 dark:from-gray-900 dark:via-gray-900 dark:to-black dark:text-white">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 bg-black/20 backdrop-blur-md border-b border-white/10">
+      <div className="absolute top-0 left-0 right-0 z-20 bg-white/80 dark:bg-black/20 backdrop-blur-md border-b border-slate-200 dark:border-white/10 shadow-sm">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center space-x-3">
             <div className="p-1.5 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-lg">
@@ -111,7 +112,7 @@ export default function Room() {
               <h1 className="text-lg font-bold bg-gradient-to-r from-[#635bff] to-[#00d4ff] bg-clip-text text-transparent">
                 Pockets
               </h1>
-              <div className="flex items-center space-x-2 text-xs text-gray-400">
+              <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-gray-400">
                 <div
                   className={`w-2 h-2 rounded-full ${
                     connectionStatus === "connected"
@@ -127,16 +128,18 @@ export default function Room() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 bg-white/10 rounded-lg px-3 py-1.5">
-              <Users className="w-4 h-4 text-gray-300" />
+            <div className="flex items-center space-x-2 bg-white text-slate-700 rounded-lg px-3 py-1.5 border border-slate-200 shadow-sm dark:bg-white/10 dark:border-white/10 dark:text-gray-300">
+              <Users className="w-4 h-4" />
               <span className="text-sm font-medium">{participantCount}</span>
             </div>
+
+            <ThemeToggle />
 
             <Button
               onClick={copyRoomId}
               variant="ghost"
               size="sm"
-              className="text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200"
+              className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-white/10 transition-all duration-200"
             >
               <Copy className="w-4 h-4 mr-2" />
               {roomCopied ? "Copied!" : "Copy ID"}
@@ -155,7 +158,7 @@ export default function Room() {
         >
           <div className="h-full flex flex-col">
             {/* Remote Video */}
-            <div className="flex-1 relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg m-4 overflow-hidden shadow-2xl">
+            <div className="flex-1 relative bg-white rounded-lg m-4 overflow-hidden shadow-2xl border border-slate-200 dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 dark:border-white/10">
               <video
                 ref={remoteVideoRef}
                 autoPlay
@@ -168,10 +171,10 @@ export default function Room() {
                     <Users className="w-12 h-12 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-300">
+                    <h2 className="text-xl font-semibold text-slate-700 dark:text-gray-300">
                       Waiting for others...
                     </h2>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-slate-500 dark:text-gray-500 mt-1">
                       Share the room ID to invite participants
                     </p>
                   </div>
@@ -179,14 +182,14 @@ export default function Room() {
               </div>
 
               {/* Remote user info overlay */}
-              <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-lg px-3 py-1.5">
+              <div className="absolute top-4 left-4 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded-lg px-3 py-1.5">
                 <span className="text-sm font-medium">Remote User</span>
               </div>
             </div>
 
             {/* Local Video (Picture-in-Picture) */}
             <div
-              className={`absolute bottom-24 right-8 bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg overflow-hidden shadow-xl border-2 border-white/20 transition-all duration-300 ${
+              className={`absolute bottom-24 right-8 bg-white rounded-lg overflow-hidden shadow-xl border-2 border-white/70 dark:bg-gradient-to-br dark:from-gray-700 dark:to-gray-800 dark:border-white/20 transition-all duration-300 ${
                 isMinimized ? "w-16 h-12" : "w-48 h-36"
               }`}
             >
@@ -198,16 +201,16 @@ export default function Room() {
                 className="w-full h-full object-cover"
               />
               {isVideoOff && (
-                <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+                <div className="absolute inset-0 bg-slate-200 dark:bg-gray-800 flex items-center justify-center">
                   <VideoOff
-                    className={`text-gray-400 ${
+                    className={`text-slate-500 dark:text-gray-400 ${
                       isMinimized ? "w-4 h-4" : "w-8 h-8"
                     }`}
                   />
                 </div>
               )}
 
-              <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm rounded px-2 py-1">
+              <div className="absolute top-2 left-2 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded px-2 py-1">
                 <span
                   className={`font-medium ${
                     isMinimized ? "text-[10px]" : "text-xs"
@@ -221,7 +224,7 @@ export default function Room() {
                 onClick={() => setIsMinimized(!isMinimized)}
                 variant="ghost"
                 size="sm"
-                className="absolute top-2 right-2 w-6 h-6 p-0 bg-black/50 hover:bg-black/70 transition-colors"
+                className="absolute top-2 right-2 w-6 h-6 p-0 bg-white/70 text-slate-700 hover:bg-white/90 dark:bg-black/50 dark:hover:bg-black/70 dark:text-white transition-colors"
               >
                 {isMinimized ? (
                   <Maximize2 className="w-3 h-3" />
@@ -235,7 +238,7 @@ export default function Room() {
 
         {/* Chat Sidebar */}
         <div
-          className={`bg-gray-900/95 backdrop-blur-sm border-l border-white/10 transition-all duration-300 ${
+          className={`bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-l border-slate-200 dark:border-white/10 transition-all duration-300 ${
             showChat ? "w-80" : "w-0 overflow-hidden"
           }`}
         >
@@ -247,9 +250,9 @@ export default function Room() {
       <MediaControl />
 
       {/* Room ID Display */}
-      <div className="absolute top-24 left-4 bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 border border-white/10">
-        <div className="text-xs text-gray-400 mb-1">Room ID</div>
-        <div className="font-mono text-sm text-white">{roomId}</div>
+      <div className="absolute top-24 left-4 bg-white/90 text-slate-800 backdrop-blur-sm rounded-lg px-4 py-2 border border-slate-200 shadow dark:bg-black/50 dark:text-white dark:border-white/10">
+        <div className="text-xs text-slate-500 dark:text-gray-300 mb-1">Room ID</div>
+        <div className="font-mono text-sm">{roomId}</div>
       </div>
     </div>
   );
