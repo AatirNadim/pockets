@@ -1,12 +1,21 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+type MediaDeviceOption = {
+  deviceId: string;
+  label: string;
+};
+
 type MediaState = {
   mediaStreams: Record<string, MediaStream>;
   isAudioOnly: boolean;
   isScreenSharing: boolean;
   isVideoOff: boolean;
   isSpeakerOff: boolean;
+  availableCameras: MediaDeviceOption[];
+  availableMicrophones: MediaDeviceOption[];
+  selectedCameraId: string | null;
+  selectedMicrophoneId: string | null;
 };
 
 type MediaActions = {
@@ -17,13 +26,17 @@ type MediaActions = {
   setScreenSharing: (isSharing: boolean) => void;
   toggleVideoOff: () => void;
   toggleSpeakerOff: () => void;
+  setAvailableCameras: (devices: MediaDeviceOption[]) => void;
+  setAvailableMicrophones: (devices: MediaDeviceOption[]) => void;
+  setSelectedCameraId: (deviceId: string | null) => void;
+  setSelectedMicrophoneId: (deviceId: string | null) => void;
 };
 
-export type { MediaState, MediaActions };
+export type { MediaState, MediaActions, MediaDeviceOption };
 
 export const useMediaStore = create<MediaState & MediaActions>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       mediaStreams: {},
       isAudioOnly: false,
       isScreenSharing: false,
@@ -32,6 +45,10 @@ export const useMediaStore = create<MediaState & MediaActions>()(
       isSpeakerOff: false,
       toggleSpeakerOff: () =>
         set((state) => ({ isSpeakerOff: !state.isSpeakerOff })),
+      availableCameras: [],
+      availableMicrophones: [],
+      selectedCameraId: null,
+      selectedMicrophoneId: null,
       addMediaStream: (userId, stream) =>
         set((state) => ({
           mediaStreams: { ...state.mediaStreams, [userId]: stream },
@@ -46,9 +63,21 @@ export const useMediaStore = create<MediaState & MediaActions>()(
       toggleAudioOnly: () =>
         set((state) => ({ isAudioOnly: !state.isAudioOnly })),
       setScreenSharing: (isSharing) => set({ isScreenSharing: isSharing }),
+      setAvailableCameras: (devices) => set({ availableCameras: devices }),
+      setAvailableMicrophones: (devices) =>
+        set({ availableMicrophones: devices }),
+      setSelectedCameraId: (deviceId) => set({ selectedCameraId: deviceId }),
+      setSelectedMicrophoneId: (deviceId) =>
+        set({ selectedMicrophoneId: deviceId }),
     }),
     {
       name: "media-storage",
+      partialize: (state) => ({
+        isAudioOnly: state.isAudioOnly,
+        isScreenSharing: state.isScreenSharing,
+        isVideoOff: state.isVideoOff,
+        isSpeakerOff: state.isSpeakerOff,
+      }),
     }
   )
 );

@@ -12,6 +12,11 @@ const serverPath = `${
   process.env.NEXT_PUBLIC_SERVER_PATH || "localhost"
 }:${serverPort}`;
 
+enum UserType {
+  HOST = "host",
+  GUEST = "guest",
+}
+
 export {
   CHUNK_SIZE,
   MAX_CHANNELS_FOR_DATA_TRANSMISSION,
@@ -19,4 +24,5 @@ export {
   MAX_FILE_SIZE_MB_MULTIPLE_SEND,
   MAX_FILES_TO_SEND_TOGETHER,
   serverPath,
+  UserType,
 };

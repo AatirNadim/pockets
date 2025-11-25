@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Button } from "../ui/button";
 import {
+  Camera,
+  Check,
   MessageSquare,
   Mic,
   MicOff,
@@ -14,8 +16,124 @@ import {
 import { useUserStore } from "../../lib/stores/userStore";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useMediaStore } from "@/lib/hooks/mediaHook";
+import type { MediaDeviceOption } from "@/lib/hooks/mediaHook";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
-const MediaControl = () => {
+type DeviceDropdownProps = {
+  label: string;
+  icon: React.ReactNode;
+  devices: MediaDeviceOption[];
+  selectedId: string | null;
+  onSelect: (deviceId: string) => void | Promise<void>;
+};
+
+const DeviceDropdown = ({
+  label,
+  icon,
+  devices,
+  selectedId,
+  onSelect,
+}: DeviceDropdownProps) => {
+  const activeLabel = devices.find((device) => device.deviceId === selectedId)?.label;
+  const isDisabled = devices.length === 0;
+
+  const handleSelect = (deviceId: string) => {
+    return Promise.resolve(onSelect(deviceId));
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="lg"
+          className={cn(
+            "min-w-[160px] justify-between rounded-full px-4 text-sm font-medium",
+            isDisabled
+              ? "cursor-not-allowed bg-slate-200 text-slate-500 opacity-50 dark:bg-white/5 dark:text-gray-500"
+              : "bg-slate-200 text-slate-700 hover:bg-slate-300 hover:text-slate-900 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20 dark:hover:text-white"
+          )}
+          disabled={isDisabled}
+        >
+          <span className="flex items-center gap-2">
+            {icon}
+            {activeLabel || `Select ${label}`}
+          </span>
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="center"
+        side="top"
+        sideOffset={12}
+        className="w-64"
+      >
+        <DropdownMenuLabel className="text-xs tracking-wide uppercase">
+          {label}
+        </DropdownMenuLabel>
+        <div className="max-h-56 overflow-y-auto">
+          {devices.length ? (
+            devices.map((device) => (
+              <DropdownMenuItem
+                key={device.deviceId}
+                onSelect={() => {
+                  handleSelect(device.deviceId);
+                }}
+                className={cn(
+                  "flex items-center justify-between gap-3",
+                  selectedId === device.deviceId && "text-[#635bff]"
+                )}
+              >
+                <span className="truncate text-sm">{device.label}</span>
+                {selectedId === device.deviceId && <Check className="h-4 w-4" />}
+              </DropdownMenuItem>
+            ))
+          ) : (
+            <div className="px-2 py-3 text-sm text-slate-500 dark:text-gray-400">
+              No devices detected
+            </div>
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+type MediaControlProps = {
+  cameras: MediaDeviceOption[];
+  microphones: MediaDeviceOption[];
+  selectedCameraId: string | null;
+  selectedMicrophoneId: string | null;
+  onCameraChange: (deviceId: string) => void | Promise<void>;
+  onMicrophoneChange: (deviceId: string) => void | Promise<void>;
+};
+
+const MediaControl = ({
+  cameras,
+  microphones,
+  selectedCameraId,
+  selectedMicrophoneId,
+  onCameraChange,
+  onMicrophoneChange,
+}: MediaControlProps) => {
   const { leaveRoom } = useUserStore();
   const { isVideoOff, isSpeakerOff, toggleSpeakerOff, toggleVideoOff } =
     useMediaStore();
@@ -24,7 +142,7 @@ const MediaControl = () => {
 
   return (
     <div className="absolute bottom-0 left-0 right-0 bg-white/80 text-slate-700 backdrop-blur-md border-t border-slate-200 dark:bg-black/40 dark:text-white dark:border-white/10">
-      <div className="flex items-center justify-center space-x-4 p-6">
+      <div className="flex flex-wrap items-center justify-center gap-4 p-6">
         <Button
           onClick={() => {
             setIsMuted((prev) => !prev);
@@ -77,6 +195,22 @@ const MediaControl = () => {
             <Volume2 className="w-5 h-5" />
           )}
         </Button>
+
+        <DeviceDropdown
+          label="Camera"
+          icon={<Camera className="w-4 h-4" />}
+          devices={cameras}
+          selectedId={selectedCameraId}
+          onSelect={onCameraChange}
+        />
+
+        <DeviceDropdown
+          label="Microphone"
+          icon={<Mic className="w-4 h-4" />}
+          devices={microphones}
+          selectedId={selectedMicrophoneId}
+          onSelect={onMicrophoneChange}
+        />
 
         <Button
           onClick={toggleShowChat}

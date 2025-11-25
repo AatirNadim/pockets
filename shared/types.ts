@@ -19,13 +19,15 @@ export type WebSocketMessage =
   | IceCandidateMessage
   | UserJoinedMessage
   | UserLeftMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | RoomFullMessage;
 
 export interface JoinRoomMessage {
   type: "join-room";
   roomId: string;
   userId: string;
-  userName?: string;
+  userName: string;
+  userType: string;
 }
 
 export interface LeaveRoomMessage {
@@ -39,6 +41,7 @@ export interface OfferMessage {
   roomId: string;
   fromUserId: string;
   toUserId: string;
+  fromUserName: string;
   offer: RTCSessionDescriptionInit;
 }
 
@@ -62,6 +65,7 @@ export interface UserJoinedMessage {
   type: "user-joined";
   roomId: string;
   userId: string;
+  userName: string;
 }
 
 export interface UserLeftMessage {
@@ -73,4 +77,9 @@ export interface UserLeftMessage {
 export interface ErrorMessage {
   type: "error";
   message: string;
+}
+
+export interface RoomFullMessage {
+  type: "room-full";
+  roomId: string;
 }
