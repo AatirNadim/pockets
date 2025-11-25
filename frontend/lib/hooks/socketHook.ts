@@ -668,6 +668,31 @@ export const useSocket = () => {
         "new peer connection created and added to records for user:",
         remoteUserId
       );
+    } catch (error) {
+      console.error("Error creating peer connection:", error);
+      toast.error("Peer Connection Failed", {
+        description: "Failed to create WebRTC peer connection.",
+      });
+    }
+  };
+
+  const createOffer = async (remoteUserId: string) => {
+    try {
+      console.debug("Creating offer for remote user:", remoteUserId);
+
+      if (!userId || !userName || !userType) {
+        throw new Error("User not initialized");
+      }
+
+      if (!roomId) {
+        throw new Error("Room ID is not set");
+      }
+
+      if (!peerConnections.current[remoteUserId]) {
+        throw new Error(`Peer connection not found for user: ${remoteUserId}`);
+      }
+
+      const pc = peerConnections.current[remoteUserId];
 
       // create data channel for file transfer, so that it is ready when offer is created
 
@@ -688,31 +713,6 @@ export const useSocket = () => {
       );
 
       registerDataChannelListeners(dataChannel);
-    } catch (error) {
-      console.error("Error creating peer connection:", error);
-      toast.error("Peer Connection Failed", {
-        description: "Failed to create WebRTC peer connection.",
-      });
-    }
-  };
-
-  const createOffer = async (remoteUserId: string) => {
-    try {
-      console.debug("Creating offer for remote user:", remoteUserId);
-
-      if (!userId || !userName) {
-        throw new Error("User not initialized");
-      }
-
-      if (!roomId) {
-        throw new Error("Room ID is not set");
-      }
-
-      if (!peerConnections.current[remoteUserId]) {
-        throw new Error(`Peer connection not found for user: ${remoteUserId}`);
-      }
-
-      const pc = peerConnections.current[remoteUserId];
 
       console.debug("Creating offer for remote user:", remoteUserId);
 
@@ -726,6 +726,7 @@ export const useSocket = () => {
         type: "offer",
         fromUserId: userId,
         fromUserName: userName,
+        fromUserType: userType,
         toUserId: remoteUserId,
         offer,
         roomId,
@@ -741,7 +742,7 @@ export const useSocket = () => {
 
   const handleOffer = async (msg: OfferMessage) => {
     try {
-      if (!userId) {
+      if (!userId || !userName || !userType) {
         throw new Error("User not initialized");
       }
 
@@ -780,6 +781,8 @@ export const useSocket = () => {
         type: "answer",
         roomId,
         fromUserId: userId,
+        fromUserName: userName,
+        fromUserType: userType,
         toUserId: fromUserId,
         answer,
       });

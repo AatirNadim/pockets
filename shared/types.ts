@@ -1,5 +1,7 @@
 // Shared types between client and server
 
+import { UserType } from "@/lib/constants";
+
 export interface User {
   id: string;
   name?: string;
@@ -36,12 +38,14 @@ export interface LeaveRoomMessage {
   userId: string;
 }
 
+// usertype is required for offer and answer for the peers to have information about the other peers
 export interface OfferMessage {
   type: "offer";
   roomId: string;
   fromUserId: string;
   toUserId: string;
   fromUserName: string;
+  fromUserType: UserType;
   offer: RTCSessionDescriptionInit;
 }
 
@@ -50,6 +54,8 @@ export interface AnswerMessage {
   roomId: string;
   fromUserId: string;
   toUserId: string;
+  fromUserName: string;
+  fromUserType: UserType;
   answer: RTCSessionDescriptionInit;
 }
 
@@ -61,6 +67,7 @@ export interface IceCandidateMessage {
   candidate: RTCIceCandidateInit;
 }
 
+// user-joined message will always come from guests
 export interface UserJoinedMessage {
   type: "user-joined";
   roomId: string;
@@ -68,6 +75,7 @@ export interface UserJoinedMessage {
   userName: string;
 }
 
+// user-left message will always come from guests; hosts cannot leave without closing the room
 export interface UserLeftMessage {
   type: "user-left";
   roomId: string;
