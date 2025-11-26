@@ -1,3 +1,4 @@
+import { MAX_USERS_PER_ROOM } from "./constants";
 import {
   AnswerMessage,
   ErrorMessage,
@@ -7,6 +8,7 @@ import {
   LeaveRoomMessage,
   OfferMessage,
   Room,
+  RoomFullMessage,
   User,
   UserJoinedMessage,
   UserLeftMessage,
@@ -63,7 +65,7 @@ export class SocketService {
     }
   }
 
-  joinRoom(ws: ExtendedWebSocket, message: JoinRoomMessage) {
+  private joinRoom(ws: ExtendedWebSocket, message: JoinRoomMessage) {
     const { roomId, userId, userName } = message;
 
     const user: User = {
@@ -86,6 +88,16 @@ export class SocketService {
       room = { id: roomId, users: [] };
     }
 
+    if (room.users.length >= MAX_USERS_PER_ROOM) {
+      console.log(`Room ${roomId} is full. Rejecting user ${userId}`);
+      const roomFullMessage: RoomFullMessage = {
+        type: "room-full",
+        roomId,
+      };
+      ws.send(JSON.stringify(roomFullMessage));
+      return;
+    }
+
     if (!room.users.find((u) => u.id === userId)) {
       room.users.push(user);
     } else {
@@ -95,10 +107,13 @@ export class SocketService {
 
     this.rooms.set(roomId, room);
 
+    console.log(`User ${userId} joined room ${roomId}`);
+
     this.broadcastToRoom(roomId, {
       roomId,
       type: "user-joined",
       userId,
+      userName,
     } as UserJoinedMessage);
   }
 

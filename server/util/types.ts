@@ -38,7 +38,8 @@ export interface JoinRoomMessage {
   type: "join-room";
   roomId: string;
   userId: string;
-  userName?: string;
+  userName: string;
+  userType: string;
 }
 
 export interface LeaveRoomMessage {
@@ -52,6 +53,8 @@ export interface OfferMessage {
   roomId: string;
   fromUserId: string;
   toUserId: string;
+  fromUserName: string;
+  fromUserType: string;
   offer: RTCSessionDescriptionInit;
 }
 
@@ -60,6 +63,8 @@ export interface AnswerMessage {
   roomId: string;
   fromUserId: string;
   toUserId: string;
+  fromUserName: string;
+  fromUserType: string;
   answer: RTCSessionDescriptionInit;
 }
 
@@ -86,6 +91,11 @@ export interface UserLeftMessage {
 export interface ErrorMessage {
   type: "error";
   message: string;
+}
+
+export interface RoomFullMessage {
+  type: "room-full";
+  roomId: string;
 }
 
 export interface ExtendedWebSocket extends WebSocket {

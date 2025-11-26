@@ -602,7 +602,8 @@ export const useSocket = () => {
 
     pc.ondatachannel = (event) => {
       const channel = event.channel;
-      // dataChannelMap.current[remoteUserId] = channel
+      // store data channel for this remote user
+      dataChannelMap.current[remoteUserId] = channel;
       console.debug(
         `Data channel established with remote user ${remoteUserId}:`,
         channel
@@ -695,6 +696,7 @@ export const useSocket = () => {
       const pc = peerConnections.current[remoteUserId];
 
       // create data channel for file transfer, so that it is ready when offer is created
+      // this ensures that the data channel is negotiated along with the offer/answer exchange
 
       console.debug(
         "Creating data channel for file transfer with remote user after answer:",
