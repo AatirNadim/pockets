@@ -15,9 +15,9 @@ interface UserState {
 
 interface UserAction {
   setUserId: () => void;
-  initializeUser: (userType: UserType) => void;
-  createRoom: (roomId: string) => void;
-  joinRoom: (roomId: string) => void;
+  initializeUser: (userType: UserType, preferredName?: string) => void;
+  initializeUserAsHost: (preferredName?: string) => void;
+  initializeUserAsGuest: (preferredName?: string) => void;
   leaveRoom: () => void;
   clearUser: () => void;
   addRemoteUser: (userId: string, userName: string) => void;
@@ -83,22 +83,26 @@ export const useUserStore = create<UserState & UserAction>()(
         set({ userId: uuidv4() });
       },
 
-      initializeUser: (userType: UserType) => {
+      initializeUser: (userType: UserType, preferredName?: string) => {
+        const sanitizedName = preferredName?.trim();
         set({
           userId: uuidv4(),
-          userName: generateRandomUsername(),
+          userName:
+            sanitizedName && sanitizedName.length > 0
+              ? sanitizedName
+              : generateRandomUsername(),
           userType,
         });
       },
 
-      createRoom: () => {
+      initializeUserAsHost: (preferredName?: string) => {
         const { initializeUser } = get();
-        initializeUser(UserType.HOST);
+        initializeUser(UserType.HOST, preferredName);
       },
 
-      joinRoom: () => {
+      initializeUserAsGuest: (preferredName?: string) => {
         const { initializeUser } = get();
-        initializeUser(UserType.GUEST);
+        initializeUser(UserType.GUEST, preferredName);
       },
 
       leaveRoom: () => {

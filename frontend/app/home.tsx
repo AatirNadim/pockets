@@ -14,25 +14,30 @@ import { useUserStore } from "@/lib/stores/userStore";
 import { isValidUUID } from "@/lib/utils";
 import { ThemeToggle } from "@/components/custom/themeToggle";
 import { motion } from "framer-motion";
+import AnimatedBackground from "@/components/custom/animatedBackground";
 
 const MotionButton = motion(Button);
 
 export default function Home() {
   const router = useRouter();
-  const { roomId, setRoomId } = useUserStore();
+  const { roomId, setRoomId, initializeUserAsGuest, initializeUserAsHost } =
+    useUserStore();
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [displayName, setDisplayName] = useState("");
 
   const joinRoom = async () => {
     if (!roomId) {
       toast.error("Room Id cannot be empty");
       return;
     }
+
     if (isValidUUID(roomId.trim())) {
       setIsJoining(true);
-      setTimeout(() => {
-        router.push(`/${roomId.trim()}`);
-      }, 500);
+
+      initializeUserAsGuest(displayName.trim());
+
+      router.push(`/room/${roomId.trim()}`);
     } else {
       // Add shake animation for invalid input
       console.log("Invalid Room ID:", roomId);
@@ -47,9 +52,10 @@ export default function Home() {
     try {
       setIsCreating(true);
       console.debug("Creating new room...");
+      initializeUserAsHost(displayName.trim());
       const newRoomId = uuidV4();
       setRoomId(newRoomId);
-      router.push(`/${newRoomId}`);
+      router.push(`/room/${newRoomId}`);
     } catch (error) {
       console.error("Error creating room:", error);
       toast.error("Failed to create room. Please try again.");
@@ -66,11 +72,12 @@ export default function Home() {
 
   return (
     <motion.main
-      className="relative min-h-screen overflow-hidden font-sans bg-stripe-gradient text-slate-900 dark:bg-gradient-to-br dark:from-gray-950 dark:via-gray-900 dark:to-black dark:text-white"
+      className="relative min-h-screen overflow-hidden font-sans text-slate-900 dark:text-white"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
+      <AnimatedBackground />
       <div className="absolute top-6 right-6 z-20">
         <ThemeToggle />
       </div>
@@ -78,18 +85,18 @@ export default function Home() {
         <div className="w-full max-w-md space-y-8 text-center">
           {/* Header Section */}
           <motion.div
-            className="space-y-4"
+            className="space-y-4 text-[var(--primary)]"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, type: "spring", stiffness: 120 }}
           >
             <div className="flex items-center justify-center space-x-2 mb-2">
               <Sparkle />
-              <h1 className="text-5xl font-bold font-heading text-white drop-shadow-md">
+              <h1 className="text-5xl font-bold font-heading drop-shadow-md">
                 Pockets
               </h1>
             </div>
-            <p className="text-lg text-white/90 dark:text-white/80 max-w-sm mx-auto leading-relaxed font-medium">
+            <p className="text-lg max-w-sm mx-auto leading-relaxed font-semibold">
               Create instant collaborative spaces or join existing ones with
               your friends
             </p>
@@ -100,15 +107,28 @@ export default function Home() {
             className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.5, type: "spring", stiffness: 140 }}
+            transition={{
+              delay: 0.15,
+              duration: 0.5,
+              type: "spring",
+              stiffness: 140,
+            }}
             whileHover={{ scale: 1.02 }}
           >
             <div className="space-y-5">
-              <div className="flex items-center justify-center space-x-2 text-[#635bff]">
+              <div className="flex items-center justify-center space-x-2 text-[var(--primary)]">
                 <Plus className="w-5 h-5" />
                 <Users className="w-5 h-5" />
                 <span className="font-semibold">Create or Join a Room</span>
               </div>
+              <Input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onKeyDown={handleKeyPress}
+                className="w-full h-12 px-4 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-sans tracking-wide focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 transition-all duration-200 placeholder:text-gray-400 dark:bg-gray-900/60 dark:border-gray-700 dark:text-white"
+                placeholder="Enter display name (optional)"
+              />
               <MotionButton
                 onClick={createAndJoin}
                 disabled={isCreating}
@@ -173,8 +193,8 @@ export default function Home() {
           </motion.div>
 
           {/* Footer */}
-          <div className="pt-8 text-center">
-            <p className="text-sm text-white/60 dark:text-white/70">
+          <div className="pt-8 text-center text-[var(--primary)]">
+            <p className="text-sm">
               Secure • Fast • Collaborative
             </p>
           </div>

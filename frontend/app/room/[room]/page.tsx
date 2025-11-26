@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   VideoOff,
@@ -24,6 +24,7 @@ import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
 import { UserType } from "@/lib/constants";
+import { isValidUUID } from "@/lib/utils";
 
 type RemoteVideoTileProps = {
   stream: MediaStream;
@@ -69,13 +70,13 @@ export default function Room() {
     selectedCameraId,
     selectedMicrophoneId,
   } = useMediaStore();
-  const { remoteUsers, userType } = useUserStore();
+  const { remoteUsers, userType, userId } = useUserStore();
 
+  const router = useRouter();
   const params = useParams();
   const roomId = params.room as string;
 
   const [isMinimized, setIsMinimized] = useState(false);
-  const [userId] = useState(uuidV4());
   const {
     localVideoRef,
     connectToRoom,
@@ -99,6 +100,14 @@ export default function Room() {
     : "bg-yellow-400 animate-pulse";
 
   const cleanUpRef = useRef(cleanUp);
+
+  useEffect(() => {
+    if (!isValidUUID(roomId) || !userId) {
+      alert("Invalid Room ID. Redirecting to home page.");
+      router.push("/");
+    }
+  });
+
   // cleanupref will always have latest cleanUp function
   useEffect(() => {
     cleanUpRef.current = cleanUp;
