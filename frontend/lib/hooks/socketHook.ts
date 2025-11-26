@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
-import { serverPath } from "@/lib/constants";
+import { serverPath, UserType } from "@/lib/constants";
 
 import { toast } from "sonner";
 import { useFileStore } from "../stores/fileStore";
+import { useJoinRequestStore } from "../stores/joinRequestStore";
 import {
   WebSocketMessage,
   AnswerMessage,
   IceCandidateMessage,
+  JoinRequestDecisionMessage,
   JoinRoomMessage,
   LeaveRoomMessage,
   OfferMessage,
@@ -15,6 +18,7 @@ import {
 import { useMediaStore } from "./mediaHook";
 
 export const useSocket = () => {
+  const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const dataChannelMap = useRef<Record<string, RTCDataChannel | null>>({});
@@ -56,6 +60,12 @@ export const useSocket = () => {
     removeMediaStream,
     clearMediaStreams,
   } = useMediaStore();
+
+  const addJoinRequest = useJoinRequestStore((state) => state.addRequest);
+  const removeJoinRequestFromStore = useJoinRequestStore(
+    (state) => state.removeRequest
+  );
+  const clearJoinRequests = useJoinRequestStore((state) => state.clearRequests);
 
   const captureDeviceIdsFromStream = (stream: MediaStream) => {
     const videoTrack = stream.getVideoTracks()[0];
@@ -348,7 +358,11 @@ export const useSocket = () => {
         socket.send(JSON.stringify(msg));
 
         console.debug("WebSocket connection established");
-        setStatus("Waiting for other users...");
+        setStatus(
+          userType === UserType.GUEST
+            ? "Waiting for host approval..."
+            : "Waiting for other users..."
+        );
       };
 
       socket.onmessage = (event) => {
@@ -366,6 +380,7 @@ export const useSocket = () => {
         leaveRoom();
         resetFileStore();
         clearMediaStreams();
+        clearJoinRequests();
       };
 
       socket.onerror = () => {
@@ -376,6 +391,7 @@ export const useSocket = () => {
         leaveRoom();
         resetFileStore();
         clearMediaStreams();
+        clearJoinRequests();
       };
     } catch (error) {
       console.error("Error registering WebSocket listeners:", error);
@@ -477,6 +493,52 @@ export const useSocket = () => {
           closeButton: true,
         });
         break;
+
+      case "join-request":
+        if (userType === UserType.HOST && message.guest) {
+          addJoinRequest({
+            roomId: message.roomId,
+            guestId: message.guest.id,
+            guestName: message.guest.name,
+          });
+          toast.info("Join Request", {
+            description: `${message.guest.name} wants to join the room.`,
+          });
+        }
+        break;
+
+      case "join-request-accepted":
+        if (message.guestUserId === userId) {
+          setStatus("Host accepted your request. Connecting...");
+          toast.success("Request Accepted", {
+            description: `${message.hostName ?? "Host"} approved your request. Setting up the call...`,
+          });
+        }
+        break;
+
+      case "join-request-rejected":
+        if (message.guestUserId === userId) {
+          setStatus("Host rejected your request");
+          toast.error("Request Rejected", {
+            description: `${message.hostName ?? "Host"} declined your request to join.`,
+          });
+          cleanUp();
+        }
+        if (userType === UserType.HOST) {
+          removeJoinRequestFromStore(message.guestUserId);
+        }
+        break;
+
+      case "host-closed-room":
+        if (userType === UserType.GUEST) {
+          toast.error("Room Closed", {
+            description: "The host ended this room. Returning to the lobby...",
+          });
+          setStatus("Host ended the room");
+          cleanUp();
+          router.push("/");
+        }
+        break;
     }
   };
 
@@ -490,6 +552,29 @@ export const useSocket = () => {
     } catch (error) {
       console.error("Error sending WebSocket message:", error);
     }
+  };
+
+  const respondToJoinRequest = (
+    guestId: string,
+    decision: "accept" | "reject"
+  ) => {
+    if (!roomId || !userId || userType !== UserType.HOST) {
+      console.error("Cannot respond to join request without host context.");
+      return;
+    }
+
+    const payload: JoinRequestDecisionMessage = {
+      type:
+        decision === "accept"
+          ? "join-request-accepted"
+          : "join-request-rejected",
+      roomId,
+      hostUserId: userId,
+      guestUserId: guestId,
+    };
+
+    sendWsMessage(payload);
+    removeJoinRequestFromStore(guestId);
   };
 
   const registerPCEventHandlers = (
@@ -990,6 +1075,7 @@ export const useSocket = () => {
       resetFileStore(); // Reset file state when leaving room
       leaveRoom();
       clearMediaStreams();
+      clearJoinRequests();
     } catch (error) {
       console.error("Error cleaning up WebSocket connection:", error);
     }
@@ -1016,5 +1102,6 @@ export const useSocket = () => {
     switchCamera,
     switchMicrophone,
     cleanUp,
+    respondToJoinRequest,
   };
 };

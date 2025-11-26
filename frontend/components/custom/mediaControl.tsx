@@ -41,7 +41,9 @@ const DeviceDropdown = ({
   selectedId,
   onSelect,
 }: DeviceDropdownProps) => {
-  const activeLabel = devices.find((device) => device.deviceId === selectedId)?.label;
+  const activeLabel = devices.find(
+    (device) => device.deviceId === selectedId
+  )?.label;
   const isDisabled = devices.length === 0;
 
   const handleSelect = (deviceId: string) => {
@@ -103,7 +105,9 @@ const DeviceDropdown = ({
                 )}
               >
                 <span className="truncate text-sm">{device.label}</span>
-                {selectedId === device.deviceId && <Check className="h-4 w-4" />}
+                {selectedId === device.deviceId && (
+                  <Check className="h-4 w-4" />
+                )}
               </DropdownMenuItem>
             ))
           ) : (
@@ -124,6 +128,7 @@ type MediaControlProps = {
   selectedMicrophoneId: string | null;
   onCameraChange: (deviceId: string) => void | Promise<void>;
   onMicrophoneChange: (deviceId: string) => void | Promise<void>;
+  onLeave: () => void;
 };
 
 const MediaControl = ({
@@ -133,8 +138,8 @@ const MediaControl = ({
   selectedMicrophoneId,
   onCameraChange,
   onMicrophoneChange,
+  onLeave,
 }: MediaControlProps) => {
-  const { leaveRoom } = useUserStore();
   const { isVideoOff, isSpeakerOff, toggleSpeakerOff, toggleVideoOff } =
     useMediaStore();
   const { showChat, toggleShowChat } = useChatStore();
@@ -236,7 +241,7 @@ const MediaControl = ({
         <div className="w-px h-8 bg-slate-300 dark:bg-white/20 mx-2"></div>
 
         <Button
-          onClick={leaveRoom}
+          onClick={onLeave}
           variant="ghost"
           size="lg"
           className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 transform hover:scale-105"

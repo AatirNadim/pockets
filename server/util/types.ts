@@ -1,6 +1,8 @@
 // Shared types between client and server
 
 // WebRTC type definitions
+
+import { UserType } from "./constants";
 interface RTCSessionDescriptionInit {
   type: "offer" | "answer" | "pranswer" | "rollback";
   sdp: string;
@@ -15,11 +17,13 @@ interface RTCIceCandidateInit {
 
 export interface User {
   id: string;
-  name?: string;
+  name: string;
+  type: UserType;
 }
 
 export interface Room {
   id: string;
+  hostId: string;
   users: User[];
 }
 
@@ -30,16 +34,20 @@ export type WebSocketMessage =
   | OfferMessage
   | AnswerMessage
   | IceCandidateMessage
+  | JoinRequestMessage
+  | JoinRequestDecisionMessage
   | UserJoinedMessage
   | UserLeftMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | HostClosedRoomMessage
+  | RoomFullMessage;
 
 export interface JoinRoomMessage {
   type: "join-room";
   roomId: string;
   userId: string;
   userName: string;
-  userType: string;
+  userType: UserType;
 }
 
 export interface LeaveRoomMessage {
@@ -54,7 +62,7 @@ export interface OfferMessage {
   fromUserId: string;
   toUserId: string;
   fromUserName: string;
-  fromUserType: string;
+  fromUserType: UserType;
   offer: RTCSessionDescriptionInit;
 }
 
@@ -64,7 +72,7 @@ export interface AnswerMessage {
   fromUserId: string;
   toUserId: string;
   fromUserName: string;
-  fromUserType: string;
+  fromUserType: UserType;
   answer: RTCSessionDescriptionInit;
 }
 
@@ -76,10 +84,26 @@ export interface IceCandidateMessage {
   candidate: RTCIceCandidateInit;
 }
 
+export interface JoinRequestMessage {
+  type: "join-request";
+  roomId: string;
+  guest: User;
+}
+
+export interface JoinRequestDecisionMessage {
+  type: "join-request-accepted" | "join-request-rejected";
+  roomId: string;
+  hostUserId: string;
+  guestUserId: string;
+  hostName?: string;
+  guestName?: string;
+}
+
 export interface UserJoinedMessage {
   type: "user-joined";
   roomId: string;
   userId: string;
+  userName: string;
 }
 
 export interface UserLeftMessage {
@@ -98,7 +122,14 @@ export interface RoomFullMessage {
   roomId: string;
 }
 
+export interface HostClosedRoomMessage {
+  type: "host-closed-room";
+  roomId: string;
+}
+
 export interface ExtendedWebSocket extends WebSocket {
   userId?: string;
   roomId?: string;
+  userName?: string;
+  userType?: UserType;
 }

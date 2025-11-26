@@ -4,11 +4,13 @@ import { UserType } from "@/lib/constants";
 
 export interface User {
   id: string;
-  name?: string;
+  name: string;
+  type: UserType;
 }
 
 export interface Room {
   id: string;
+  hostId: string;
   users: User[];
 }
 
@@ -19,9 +21,12 @@ export type WebSocketMessage =
   | OfferMessage
   | AnswerMessage
   | IceCandidateMessage
+  | JoinRequestMessage
+  | JoinRequestDecisionMessage
   | UserJoinedMessage
   | UserLeftMessage
   | ErrorMessage
+  | HostClosedRoomMessage
   | RoomFullMessage;
 
 export interface JoinRoomMessage {
@@ -29,7 +34,7 @@ export interface JoinRoomMessage {
   roomId: string;
   userId: string;
   userName: string;
-  userType: string;
+  userType: UserType;
 }
 
 export interface LeaveRoomMessage {
@@ -67,6 +72,21 @@ export interface IceCandidateMessage {
   candidate: RTCIceCandidateInit;
 }
 
+export interface JoinRequestMessage {
+  type: "join-request";
+  roomId: string;
+  guest: User;
+}
+
+export interface JoinRequestDecisionMessage {
+  type: "join-request-accepted" | "join-request-rejected";
+  roomId: string;
+  hostUserId: string;
+  guestUserId: string;
+  hostName?: string;
+  guestName?: string;
+}
+
 // user-joined message will always come from guests
 export interface UserJoinedMessage {
   type: "user-joined";
@@ -89,5 +109,10 @@ export interface ErrorMessage {
 
 export interface RoomFullMessage {
   type: "room-full";
+  roomId: string;
+}
+
+export interface HostClosedRoomMessage {
+  type: "host-closed-room";
   roomId: string;
 }
