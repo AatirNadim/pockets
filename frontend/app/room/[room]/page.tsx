@@ -18,7 +18,7 @@ import { v4 as uuidV4 } from "uuid";
 import ChatComponent from "@/components/custom/chatComponent";
 import MediaControl from "@/components/custom/mediaControl";
 import { useChatStore } from "@/lib/stores/chatStore";
-import { useMediaStore } from "@/lib/hooks/mediaHook";
+import { useMediaStore } from "@/lib/stores/mediaStore";
 import { ThemeToggle } from "@/components/custom/themeToggle";
 import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
@@ -102,11 +102,15 @@ export default function Room() {
   const cleanUpRef = useRef(cleanUp);
 
   useEffect(() => {
-    if (!isValidUUID(roomId) || !userId) {
+    if (!isValidUUID(roomId)) {
       alert("Invalid Room ID. Redirecting to home page.");
       router.push("/");
     }
-  });
+    if (!userId) {
+      alert("User not initialized. Redirecting to home page.");
+      router.push("/");
+    }
+  }, [router]);
 
   // cleanupref will always have latest cleanUp function
   useEffect(() => {
@@ -115,11 +119,13 @@ export default function Room() {
 
   useEffect(() => {
     connectToRoom();
-  }, [connectToRoom, roomId, userId]);
+  }, []);
 
   useEffect(() => {
     // 1. Handler to prompt the user before reloading/closing
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      console.log("Before unload event triggered, cleaning up...");
+
       e.preventDefault();
       // Setting returnValue triggers the browser's native confirmation dialog
       e.returnValue = "";

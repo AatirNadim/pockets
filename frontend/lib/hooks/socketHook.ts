@@ -15,7 +15,7 @@ import {
   LeaveRoomMessage,
   OfferMessage,
 } from "../../../shared/types";
-import { useMediaStore } from "./mediaHook";
+import { useMediaStore } from "../stores/mediaStore";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -430,6 +430,7 @@ export const useSocket = () => {
 
   const connectToRoom = async () => {
     try {
+      console.log("connecting to room...");
       await createMediaStreams();
       createWSConnection();
     } catch (error) {
@@ -511,7 +512,9 @@ export const useSocket = () => {
         if (message.guestUserId === userId) {
           setStatus("Host accepted your request. Connecting...");
           toast.success("Request Accepted", {
-            description: `${message.hostName ?? "Host"} approved your request. Setting up the call...`,
+            description: `${
+              message.hostName ?? "Host"
+            } approved your request. Setting up the call...`,
           });
         }
         break;
@@ -520,7 +523,9 @@ export const useSocket = () => {
         if (message.guestUserId === userId) {
           setStatus("Host rejected your request");
           toast.error("Request Rejected", {
-            description: `${message.hostName ?? "Host"} declined your request to join.`,
+            description: `${
+              message.hostName ?? "Host"
+            } declined your request to join.`,
           });
           cleanUp();
         }

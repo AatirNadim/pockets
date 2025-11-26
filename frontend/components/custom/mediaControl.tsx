@@ -15,8 +15,8 @@ import {
 } from "lucide-react";
 import { useUserStore } from "../../lib/stores/userStore";
 import { useChatStore } from "@/lib/stores/chatStore";
-import { useMediaStore } from "@/lib/hooks/mediaHook";
-import type { MediaDeviceOption } from "@/lib/hooks/mediaHook";
+import { useMediaStore } from "@/lib/stores/mediaStore";
+import type { MediaDeviceOption } from "@/lib/stores/mediaStore";
 import {
   DropdownMenu,
   DropdownMenuContent,
