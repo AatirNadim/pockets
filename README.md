@@ -1,236 +1,149 @@
 # ✨ Pockets
 
-> Create instant collaborative spaces or join existing ones with your friends
+> A WebRTC playground for building stress-free, multi-device collaboration rooms.
 
-Pockets is a modern, lightweight WebRTC-powered video conferencing application that enables seamless peer-to-peer communication. Built with Next.js and TypeScript, it offers a beautiful, responsive interface for creating and joining video chat rooms instantly.
+Pockets is an experiment in making ad-hoc collaboration as frictionless as dropping files into a shared folder. It aims to let designers, engineers, or classrooms spin up a room, screen share, talk, chat, and exchange large assets directly over LAN or the public internet—all without managed infrastructure.
 
-<!-- todo: add screenshot for the application -->
+This README captures **what is being built**, **why specific subsystems exist**, and **how to run or extend the project**.
 
-## 🌟 Features
+## Mission & Product Intent
 
-### 🚀 **Instant Room Creation**
+- Enable multiple people across multiple machines to co-exist in the same “pocket” with audio/video, chat, and file transfer.
+- Give participants agency over media devices without renegotiating entire peer connections.
+- Keep rooms host-driven: guests ask for permission, hosts stay in control, and room state remains predictable even when someone rage-quits.
+- Treat non-chat data as first-class citizens via a **pull-based, round-robin, multi-queue data channel** that scales better than naïve broadcast blobs.
 
-- Generate unique room IDs with a single click
-- No registration or sign-up required
-- Share room IDs to invite others instantly
+## System Architecture
 
-### 🎥 **High-Quality Video Chat**
+- **Frontend** – Next.js 15 App Router, React 19, Tailwind, Radix UI, Zustand stores, and Framer Motion finishings. The entire RTC lifecycle (media capture, peer negotiation, chat/file data channels, join-request UX) happens here.
+- **Signaling Server** – Minimal Node.js WebSocket service (`server/`) that enforces host/guest invariants, room capacity, and relays SDP/ICE payloads. No persistent DB is required for development.
+- **Shared Contract** – `shared/types.*` keep signaling envelopes, join-request payloads, and UserType enums in sync between client and server.
 
-- WebRTC-powered peer-to-peer video calls
-- Real-time audio and video streaming
-- Adaptive quality based on network conditions
+## Core Collaboration Features
 
-### 💬 **Integrated Chat**
+### Media Surfaces & Device Orchestration
 
-- Real-time messaging alongside video calls
-- Chat history during the session
-- System notifications for user events
+- `useMediaStore` + `MediaControl` expose toggles for mic, camera, speaker, chat panel, and graceful leave.
+- `useSocket` wires these stores to WebRTC tracks, replacing video/audio senders on-the-fly whenever a user picks another device (no renegotiation needed).
+- Local preview sits in PiP mode; remote participants render as a responsive grid.
 
-### 🎛️ **Full Media Controls**
+### Request-Driven Room Entry
 
-- Toggle audio/video on demand
-- Speaker volume control
-- Minimizable video interface
-- Picture-in-picture support
+- Hosts create rooms (UUID backed) from the landing page. Guests can only enter by submitting the exact ID.
+- Every guest join emits a `join-request` event. Hosts see a persistent card (`useJoinRequestStore`) with ACCEPT/REJECT actions that map to `join-request-accepted` or `join-request-rejected` messages.
+- Guests stay in a waiting state (“Host approval pending…”) until they receive a decision; auto-join never occurs.
 
-### 🎨 **Beautiful Modern UI**
+### Chat + File Management Micro-System
 
-- Glassmorphism design with gradient backgrounds
-- Smooth animations and transitions
-- Responsive design for all devices
-- Dark/light theme support (via next-themes)
+- Chat flows over a dedicated `chat` RTCDataChannel and persists locally in `useChatStore`, supporting unread counts, collapsible panes, and attachment metadata.
+- Sending files queues up to 10 assets (`useFileStore`), dedupes by name+size, and tags each attachment with the owner’s ID.
+- Attachments are not auto-pushed. Instead, peers **request a download**, and the owner replays the relevant files through data channels (see below). This keeps bandwidth predictable and respects user intent.
 
-### ⚡ **Performance Optimized**
+## File Transfer Pipeline (Pull-Based, Round-Robin, Multi-Queue)
 
-- Built with Next.js 15 and React 19
-- Turbopack for lightning-fast development
-- Efficient WebSocket signaling server
-- SQLite database for session management
+| Stage           | What happens                                                                                                                                                                                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Queue sharding  | `useFile` slices up to `MAX_CHANNELS_FOR_DATA_TRANSMISSION` (5) queues and assigns files in a round-robin fashion. Each queue maps to its own RTCDataChannel (`transfer-queue-{i}`) for better throughput.                                                                   |
+| Metadata primer | Before chunks fly, the sender emits a `file-metadata` envelope (id, ownerId, size, MIME). Receivers cache this alongside the channel label.                                                                                                                                  |
+| Chunk streaming | Files break into 64 KB slices (`CHUNK_SIZE`). The sender monitors `channel.bufferedAmount` to apply backpressure and avoid browser crashes.                                                                                                                                  |
+| Pull semantics  | Attachments render with contextual actions: `Open` (local), `Download` (already received), or `Request` (not yet downloaded). A request triggers `file-download-request`, the owner replies with `file-download-response`, and only the explicitly requested data transfers. |
+| Persistence     | Completed transfers turn into object URLs and are cleaned up via `URL.revokeObjectURL` to prevent leaks.                                                                                                                                                                     |
 
-## 🛠️ Tech Stack
+## Host vs Guest Dynamics & Room Lifecycle
 
-### **Frontend**
+1. **Host creates room** – `useUserStore.initializeUserAsHost` issues a UUID and registers the user with the signaling server, claiming `room.hostId`.
+2. **Guests request entry** – Guests can’t join unless a host exists. When they try, the server queues them in `pendingJoinRequests` and forwards the request to the active host socket only if the room has capacity.
+3. **Host decision** – Accepting moves the guest from the pending map into `room.users` and broadcasts `user-joined`. Rejecting simply removes the pending entry and notifies the guest with a reason.
+4. **In-room behavior** – Up to 6 concurrent users (including host) can share media. All chat/file traffic stays peer-to-peer; the server only sees signaling metadata.
+5. **Host exit** – When the host leaves, `notifyHostClosed` tears down the room, informs connected guests, and clears pending requests so nobody waits forever.
 
-- **Next.js 15** - React framework with App Router
-- **React 19** - Latest React with concurrent features
-- **TypeScript** - Type-safe development
-- **Tailwind CSS** - Utility-first CSS framework
-- **Radix UI** - Accessible component primitives
-- **Lucide React** - Beautiful icon library
-- **Sonner** - Toast notifications
+## Resilience & Edge Cases Already Handled
 
-### **Backend**
+- **Single host per room** – Any second host attempting to reuse the ID receives `This room already has an active host` and is dropped.
+- **Guest before host** – Guests are politely told to wait because the signaling layer refuses to spin up host-less rooms.
+- **Capacity accounting** – Pending join requests count toward the 6-user limit to prevent over-admission once multiple requests are approved.
+- **Host disconnect** – Everyone (connected + pending) receives `host-closed-room` and auto-navigates away so they don’t get stuck in limbo.
+- **ICE/RTC cleanup** – When sockets close or remote users leave, the client tears down peer connections, revokes object URLs, and resets Zustand stores to maintain a clean slate.
+- **Device hot-swap** – The runtime listens to `navigator.mediaDevices.ondevicechange` events, auto-selects the next best device, and surfaces toasts if switching fails.
+- **Broken transfers** – Each channel is isolated; a failed queue only affects the subset of files assigned to it, making retries cheaper.
 
-- **WebSocket Server** - Real-time signaling
-- **SQLite** - Lightweight database
-- **UUID** - Unique room ID generation
+## Tech Stack Snapshot
 
-### **WebRTC**
+- **Next.js 15 / React 19** with App Router and server actions disabled (pure client-focused).
+- **TypeScript everywhere** – shared envelopes, stores, hooks, server.
+- **Tailwind + Shadcn + Framer Motion** for interactivity.
+- **Zustand** for persistent yet minimal state (user identity, media state, chat, files, join requests).
+- **Node.js WebSocket server** powered by `ws`, with graceful shutdown handlers.
 
-- Peer-to-peer video/audio streaming
-- ICE candidate exchange
-- STUN/TURN server support
+## Repository Layout
 
-## 🚀 Quick Start
+```text
+pockets/
+├── frontend/
+│   ├── app/                # Landing page, dynamic room route, global styles
+│   ├── components/         # Custom UI (chat, media controls, animations)
+│   ├── lib/
+│   │   ├── hooks/          # socketHook, fileHook, mediaHook
+│   │   ├── stores/         # Zustand stores for user/media/chat/file/join requests
+│   │   ├── constants.ts    # UserType, chunk sizes, channel limits
+│   │   └── types.ts        # Chat + file envelopes used by RTC channels
+│   └── public/             # Static assets
+├── server/
+│   ├── util/constants.ts   # PORT, MAX_USERS_PER_ROOM, enums shared with server
+│   ├── util/socket.ts      # Room registry, join request queue, signaling relays
+│   └── index.ts            # WebSocket bootstrap + lifecycle hooks
+├── shared/                 # Cross-runtime TypeScript definitions for signaling
+└── LOCAL_DEVELOPMENT.md    # LAN-focused setup guide (multi-device testing)
+```
+
+## Running the Project Locally
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (recommended) or npm
+- pnpm (preferred) or npm
+- Camera + microphone on each test device
+- Machines on the same LAN if you want multi-device realism (see `LOCAL_DEVELOPMENT.md`)
 
-### Installation
-
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/AatirNadim/pockets.git
-   cd pockets
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   # Install frontend dependencies
-   pnpm install
-
-   # Install server dependencies
-   cd server
-   pnpm install
-   cd ..
-   ```
-
-3. **Start the development servers**
-
-   **Terminal 1 - Start the signaling server:**
-
-   ```bash
-   cd server
-   pnpm dev
-   ```
-
-   **Terminal 2 - Start the Next.js app:**
-
-   ```bash
-   pnpm dev
-   ```
-
-4. **Open your browser**
-
-   - Navigate to `http://localhost:3000`
-   - Create a new room or join an existing one!
-
-## 📁 Project Structure
-
-```text
-pockets/
-├── app/                    # Next.js App Router
-│   ├── page.tsx           # Landing page
-│   ├── home.tsx           # Home component
-│   ├── [room]/            # Dynamic room routes
-│   │   └── page.tsx       # Room interface
-│   └── assets/            # Static assets
-├── components/            # Reusable UI components
-│   └── ui/               # Shadcn/ui components
-├── lib/                  # Utility functions
-│   ├── db.ts            # Database connection
-│   └── utils.ts         # Helper utilities
-├── server/              # WebSocket signaling server
-│   ├── index.ts        # Server implementation
-│   └── package.json    # Server dependencies
-├── shared/             # Shared types and utilities
-│   └── types.ts       # WebSocket message types
-└── public/            # Static files
-```
-
-## 🎯 How It Works
-
-1. **Room Creation**: Users can create a new room with a unique UUID
-2. **WebSocket Signaling**: The server handles WebRTC signaling between peers
-3. **Peer Connection**: Direct peer-to-peer connection established via WebRTC
-4. **Media Streaming**: Audio/video streams shared directly between users
-5. **Real-time Chat**: Messages sent through WebRTC data channels
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env.local` file in the root directory:
-
-```env
-NEXT_PUBLIC_SERVER_PATH=localhost
-NEXT_PUBLIC_SERVER_PORT=8080
-```
-
-### Server Configuration
-
-The WebSocket server runs on port 8080 by default. You can change this in `server/index.ts`:
-
-```typescript
-const PORT = Number(process.env.PORT) || 8080;
-```
-
-## 🎨 Customization
-
-### Themes
-
-The app supports theme customization through Tailwind CSS and next-themes. Modify the color palette in `tailwind.config.js`.
-
-### UI Components
-
-All UI components are built with Radix UI and can be customized in the `components/ui/` directory.
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how you can help:
-
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit your changes**: `git commit -m 'Add amazing feature'`
-4. **Push to the branch**: `git push origin feature/amazing-feature`
-5. **Open a Pull Request**
-
-### Development Guidelines
-
-- Follow TypeScript best practices
-- Use conventional commit messages
-- Ensure all tests pass
-- Update documentation as needed
-
-<!-- ## 🙏 Acknowledgments
-
-- **WebRTC** - For enabling peer-to-peer communication
-- **Next.js Team** - For the amazing React framework
-- **Vercel** - For seamless deployment platform
-- **Radix UI** - For accessible component primitives
-- **Tailwind CSS** - For the utility-first CSS framework
-
-## 🐛 Issues & Support
-
-If you encounter any issues or have questions:
-
-1. Check the [existing issues](https://github.com/AatirNadim/pockets/issues)
-2. Create a new issue with detailed information
-3. Include steps to reproduce the problem
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-
-1. Push your code to GitHub
-2. Connect your repository to Vercel
-3. Deploy the frontend automatically
-4. Deploy the server separately or use Vercel Functions
-
-### Docker
+### Installation & Bootstrap
 
 ```bash
-# Build and run with Docker
-docker build -t pockets .
-docker run -p 3000:3000 -p 8080:8080 pockets
+git clone https://github.com/AatirNadim/pockets.git
+cd pockets
+
+# Frontend deps
+cd frontend
+pnpm install
+
+# Signaling server deps
+cd ../server
+pnpm install
 ```
 
----
+### Running
 
-**Made with ❤️ by [AatirNadim](https://github.com/AatirNadim)**
+```bash
+# Terminal 1 – signaling server
+cd server
+pnpm dev
 
-⭐ **Star this repo if you found it helpful!** ⭐ -->
+# Terminal 2 – Next.js over LAN (hostname already 0.0.0.0)
+cd ../frontend
+pnpm dev
+```
+
+Point every test device to `http://<host-ip>:3000` and make sure `NEXT_PUBLIC_SERVER_PATH` resolves to that same IP. A deeper LAN checklist (firewalls, AP isolation, port exposure) lives in [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md).
+
+## Testing Scenarios to Try
+
+- **Multi-host defense** – Attempt to open the same room ID twice as host; the second should fail gracefully.
+- **Join queue** – Join as several guests while the host is AFK; verify requests pile up and are drained when the host returns.
+- **Device hot-swap** – Plug/unplug cameras or mics mid-call and switch via the dropdowns to confirm track replacement works.
+- **File pull flow** – Attach files, send a chat message, request a download from another client, and observe the targeted transfer handshake.
+- **Host leaving** – Close the host tab and watch guests auto-eject with “Host ended the room.”
+
+## Contributing & Next Steps
+
+- Documentation and UX improvements are tracked in GitHub issues.
+- If you extend the signaling protocol or add TURN/STUN enhancements, update both `shared/types.ts` and this README.
+- For multi-machine workflows or QA handoffs, share `LOCAL_DEVELOPMENT.md` alongside this README.
