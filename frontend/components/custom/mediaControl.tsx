@@ -13,7 +13,6 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useUserStore } from "../../lib/stores/userStore";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useMediaStore } from "@/lib/stores/mediaStore";
 import type { MediaDeviceOption } from "@/lib/stores/mediaStore";

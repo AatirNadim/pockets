@@ -14,7 +14,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { v4 as uuidV4 } from "uuid";
 import ChatComponent from "@/components/custom/chatComponent";
 import MediaControl from "@/components/custom/mediaControl";
 import { useChatStore } from "@/lib/stores/chatStore";
@@ -24,7 +23,7 @@ import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
 import { UserType } from "@/lib/constants";
-import { isValidUUID } from "@/lib/utils";
+import { cn, isValidUUID } from "@/lib/utils";
 
 type RemoteVideoTileProps = {
   stream: MediaStream;
@@ -87,6 +86,8 @@ export default function Room() {
     switchCamera,
     switchMicrophone,
     respondToJoinRequest,
+    sendChatMessage,
+    requestFileDownload,
   } = useSocket();
   const { requests } = useJoinRequestStore();
   const isHost = userType === UserType.HOST;
@@ -204,12 +205,13 @@ export default function Room() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex pt-20">
+      <div className="flex-1 flex flex-col sm:flex-row pt-20">
         {/* Video Area */}
         <div
-          className={`flex-1 relative transition-all duration-300 ${
-            showChat ? "mr-80" : ""
-          }`}
+          className={cn(
+            "flex-1 relative transition-all duration-300",
+            showChat ? "sm:mr-80" : ""
+          )}
         >
           <div className="h-full flex flex-col">
             {/* Remote Video Grid */}
@@ -303,11 +305,18 @@ export default function Room() {
 
         {/* Chat Sidebar */}
         <div
-          className={`bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-l border-slate-200 dark:border-white/10 transition-all duration-300 ${
-            showChat ? "w-80" : "w-0 overflow-hidden"
-          }`}
+          className={cn(
+            "bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-slate-200 dark:border-white/10 transition-all duration-300 sm:border-l sm:border-t-0 sm:border-b-0 sm:border-r-0",
+            "rounded-2xl sm:rounded-none shadow-xl sm:shadow-none mt-4 sm:mt-0 overflow-hidden sm:overflow-visible",
+            showChat
+              ? "w-full max-h-[70vh] sm:max-h-none sm:w-80 opacity-100 pointer-events-auto"
+              : "w-full max-h-0 sm:max-h-none sm:w-0 opacity-0 sm:opacity-100 pointer-events-none"
+          )}
         >
-          <ChatComponent />
+          <ChatComponent
+            onSendMessage={sendChatMessage}
+            onRequestFile={requestFileDownload}
+          />
         </div>
       </div>
 

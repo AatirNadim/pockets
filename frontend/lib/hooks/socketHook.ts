@@ -4,8 +4,9 @@ import { useUserStore } from "../stores/userStore";
 import { serverPath, UserType } from "@/lib/constants";
 
 import { toast } from "sonner";
-import { useFileStore } from "../stores/fileStore";
 import { useJoinRequestStore } from "../stores/joinRequestStore";
+import { useChatStore } from "../stores/chatStore";
+import { useFileStore } from "../stores/fileStore";
 import {
   WebSocketMessage,
   AnswerMessage,
@@ -16,6 +17,13 @@ import {
   OfferMessage,
 } from "../../../shared/types";
 import { useMediaStore } from "../stores/mediaStore";
+import { useFile } from "./fileHook";
+import type {
+  ChatDataEnvelope,
+  ChatMessage,
+  FileDownloadRequest,
+  FileDownloadResponse,
+} from "../types";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -43,11 +51,23 @@ export const useSocket = () => {
   } = useUserStore();
 
   const {
-    setReceivedFile,
-    setReceivedFileInfo,
-    setTransferProgress,
+    filesToBeSent,
+    clearFilesToBeSent,
     resetFileStore,
-  } = useFileStore();
+    getLocalFileEntry,
+  } = useFileStore((state) => ({
+    filesToBeSent: state.filesToBeSent,
+    clearFilesToBeSent: state.clearFilesToBeSent,
+    resetFileStore: state.resetFileStore,
+    getLocalFileEntry: state.getLocalFileEntry,
+  }));
+
+  const addChatMessage = useChatStore((state) => state.addChatMessage);
+  const incrementUnreadCount = useChatStore(
+    (state) => state.incrementUnreadCount
+  );
+  const resetUnreadCount = useChatStore((state) => state.resetUnreadCount);
+  const clearChatMessages = useChatStore((state) => state.clearChatMessages);
 
   const {
     selectedCameraId,
@@ -66,6 +86,59 @@ export const useSocket = () => {
     (state) => state.removeRequest
   );
   const clearJoinRequests = useJoinRequestStore((state) => state.clearRequests);
+
+  const { sendFile, sendFilesToUser, registerIncomingTransferChannel } = useFile({
+    peerConnections,
+    dataChannelMap,
+  });
+
+  const sendEnvelope = (
+    envelope: ChatDataEnvelope,
+    targetUserId?: string
+  ): boolean => {
+    const payload = JSON.stringify(envelope);
+
+    if (targetUserId) {
+      const channel = dataChannelMap.current[targetUserId];
+      if (channel?.readyState === "open") {
+        try {
+          channel.send(payload);
+          return true;
+        } catch (error) {
+          console.error("Failed to deliver envelope to target", error);
+        }
+      }
+
+      toast.error("Message delivery failed", {
+        description: "Unable to reach the requested participant.",
+      });
+      return false;
+    }
+
+    let deliveredChannels = 0;
+    Object.values(dataChannelMap.current).forEach((channel) => {
+      if (channel?.readyState === "open") {
+        try {
+          channel.send(payload);
+          deliveredChannels += 1;
+        } catch (error) {
+          console.error("Failed to broadcast envelope", error);
+        }
+      }
+    });
+
+    if (
+      deliveredChannels === 0 &&
+      Object.keys(peerConnections.current).length > 0
+    ) {
+      toast.error("Chat delivery failed", {
+        description:
+          "No active data channels available. Message will not reach others.",
+      });
+    }
+
+    return deliveredChannels > 0;
+  };
 
   const captureDeviceIdsFromStream = (stream: MediaStream) => {
     const videoTrack = stream.getVideoTracks()[0];
@@ -378,6 +451,8 @@ export const useSocket = () => {
             "Disconnected from signaling server. Returning to home page.",
         });
         leaveRoom();
+        clearChatMessages();
+        resetUnreadCount();
         resetFileStore();
         clearMediaStreams();
         clearJoinRequests();
@@ -389,6 +464,8 @@ export const useSocket = () => {
         });
         setStatus("Connection failed");
         leaveRoom();
+        clearChatMessages();
+        resetUnreadCount();
         resetFileStore();
         clearMediaStreams();
         clearJoinRequests();
@@ -430,6 +507,8 @@ export const useSocket = () => {
 
   const connectToRoom = async () => {
     try {
+      clearChatMessages();
+      resetUnreadCount();
       console.log("connecting to room...");
       await createMediaStreams();
       createWSConnection();
@@ -484,6 +563,8 @@ export const useSocket = () => {
         toast.error("Error", {
           description: message.message || "An error occurred",
         });
+        cleanUp();
+        router.push("/");
         break;
 
       case "room-full":
@@ -587,13 +668,7 @@ export const useSocket = () => {
     remoteUserId: string,
     remoteUserName: string
   ) => {
-    console.log("running pc event handler registration...");
     pc.onicecandidate = (event) => {
-      console.log(
-        "\n\nreceived event of ice candidate:",
-        event.candidate,
-        "\n\n"
-      );
       if (event.candidate && socketRef.current) {
         console.debug("Sending ICE candidate:", "to remote user:");
 
@@ -612,11 +687,6 @@ export const useSocket = () => {
     };
 
     pc.onconnectionstatechange = () => {
-      console.log(
-        "\n\ncurrent pc connection state:",
-        pc.connectionState,
-        "\n\n"
-      );
       switch (pc.connectionState) {
         case "connected":
           if (remoteUsers[remoteUserId]) return;
@@ -692,14 +762,21 @@ export const useSocket = () => {
 
     pc.ondatachannel = (event) => {
       const channel = event.channel;
-      // store data channel for this remote user
-      dataChannelMap.current[remoteUserId] = channel;
-      console.debug(
-        `Data channel established with remote user ${remoteUserId}:`,
-        channel
-      );
+      if (channel.label === "chat") {
+        dataChannelMap.current[remoteUserId] = channel;
+        console.debug(
+          `Chat channel established with remote user ${remoteUserId}:`,
+          channel
+        );
+        registerDataChannelListeners(channel, remoteUserId);
+        return;
+      }
 
-      registerDataChannelListeners(channel);
+      console.debug(
+        `File transfer channel established with ${remoteUserId}:`,
+        channel.label
+      );
+      registerIncomingTransferChannel(channel, remoteUserId);
     };
 
     pc.ontrack = (event) => {
@@ -793,7 +870,7 @@ export const useSocket = () => {
         remoteUserId
       );
 
-      const dataChannel = pc.createDataChannel("fileTransfer", {
+      const dataChannel = pc.createDataChannel("chat", {
         ordered: true,
       });
 
@@ -804,7 +881,7 @@ export const useSocket = () => {
         dataChannelMap.current[remoteUserId]
       );
 
-      registerDataChannelListeners(dataChannel);
+      registerDataChannelListeners(dataChannel, remoteUserId);
 
       console.debug("Creating offer for remote user:", remoteUserId);
 
@@ -967,96 +1044,218 @@ export const useSocket = () => {
     }
   };
 
-  const registerDataChannelListeners = (channel: RTCDataChannel) => {
-    let receivedChunks: ArrayBuffer[] = [];
-    let receivedFileInfo: { name: string; type: string; size: number } | null =
-      null;
-    let receivedSize = 0;
+  const handleIncomingChatMessage = (incoming: ChatMessage) => {
+    addChatMessage(incoming);
 
+    const isLocalMessage = incoming.userId === userId;
+    const { showChat } = useChatStore.getState();
+
+    if (!isLocalMessage && !showChat) {
+      incrementUnreadCount();
+    }
+  };
+
+  const handleDownloadRequest = async (payload: FileDownloadRequest) => {
+    if (!userId || payload.ownerId !== userId) {
+      return;
+    }
+
+    try {
+      const entry = getLocalFileEntry(payload.fileId);
+      if (!entry) {
+        sendEnvelope(
+          {
+            kind: "file-download-response",
+            payload: {
+              ...payload,
+              status: "unavailable",
+              reason: "File is no longer available.",
+            },
+          },
+          payload.requesterId
+        );
+        return;
+      }
+
+      sendEnvelope(
+        {
+          kind: "file-download-response",
+          payload: {
+            ...payload,
+            status: "accepted",
+          },
+        },
+        payload.requesterId
+      );
+
+      await sendFilesToUser(payload.requesterId, [payload.fileId]);
+    } catch (error) {
+      console.error("Failed to fulfill download request", error);
+      sendEnvelope(
+        {
+          kind: "file-download-response",
+          payload: {
+            ...payload,
+            status: "rejected",
+            reason: "Failed to send the requested file.",
+          },
+        },
+        payload.requesterId
+      );
+    }
+  };
+
+  const handleDownloadResponse = (payload: FileDownloadResponse) => {
+    if (!userId || payload.requesterId !== userId) {
+      return;
+    }
+
+    if (payload.status === "accepted") {
+      toast.info("Download approved", {
+        description: "Peer accepted your request. Transfer will start shortly.",
+      });
+      return;
+    }
+
+    const reason =
+      payload.reason ||
+      (payload.status === "unavailable"
+        ? "Peer could not locate the file."
+        : "Peer declined the download request.");
+
+    toast.error("Download unavailable", {
+      description: reason,
+    });
+  };
+
+  const registerDataChannelListeners = (
+    channel: RTCDataChannel,
+    remoteUserId?: string
+  ) => {
     channel.onopen = () => {
-      console.log("Data channel is open:", channel.label);
+      console.log(
+        "Data channel is open:",
+        channel.label,
+        remoteUserId ? `with ${remoteUserId}` : ""
+      );
     };
 
     channel.onclose = () => {
-      console.log("Data channel is closed:", channel.label);
+      console.log(
+        "Data channel is closed:",
+        channel.label,
+        remoteUserId ? `with ${remoteUserId}` : ""
+      );
     };
 
-    channel.onmessage = async (event) => {
-      let chunk = event.data;
+    channel.onmessage = (event) => {
+      if (typeof event.data !== "string") {
+        console.warn("Received non-text data on chat channel", event.data);
+        return;
+      }
 
-      // If data is a string, it's metadata.
-      if (typeof chunk === "string") {
-        try {
-          receivedFileInfo = JSON.parse(chunk);
-          receivedChunks = [];
-          receivedSize = 0;
+      try {
+        const parsed = JSON.parse(event.data) as ChatDataEnvelope | ChatMessage;
 
-          setReceivedFileInfo(receivedFileInfo);
-          setTransferProgress(0);
-          toast.success("Incoming File", {
-            description: `Receiving ${receivedFileInfo?.name} (${(
-              (receivedFileInfo?.size || 0) /
-              1024 /
-              1024
-            ).toFixed(2)} MB)`,
-          });
-        } catch (error) {
-          console.error("Error parsing metadata:", error);
+        if ((parsed as ChatDataEnvelope)?.kind) {
+          const envelope = parsed as ChatDataEnvelope;
+          switch (envelope.kind) {
+            case "chat-message":
+              handleIncomingChatMessage(envelope.payload);
+              break;
+            case "file-download-request":
+              handleDownloadRequest(envelope.payload);
+              break;
+            case "file-download-response":
+              handleDownloadResponse(envelope.payload);
+              break;
+            case "system":
+              // future system notices
+              break;
+          }
+          return;
         }
-        return;
-      }
 
-      // Otherwise, it's a file chunk (ArrayBuffer)
-      if (chunk instanceof Blob) {
-        chunk = await chunk.arrayBuffer();
-      } else if (chunk instanceof String) {
-        chunk = new TextEncoder().encode(chunk as string).buffer;
-      }
-
-      if (chunk instanceof ArrayBuffer === false) {
-        console.error("Received incompatible segment type", chunk);
-        return;
-      }
-
-      // highly unlikely, but checking if metadata was received
-      if (!receivedFileInfo) {
-        console.error("Received file chunk before metadata");
-        return;
-      }
-
-      // push chunk to received chunks
-      receivedChunks.push(chunk);
-      receivedSize += chunk.byteLength;
-
-      setTransferProgress((receivedSize / receivedFileInfo.size) * 100);
-
-      // If all chunks received, assemble the file
-      if (receivedSize === receivedFileInfo.size) {
-        const fileBlob = new Blob(receivedChunks, {
-          type: receivedFileInfo.type,
-        });
-        const url = URL.createObjectURL(fileBlob);
-        setReceivedFile({ name: receivedFileInfo.name, url });
-
-        toast.success("File Received", {
-          description: `${receivedFileInfo.name} has been received.`,
-        });
-
-        // Auto-download
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = receivedFileInfo.name;
-        document.body.appendChild(a);
-        console.log("Downloading file:", receivedFileInfo.name);
-        a.click();
-        document.body.removeChild(a);
-
-        // Reset local state for next file on this channel (if any, though we expect channel close)
-        receivedChunks = [];
-        receivedSize = 0;
-        receivedFileInfo = null;
+        handleIncomingChatMessage(parsed as ChatMessage);
+      } catch (error) {
+        console.error("Error parsing chat payload:", error);
       }
     };
+  };
+
+  const sendChatMessage = (chatText: string) => {
+    if (!chatText) {
+      return false;
+    }
+
+    const trimmedMessage = chatText.trim();
+
+    if (!trimmedMessage) {
+      return false;
+    }
+
+    if (!userId || !userName) {
+      toast.error("Unable to send chat", {
+        description: "User identity missing. Please rejoin the room.",
+      });
+      return false;
+    }
+
+    const timestamp = Date.now();
+    const attachments = filesToBeSent.map((entry) => ({
+      id: entry.id,
+      ownerId: userId,
+      name: entry.file.name,
+      size: entry.file.size,
+      type: entry.file.type,
+    }));
+
+    const localMessage: ChatMessage = {
+      id: `${userId}-${timestamp}`,
+      userId,
+      userName,
+      message: trimmedMessage,
+      timestamp,
+      attachments: attachments.length ? attachments : undefined,
+    };
+
+    addChatMessage(localMessage);
+
+    sendEnvelope({ kind: "chat-message", payload: localMessage });
+
+    if (attachments.length) {
+      clearFilesToBeSent();
+    }
+
+    return true;
+  };
+
+  const requestFileDownload = (fileId: string, ownerId: string) => {
+    if (!userId) {
+      toast.error("Unable to request file", {
+        description: "User identity missing. Please rejoin the room.",
+      });
+      return false;
+    }
+
+    if (ownerId === userId) {
+      toast.info("File already available", {
+        description: "You already own this file.",
+      });
+      return false;
+    }
+
+    return sendEnvelope(
+      {
+        kind: "file-download-request",
+        payload: {
+          fileId,
+          ownerId,
+          requesterId: userId,
+        },
+      },
+      ownerId
+    );
   };
 
   const cleanUp = () => {
@@ -1077,7 +1276,9 @@ export const useSocket = () => {
       localStream.current = null;
       currentVideoDeviceId.current = null;
       currentAudioDeviceId.current = null;
-      resetFileStore(); // Reset file state when leaving room
+      clearChatMessages();
+      resetUnreadCount();
+      resetFileStore();
       leaveRoom();
       clearMediaStreams();
       clearJoinRequests();
@@ -1098,6 +1299,9 @@ export const useSocket = () => {
     connectToRoom,
     createWSConnection,
     sendWsMessage,
+    sendFile,
+    sendChatMessage,
+    requestFileDownload,
     createPeerConnection,
     createOffer,
     handleSignalingMessage,

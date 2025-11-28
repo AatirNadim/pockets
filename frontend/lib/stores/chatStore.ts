@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { ChatMessage } from "../types";
+
 interface ChatState {
   chatMessages: ChatMessage[];
   unreadCount: number;
@@ -12,7 +14,6 @@ interface ChatActions {
   clearChatMessages: () => void;
   incrementUnreadCount: () => void;
   resetUnreadCount: () => void;
-  sendMessage: (chatMessage: string) => void;
   toggleShowChat: () => void;
 }
 
@@ -20,11 +21,18 @@ export type { ChatState };
 
 export const useChatStore = create<ChatState & ChatActions>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       chatMessages: [],
       unreadCount: 0,
       showChat: false,
-      toggleShowChat: () => set((state) => ({ showChat: !state.showChat })),
+      toggleShowChat: () =>
+        set((state) => {
+          const nextShowState = !state.showChat;
+          return {
+            showChat: nextShowState,
+            unreadCount: nextShowState ? 0 : state.unreadCount,
+          };
+        }),
       addChatMessage: (message) =>
         set((state) => ({
           chatMessages: [...state.chatMessages, message],
@@ -33,18 +41,6 @@ export const useChatStore = create<ChatState & ChatActions>()(
       incrementUnreadCount: () =>
         set((state) => ({ unreadCount: state.unreadCount + 1 })),
       resetUnreadCount: () => set({ unreadCount: 0 }),
-      sendMessage: (chatMessage: string) => {
-        const { addChatMessage } = get();
-        if (chatMessage.trim()) {
-          const newMessage: ChatMessage = {
-            id: Date.now().toString(),
-            user: "You",
-            message: chatMessage.trim(),
-            timestamp: new Date(),
-          };
-          addChatMessage(newMessage);
-        }
-      },
     }),
     {
       name: "chat-storage",

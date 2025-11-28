@@ -64,7 +64,7 @@ export default function Home() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleJoinKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       joinRoom();
     }
@@ -102,70 +102,107 @@ export default function Home() {
             </p>
           </motion.div>
 
-          {/* Create/Join Room */}
+          {/* Display name input */}
           <motion.div
-            className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
-            initial={{ opacity: 0, y: 40 }}
+            className="p-5 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-white/60 dark:border-white/10"
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{
-              delay: 0.15,
-              duration: 0.5,
-              type: "spring",
-              stiffness: 140,
-            }}
-            whileHover={{ scale: 1.02 }}
+            transition={{ delay: 0.1, duration: 0.5, type: "spring", stiffness: 140 }}
           >
-            <div className="space-y-5">
-              <div className="flex items-center justify-center space-x-2 text-[var(--primary)]">
-                <Plus className="w-5 h-5" />
-                <Users className="w-5 h-5" />
-                <span className="font-semibold">Create or Join a Room</span>
-              </div>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-[var(--primary)]">
+                Choose your display name (optional)
+              </p>
               <Input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                onKeyDown={handleKeyPress}
                 className="w-full h-12 px-4 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-sans tracking-wide focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 transition-all duration-200 placeholder:text-gray-400 dark:bg-gray-900/60 dark:border-gray-700 dark:text-white"
-                placeholder="Enter display name (optional)"
+                placeholder="e.g. Aatir or Design Team"
               />
-              <MotionButton
-                onClick={createAndJoin}
-                disabled={isCreating}
-                className="w-full bg-[#635bff] hover:bg-[#544dc9] text-white font-semibold py-3 px-6 rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={{ scale: 1.015 }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-                {isCreating ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Creating...</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <Plus className="w-4 h-4" />
-                    <span>Quick Create</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
-                  </div>
-                )}
-              </MotionButton>
-              <p className="text-sm text-gray-500 dark:text-gray-300">
-                Spin up a brand-new collaborative space or jump into an existing
-                one with a room ID.
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                This name appears everywhere once you create or join a room.
               </p>
-              <div className="space-y-4">
+            </div>
+          </motion.div>
+
+          {/* Room actions */}
+          <div className="flex flex-col gap-6">
+            <motion.div
+              className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: 0.15,
+                duration: 0.5,
+                type: "spring",
+                stiffness: 140,
+              }}
+              whileHover={{ scale: 1.02 }}
+            >
+              <div className="space-y-5">
+                <div className="flex items-center justify-center space-x-2 text-[var(--primary)]">
+                  <Plus className="w-5 h-5" />
+                  <span className="font-semibold">Create a new room</span>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-300">
+                  Instantly spin up a fresh space and invite others with the generated ID.
+                </p>
+                <MotionButton
+                  onClick={createAndJoin}
+                  disabled={isCreating}
+                  className="w-full bg-[#635bff] hover:bg-[#544dc9] text-white font-semibold py-3 px-6 rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                >
+                  {isCreating ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Creating...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <Plus className="w-4 h-4" />
+                      <span>Quick Create</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
+                    </div>
+                  )}
+                </MotionButton>
+              </div>
+            </motion.div>
+
+            <div className="flex items-center justify-center text-xs font-semibold tracking-[0.3em] text-gray-400 dark:text-gray-500">
+              <span className="px-4 py-1 rounded-full border border-gray-200 dark:border-white/20">
+                - OR -
+              </span>
+            </div>
+
+            <motion.div
+              className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: 0.2,
+                duration: 0.5,
+                type: "spring",
+                stiffness: 140,
+              }}
+              whileHover={{ scale: 1.02 }}
+            >
+              <div className="space-y-5">
+                <div className="flex items-center justify-center space-x-2 text-[var(--primary)]">
+                  <Users className="w-5 h-5" />
+                  <span className="font-semibold">Join with an invite ID</span>
+                </div>
                 <Input
                   type="text"
                   value={roomId || ""}
                   onChange={(e) => setRoomId(e.target.value)}
-                  onKeyDown={handleKeyPress}
+                  onKeyDown={handleJoinKeyPress}
                   className="w-full h-12 px-4 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-mono tracking-wider focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 transition-all duration-200 placeholder:text-gray-400 dark:bg-gray-900/60 dark:border-gray-700 dark:text-white"
                   placeholder="Enter Room ID"
                 />
-                <div className="text-xs font-semibold tracking-[0.3em] text-gray-400 dark:text-gray-500 text-center">
-                  OR
-                </div>
                 <MotionButton
                   onClick={joinRoom}
                   disabled={isJoining}
@@ -183,14 +220,14 @@ export default function Home() {
                   ) : (
                     <div className="flex items-center space-x-2">
                       <Users className="w-4 h-4" />
-                      <span>Join with ID</span>
+                      <span>Join Room</span>
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
                     </div>
                   )}
                 </MotionButton>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
 
           {/* Footer */}
           <div className="pt-8 text-center text-[var(--primary)]">

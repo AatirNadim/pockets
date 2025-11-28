@@ -1,7 +1,17 @@
-import { useFileStore } from "../stores/fileStore";
-import { toast } from "sonner";
 import { useRef } from "react";
+import { toast } from "sonner";
+
 import { CHUNK_SIZE, MAX_CHANNELS_FOR_DATA_TRANSMISSION } from "../constants";
+import { useFileStore, type QueuedFile } from "../stores/fileStore";
+import { useUserStore } from "../stores/userStore";
+import type { DataChannelEnvelope, FileMetadataPayload } from "../types";
+
+type IncomingTransferState = {
+  metadata?: FileMetadataPayload;
+  chunks: ArrayBuffer[];
+  receivedBytes: number;
+  remoteUserId?: string;
+};
 
 export const useFile = ({
   peerConnections,
@@ -10,15 +20,19 @@ export const useFile = ({
   dataChannelMap: React.RefObject<Record<string, RTCDataChannel | null>>;
 }) => {
   const {
-    setTransferProgress,
     filesToBeSent,
+    setTransferProgress,
     setIsSending,
     clearFilesToBeSent,
     setSendingFile,
+    registerReceivedFile,
+    getLocalFileEntry,
   } = useFileStore();
+  const ownerId = useUserStore((state) => state.userId);
 
-  // Ref to track total bytes transferred across all concurrent uploads
+  // Track total bytes transferred across concurrent uploads
   const globalTransferredRef = useRef(0);
+  const incomingTransfersRef = useRef<Record<string, IncomingTransferState>>({});
 
   /**
    * Initiates the file sending process to all connected peers.
@@ -29,6 +43,13 @@ export const useFile = ({
 
     if (filesToBeSent.length === 0) {
       toast.error("No files selected to send");
+      return;
+    }
+
+    if (!ownerId) {
+      toast.error("Cannot send files", {
+        description: "User identity missing. Please rejoin the room.",
+      });
       return;
     }
 
@@ -44,7 +65,7 @@ export const useFile = ({
 
     // Calculate total size of all files * number of peers (since we send to all)
     const totalSizePerPeer = filesToBeSent.reduce(
-      (acc, file) => acc + file.size,
+      (acc, entry) => acc + entry.file.size,
       0
     );
     const totalGlobalSize = totalSizePerPeer * peers.length;
@@ -57,7 +78,8 @@ export const useFile = ({
           remoteUserId,
           pc,
           filesToBeSent,
-          totalGlobalSize
+          totalGlobalSize,
+          ownerId
         );
       });
 
@@ -81,18 +103,74 @@ export const useFile = ({
     }
   };
 
+  const sendFilesToUser = async (remoteUserId: string, fileIds: string[]) => {
+    if (!ownerId) {
+      toast.error("Cannot send files", {
+        description: "User identity missing. Please rejoin the room.",
+      });
+      return false;
+    }
+
+    const pc = peerConnections.current[remoteUserId];
+    if (!pc) {
+      toast.error("Peer unavailable", {
+        description: "Unable to locate the requested peer connection.",
+      });
+      return false;
+    }
+
+    const fileEntries: QueuedFile[] = [];
+    fileIds.forEach((fileId) => {
+      const entry = getLocalFileEntry(fileId);
+      if (entry) {
+        fileEntries.push(entry);
+      }
+    });
+
+    if (!fileEntries.length) {
+      toast.error("File not found", {
+        description: "Requested file is no longer available locally.",
+      });
+      return false;
+    }
+
+    setIsSending(true);
+    globalTransferredRef.current = 0;
+
+    const totalSize = fileEntries.reduce((acc, entry) => acc + entry.file.size, 0);
+
+    try {
+      await sendFilesToPeer(remoteUserId, pc, fileEntries, totalSize, ownerId);
+      toast.success("File transfer started", {
+        description: "Sending requested file to peer.",
+      });
+      return true;
+    } catch (error) {
+      console.error("Targeted file send failed", error);
+      toast.error("File transfer failed", {
+        description: "Could not send the requested file.",
+      });
+      return false;
+    } finally {
+      setIsSending(false);
+      setSendingFile(null);
+      globalTransferredRef.current = 0;
+    }
+  };
+
   const sendFilesToPeer = async (
     remoteUserId: string,
     pc: RTCPeerConnection,
-    files: File[],
-    totalGlobalSize: number
+    files: QueuedFile[],
+    totalGlobalSize: number,
+    ownerId: string
   ) => {
     // 1. Determine number of channels and distribute files
     const numChannels = Math.min(
       files.length,
       MAX_CHANNELS_FOR_DATA_TRANSMISSION
     );
-    const queues: File[][] = Array.from({ length: numChannels }, () => []);
+    const queues: QueuedFile[][] = Array.from({ length: numChannels }, () => []);
 
     // Round-robin distribution
     files.forEach((file, index) => {
@@ -106,7 +184,13 @@ export const useFile = ({
       const channelLabel = `transfer-queue-${index}-${Date.now()}`;
       const channel = pc.createDataChannel(channelLabel, { ordered: true });
 
-      return processQueue(channel, queue, remoteUserId, totalGlobalSize);
+      return processQueue(
+        channel,
+        queue,
+        remoteUserId,
+        totalGlobalSize,
+        ownerId
+      );
     });
 
     const result = await Promise.allSettled(channelPromises);
@@ -130,9 +214,10 @@ export const useFile = ({
    */
   const processQueue = (
     channel: RTCDataChannel,
-    queue: File[],
+    queue: QueuedFile[],
     remoteUserId: string,
-    totalGlobalSize: number
+    totalGlobalSize: number,
+    ownerId: string
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
       const startQueueProcessing = async () => {
@@ -140,11 +225,16 @@ export const useFile = ({
 
         try {
           // Send files serially in this queue
-          for (const file of queue) {
-            // setSendingFile(file) // Update UI to show current file being started
-            await sendFileOverChannel(channel, file, totalGlobalSize);
+          for (const entry of queue) {
+            setSendingFile(entry.file);
+            await sendFileOverChannel(
+              channel,
+              entry,
+              totalGlobalSize,
+              ownerId
+            );
             console.log(
-              `File ${file.name} sent to ${remoteUserId} via ${channel.label}`
+              `File ${entry.file.name} sent to ${remoteUserId} via ${channel.label}`
             );
           }
           channel.close();
@@ -181,19 +271,28 @@ export const useFile = ({
    */
   const sendFileOverChannel = async (
     channel: RTCDataChannel,
-    file: File,
-    totalGlobalSize: number
+    fileEntry: QueuedFile,
+    totalGlobalSize: number,
+    ownerId: string
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
+      const { file, id } = fileEntry;
       // 1. Send metadata (Delimiter)
-      const metadata = JSON.stringify({
+      const metadata: FileMetadataPayload = {
+        fileId: id,
+        ownerId,
         name: file.name,
         type: file.type,
         size: file.size,
-      });
+      };
+
+      const envelope: DataChannelEnvelope = {
+        kind: "file-metadata",
+        payload: metadata,
+      };
 
       try {
-        channel.send(metadata);
+        channel.send(JSON.stringify(envelope));
       } catch (error) {
         return reject(error);
       }
@@ -266,7 +365,101 @@ export const useFile = ({
     });
   };
 
+  const registerIncomingTransferChannel = (
+    channel: RTCDataChannel,
+    remoteUserId?: string
+  ) => {
+    incomingTransfersRef.current[channel.label] = {
+      chunks: [],
+      receivedBytes: 0,
+      remoteUserId,
+    };
+
+    channel.onmessage = async (event) => {
+      const transfer = incomingTransfersRef.current[channel.label];
+      if (!transfer) {
+        return;
+      }
+
+      if (typeof event.data === "string") {
+        try {
+          const envelope = JSON.parse(event.data) as DataChannelEnvelope;
+          if (envelope.kind === "file-metadata") {
+            transfer.metadata = envelope.payload;
+          }
+        } catch (error) {
+          console.error("Failed to parse transfer metadata", error);
+        }
+        return;
+      }
+
+      if (!transfer.metadata) {
+        console.warn("Received file chunk before metadata", channel.label);
+        return;
+      }
+
+      const chunkBuffer =
+        event.data instanceof ArrayBuffer
+          ? event.data
+          : await event.data.arrayBuffer();
+
+      transfer.chunks.push(chunkBuffer);
+      transfer.receivedBytes += chunkBuffer.byteLength;
+
+      if (transfer.receivedBytes >= transfer.metadata.size) {
+        finalizeIncomingTransfer(channel.label);
+        channel.close();
+      }
+    };
+
+    channel.onclose = () => {
+      finalizeIncomingTransfer(channel.label, { skipPersist: true });
+      delete incomingTransfersRef.current[channel.label];
+    };
+  };
+
+  const finalizeIncomingTransfer = (
+    label: string,
+    options?: { skipPersist?: boolean }
+  ) => {
+    const transfer = incomingTransfersRef.current[label];
+    if (!transfer || !transfer.metadata) {
+      return;
+    }
+
+    const { metadata, chunks } = transfer;
+    delete incomingTransfersRef.current[label];
+
+    if (options?.skipPersist || !chunks.length) {
+      return;
+    }
+
+    try {
+      const blob = new Blob(chunks, { type: metadata.type || "application/octet-stream" });
+      const url = typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
+
+      registerReceivedFile({
+        id: metadata.fileId,
+        ownerId: metadata.ownerId,
+        name: metadata.name,
+        type: metadata.type,
+        size: metadata.size,
+        url,
+        receivedAt: Date.now(),
+      });
+
+      toast.success(`Received ${metadata.name}`);
+    } catch (error) {
+      console.error("Failed to finalize incoming transfer", error);
+      toast.error("Download failed", {
+        description: `Could not process ${metadata.name}.`,
+      });
+    }
+  };
+
   return {
     sendFile,
+    sendFilesToUser,
+    registerIncomingTransferChannel,
   };
 };
