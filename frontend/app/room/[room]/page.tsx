@@ -24,40 +24,7 @@ import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
 import { UserType } from "@/lib/constants";
 import { cn, isValidUUID } from "@/lib/utils";
-
-type RemoteVideoTileProps = {
-  stream: MediaStream;
-  userName?: string;
-  userId: string;
-};
-
-const RemoteVideoTile = ({
-  stream,
-  userName,
-  userId,
-}: RemoteVideoTileProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (videoRef.current && videoRef.current.srcObject !== stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
-
-  return (
-    <div className="relative rounded-2xl overflow-hidden border border-slate-200/60 bg-black/60 shadow-xl dark:border-white/10">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full object-cover"
-      />
-      <div className="absolute bottom-3 left-3 bg-black/70 text-white text-sm font-medium px-3 py-1 rounded-full backdrop-blur-sm">
-        {userName || `Participant ${userId.slice(0, 4)}`}
-      </div>
-    </div>
-  );
-};
+import RemoteVideoTile from "@/components/custom/remoteVideoTile";
 
 export default function Room() {
   const { showChat } = useChatStore();
@@ -68,6 +35,7 @@ export default function Room() {
     availableMicrophones,
     selectedCameraId,
     selectedMicrophoneId,
+    remoteTrackState,
   } = useMediaStore();
   const { remoteUsers, userType, userId } = useUserStore();
 
@@ -231,6 +199,12 @@ export default function Room() {
                         stream={stream}
                         userId={remoteId}
                         userName={remoteUsers[remoteId]}
+                        videoEnabled={
+                          remoteTrackState[remoteId]?.videoEnabled !== false
+                        }
+                        audioEnabled={
+                          remoteTrackState[remoteId]?.audioEnabled !== false
+                        }
                       />
                     ))}
                   </div>

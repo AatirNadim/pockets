@@ -167,6 +167,11 @@ type FileMetadataPayload = {
 type DataChannelEnvelope =
   | { kind: "file-metadata"; payload: FileMetadataPayload }
   | { kind: "control"; payload: Record<string, unknown> };
+  
+export enum TrackType {
+  AUDIO = "audio",
+  VIDEO = "video",
+}
 
 export type {
   User,

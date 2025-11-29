@@ -15,6 +15,7 @@ import {
   AnswerMessage,
   IceCandidateMessage,
   LeaveRoomMessage,
+  TrackType,
 } from "@/lib/types";
 import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
@@ -79,6 +80,8 @@ export const useSocket = () => {
     addMediaStream,
     removeMediaStream,
     clearMediaStreams,
+    setRemoteTrackEnabled,
+    clearRemoteTrackState,
   } = useMediaStore();
 
   const addJoinRequest = useJoinRequestStore((state) => state.addRequest);
@@ -781,10 +784,21 @@ export const useSocket = () => {
     };
 
     pc.ontrack = (event) => {
-      const [remoteStream] = event.streams;
-      if (remoteStream) {
-        addMediaStream(remoteUserId, remoteStream);
-      }
+      console.log("received remote track from user:", remoteUserId);
+      const track = event.track;
+      const trackType =
+        track.kind === "audio" ? TrackType.AUDIO : TrackType.VIDEO;
+
+      addMediaStream(remoteUserId, track, trackType);
+
+      const setState = (enabled: boolean) =>
+        setRemoteTrackEnabled(remoteUserId, trackType, enabled);
+
+      setState(!track.muted && track.readyState === "live");
+
+      track.onmute = () => setState(false);
+      track.onunmute = () => setState(true);
+      track.onended = () => setState(false);
     };
   };
 
@@ -1035,6 +1049,7 @@ export const useSocket = () => {
 
       removeRemoteUser(remoteUserId);
       removeMediaStream(remoteUserId);
+      clearRemoteTrackState(remoteUserId);
       // if there is only a single peer connection left and its connectivity is failed,
       // set isConnected to false
     } catch (error) {
