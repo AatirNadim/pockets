@@ -9,13 +9,13 @@ import { useChatStore } from "../stores/chatStore";
 import { useFileStore } from "../stores/fileStore";
 import {
   WebSocketMessage,
+  JoinRoomMessage,
+  JoinRequestDecisionMessage,
+  OfferMessage,
   AnswerMessage,
   IceCandidateMessage,
-  JoinRequestDecisionMessage,
-  JoinRoomMessage,
   LeaveRoomMessage,
-  OfferMessage,
-} from "../../../shared/types";
+} from "@/lib/types";
 import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
 import type {
@@ -87,10 +87,11 @@ export const useSocket = () => {
   );
   const clearJoinRequests = useJoinRequestStore((state) => state.clearRequests);
 
-  const { sendFile, sendFilesToUser, registerIncomingTransferChannel } = useFile({
-    peerConnections,
-    dataChannelMap,
-  });
+  const { sendFile, sendFilesToUser, registerIncomingTransferChannel } =
+    useFile({
+      peerConnections,
+      dataChannelMap,
+    });
 
   const sendEnvelope = (
     envelope: ChatDataEnvelope,
