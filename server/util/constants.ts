@@ -1,4 +1,4 @@
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.SERVER_PORT) || 8080;
 
 const MAX_USERS_PER_ROOM = 6;
 

@@ -25,6 +25,7 @@ import type {
   FileDownloadRequest,
   FileDownloadResponse,
 } from "../types";
+import { audioLevelManager } from "@/lib/utils/audioLevelManager";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -311,6 +312,10 @@ export const useSocket = () => {
         localVideoRef.current.srcObject = localStream.current;
       }
 
+      if (kind === "audio" && userId) {
+        audioLevelManager.startAnalyzing(userId, newTrack);
+      }
+
       // TODO: Handle audio element if needed
       Object.values(peerConnections.current).forEach((pc) => {
         pc.getSenders().forEach((sender) => {
@@ -399,6 +404,12 @@ export const useSocket = () => {
 
       captureDeviceIdsFromStream(localStream.current);
       await populateAvailableDevices();
+      if (userId) {
+        const audioTrack = localStream.current.getAudioTracks()[0];
+        if (audioTrack) {
+          audioLevelManager.startAnalyzing(userId, audioTrack);
+        }
+      }
     } catch (error) {
       console.error("Error accessing media devices:", error);
       toast.error(
@@ -791,9 +802,23 @@ export const useSocket = () => {
 
       setState(!track.muted && track.readyState === "live");
 
-      track.onmute = () => setState(false);
+      if (trackType === TrackType.AUDIO) {
+        audioLevelManager.startAnalyzing(remoteUserId, track);
+      }
+
+      track.onmute = () => {
+        setState(false);
+        if (trackType === TrackType.AUDIO) {
+          audioLevelManager.markSilent(remoteUserId);
+        }
+      };
       track.onunmute = () => setState(true);
-      track.onended = () => setState(false);
+      track.onended = () => {
+        setState(false);
+        if (trackType === TrackType.AUDIO) {
+          audioLevelManager.stopAnalyzing(remoteUserId);
+        }
+      };
     };
   };
 
@@ -1045,6 +1070,7 @@ export const useSocket = () => {
       removeRemoteUser(remoteUserId);
       removeMediaStream(remoteUserId);
       clearRemoteTrackState(remoteUserId);
+      audioLevelManager.stopAnalyzing(remoteUserId);
       // if there is only a single peer connection left and its connectivity is failed,
       // set isConnected to false
     } catch (error) {
@@ -1293,6 +1319,7 @@ export const useSocket = () => {
       leaveRoom();
       clearMediaStreams();
       clearJoinRequests();
+      audioLevelManager.stopAll();
     } catch (error) {
       console.error("Error cleaning up WebSocket connection:", error);
     }
