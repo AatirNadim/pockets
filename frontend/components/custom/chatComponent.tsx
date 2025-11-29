@@ -18,16 +18,13 @@ type ChatComponentProps = {
   onRequestFile: (fileId: string, ownerId: string) => boolean;
 };
 
-const ChatComponent = ({ onSendMessage, onRequestFile }: ChatComponentProps) => {
+const ChatComponent = ({
+  onSendMessage,
+  onRequestFile,
+}: ChatComponentProps) => {
   const { chatMessages } = useChatStore();
   const { userId } = useUserStore();
-  const { getLocalFile, getReceivedFile, hasLocalFile } = useFileStore(
-    (state) => ({
-      getLocalFile: state.getLocalFile,
-      getReceivedFile: state.getReceivedFile,
-      hasLocalFile: state.hasLocalFile,
-    })
-  );
+  const { getLocalFile, getReceivedFile, hasLocalFile } = useFileStore();
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [chatMessage, setChatMessage] = useState("");
 
@@ -105,7 +102,9 @@ const ChatComponent = ({ onSendMessage, onRequestFile }: ChatComponentProps) => 
 
   type AttachmentState = "local" | "ready" | "remote";
 
-  const deriveAttachmentState = (attachment: FileAttachment): AttachmentState => {
+  const deriveAttachmentState = (
+    attachment: FileAttachment
+  ): AttachmentState => {
     if (attachment.ownerId === userId || hasLocalFile(attachment.id)) {
       return "local";
     }

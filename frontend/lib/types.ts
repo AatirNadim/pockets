@@ -164,10 +164,17 @@ type FileMetadataPayload = {
   size: number;
 };
 
+type IncomingTransferState = {
+  metadata?: FileMetadataPayload;
+  chunks: ArrayBuffer[];
+  receivedBytes: number;
+  remoteUserId?: string;
+};
+
 type DataChannelEnvelope =
   | { kind: "file-metadata"; payload: FileMetadataPayload }
   | { kind: "control"; payload: Record<string, unknown> };
-  
+
 export enum TrackType {
   AUDIO = "audio",
   VIDEO = "video",
@@ -195,6 +202,7 @@ export type {
   FileDownloadResponse,
   ChatSystemNotice,
   ChatDataEnvelope,
+  IncomingTransferState,
   DataChannelEnvelope,
   FileMetadataPayload,
 };

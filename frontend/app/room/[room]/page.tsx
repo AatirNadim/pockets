@@ -302,7 +302,10 @@ export default function Room() {
         selectedMicrophoneId={selectedMicrophoneId}
         onCameraChange={switchCamera}
         onMicrophoneChange={switchMicrophone}
-        onLeave={cleanUp}
+        onLeave={() => {
+          cleanUpRef.current();
+          router.push("/");
+        }}
       />
 
       {isHost && requests.length > 0 && (

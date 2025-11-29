@@ -4,14 +4,11 @@ import { toast } from "sonner";
 import { CHUNK_SIZE, MAX_CHANNELS_FOR_DATA_TRANSMISSION } from "../constants";
 import { useFileStore, type QueuedFile } from "../stores/fileStore";
 import { useUserStore } from "../stores/userStore";
-import type { DataChannelEnvelope, FileMetadataPayload } from "../types";
-
-type IncomingTransferState = {
-  metadata?: FileMetadataPayload;
-  chunks: ArrayBuffer[];
-  receivedBytes: number;
-  remoteUserId?: string;
-};
+import type {
+  DataChannelEnvelope,
+  FileMetadataPayload,
+  IncomingTransferState,
+} from "../types";
 
 export const useFile = ({
   peerConnections,
@@ -32,7 +29,9 @@ export const useFile = ({
 
   // Track total bytes transferred across concurrent uploads
   const globalTransferredRef = useRef(0);
-  const incomingTransfersRef = useRef<Record<string, IncomingTransferState>>({});
+  const incomingTransfersRef = useRef<Record<string, IncomingTransferState>>(
+    {}
+  );
 
   /**
    * Initiates the file sending process to all connected peers.
@@ -137,7 +136,10 @@ export const useFile = ({
     setIsSending(true);
     globalTransferredRef.current = 0;
 
-    const totalSize = fileEntries.reduce((acc, entry) => acc + entry.file.size, 0);
+    const totalSize = fileEntries.reduce(
+      (acc, entry) => acc + entry.file.size,
+      0
+    );
 
     try {
       await sendFilesToPeer(remoteUserId, pc, fileEntries, totalSize, ownerId);
@@ -170,7 +172,10 @@ export const useFile = ({
       files.length,
       MAX_CHANNELS_FOR_DATA_TRANSMISSION
     );
-    const queues: QueuedFile[][] = Array.from({ length: numChannels }, () => []);
+    const queues: QueuedFile[][] = Array.from(
+      { length: numChannels },
+      () => []
+    );
 
     // Round-robin distribution
     files.forEach((file, index) => {
@@ -227,12 +232,7 @@ export const useFile = ({
           // Send files serially in this queue
           for (const entry of queue) {
             setSendingFile(entry.file);
-            await sendFileOverChannel(
-              channel,
-              entry,
-              totalGlobalSize,
-              ownerId
-            );
+            await sendFileOverChannel(channel, entry, totalGlobalSize, ownerId);
             console.log(
               `File ${entry.file.name} sent to ${remoteUserId} via ${channel.label}`
             );
@@ -435,8 +435,11 @@ export const useFile = ({
     }
 
     try {
-      const blob = new Blob(chunks, { type: metadata.type || "application/octet-stream" });
-      const url = typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
+      const blob = new Blob(chunks, {
+        type: metadata.type || "application/octet-stream",
+      });
+      const url =
+        typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
 
       registerReceivedFile({
         id: metadata.fileId,

@@ -53,15 +53,10 @@ export const useSocket = () => {
 
   const {
     filesToBeSent,
+    getLocalFileEntry,
     clearFilesToBeSent,
     resetFileStore,
-    getLocalFileEntry,
-  } = useFileStore((state) => ({
-    filesToBeSent: state.filesToBeSent,
-    clearFilesToBeSent: state.clearFilesToBeSent,
-    resetFileStore: state.resetFileStore,
-    getLocalFileEntry: state.getLocalFileEntry,
-  }));
+  } = useFileStore();
 
   const addChatMessage = useChatStore((state) => state.addChatMessage);
   const incrementUnreadCount = useChatStore(
