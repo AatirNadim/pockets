@@ -1,3 +1,4 @@
+import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
 import {
@@ -19,9 +20,23 @@ import { SocketService } from "./util/socket";
 
 const socketService = new SocketService();
 
-const wss = new WebSocketServer({ port: PORT });
+const httpServer = createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
 
-console.log(`🚀 Signaling server running on port ${PORT}`);
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Not Found" }));
+});
+
+const wss = new WebSocketServer({ server: httpServer });
+
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Signaling server (HTTP + WS) running on port ${PORT}`);
+  console.log(`   • Health check: http://localhost:${PORT}/health`);
+});
 
 const registerSocketEventListeners = (ws: ExtendedWebSocket) => {
   // @ts-expect-error
@@ -65,7 +80,10 @@ const gracefulShutdown = () => {
   // Close the WebSocket server
   wss.close(() => {
     console.log("WebSocket server closed");
-    process.exit(0);
+    httpServer.close(() => {
+      console.log("HTTP server closed");
+      process.exit(0);
+    });
   });
 };
 

@@ -8,9 +8,8 @@ const MAX_FILES_TO_SEND_TOGETHER = 5;
 
 const serverPort: string = process.env.NEXT_PUBLIC_SERVER_PORT || "8080";
 
-const serverPath = `${
-  process.env.NEXT_PUBLIC_SERVER_PATH || "localhost"
-}:${serverPort}`;
+const serverPath =
+  process.env.NEXT_PUBLIC_SERVER_PATH || `localhost:${serverPort}`;
 
 enum UserType {
   HOST = "host",

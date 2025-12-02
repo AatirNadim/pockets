@@ -107,7 +107,12 @@ export default function Home() {
             className="p-5 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-white/60 dark:border-white/10"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.5, type: "spring", stiffness: 140 }}
+            transition={{
+              delay: 0.1,
+              duration: 0.5,
+              type: "spring",
+              stiffness: 140,
+            }}
           >
             <div className="space-y-3">
               <p className="text-sm font-semibold text-[var(--primary)]">
@@ -146,7 +151,8 @@ export default function Home() {
                   <span className="font-semibold">Create a new room</span>
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-300">
-                  Instantly spin up a fresh space and invite others with the generated ID.
+                  Instantly spin up a fresh space and invite others with the
+                  generated ID.
                 </p>
                 <MotionButton
                   onClick={createAndJoin}
@@ -231,9 +237,7 @@ export default function Home() {
 
           {/* Footer */}
           <div className="pt-8 text-center text-[var(--primary)]">
-            <p className="text-sm">
-              Secure • Fast • Collaborative
-            </p>
+            <p className="text-sm">Secure • Fast • Collaborative</p>
           </div>
         </div>
       </div>

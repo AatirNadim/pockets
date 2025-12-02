@@ -18,6 +18,7 @@ import ChatComponent from "@/components/custom/chatComponent";
 import MediaControl from "@/components/custom/mediaControl";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useMediaStore } from "@/lib/stores/mediaStore";
+import { useVoiceActivityStore } from "@/lib/stores/voiceActivityStore";
 import { ThemeToggle } from "@/components/custom/themeToggle";
 import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
@@ -38,6 +39,7 @@ export default function Room() {
     remoteTrackState,
   } = useMediaStore();
   const { remoteUsers, userType, userId } = useUserStore();
+  const { levels: voiceLevels } = useVoiceActivityStore();
 
   const router = useRouter();
   const params = useParams();
@@ -68,7 +70,14 @@ export default function Room() {
     ? "bg-red-400"
     : "bg-yellow-400 animate-pulse";
 
+  const localVoiceLevel = userId ? voiceLevels[userId] ?? 0 : 0;
+  const isSpeakingLocally = localVoiceLevel > 0.18;
+
   const cleanUpRef = useRef(cleanUp);
+
+  useEffect(() => {
+    console.log("Local voice level:", localVoiceLevel);
+  }, [localVoiceLevel]);
 
   useEffect(() => {
     if (!isValidUUID(roomId)) {
@@ -205,6 +214,7 @@ export default function Room() {
                         audioEnabled={
                           remoteTrackState[remoteId]?.audioEnabled !== false
                         }
+                        voiceLevel={voiceLevels[remoteId] ?? 0}
                       />
                     ))}
                   </div>
@@ -252,13 +262,38 @@ export default function Room() {
               )}
 
               <div className="absolute top-2 left-2 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded px-2 py-1">
-                <span
-                  className={`font-medium ${
-                    isMinimized ? "text-[10px]" : "text-xs"
-                  }`}
-                >
-                  You
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`font-medium ${
+                      isMinimized ? "text-[10px]" : "text-xs"
+                    }`}
+                  >
+                    You
+                  </span>
+                  <span
+                    className={`flex items-center gap-1 rounded-full px-2 py-[2px] text-[9px] font-semibold uppercase tracking-wide transition-all ${
+                      isSpeakingLocally
+                        ? "bg-emerald-400/90 text-emerald-950"
+                        : "bg-black/40 text-white/80"
+                    }`}
+                    style={{
+                      boxShadow: isSpeakingLocally
+                        ? `0 0 ${6 + localVoiceLevel * 10}px rgba(16,185,129,${
+                            0.45 + localVoiceLevel * 0.3
+                          })`
+                        : undefined,
+                    }}
+                  >
+                    <span
+                      className="inline-block h-[6px] w-[6px] rounded-full bg-current"
+                      style={{
+                        transform: `scale(${0.9 + localVoiceLevel * 0.5})`,
+                        transition: "transform 120ms ease-out",
+                      }}
+                    ></span>
+                    {isSpeakingLocally ? "Speaking" : "Live"}
+                  </span>
+                </div>
               </div>
 
               <Button

@@ -1,0 +1,8 @@
+ui.localhost {
+  reverse_proxy localhost:3000
+}
+
+
+api.localhost {
+  reverse_proxy localhost:8080
+}
