@@ -19,31 +19,24 @@ interface ChatActions {
 
 export type { ChatState };
 
-export const useChatStore = create<ChatState & ChatActions>()(
-  persist(
-    (set) => ({
-      chatMessages: [],
-      unreadCount: 0,
-      showChat: false,
-      toggleShowChat: () =>
-        set((state) => {
-          const nextShowState = !state.showChat;
-          return {
-            showChat: nextShowState,
-            unreadCount: nextShowState ? 0 : state.unreadCount,
-          };
-        }),
-      addChatMessage: (message) =>
-        set((state) => ({
-          chatMessages: [...state.chatMessages, message],
-        })),
-      clearChatMessages: () => set({ chatMessages: [] }),
-      incrementUnreadCount: () =>
-        set((state) => ({ unreadCount: state.unreadCount + 1 })),
-      resetUnreadCount: () => set({ unreadCount: 0 }),
+export const useChatStore = create<ChatState & ChatActions>()((set) => ({
+  chatMessages: [],
+  unreadCount: 0,
+  showChat: false,
+  toggleShowChat: () =>
+    set((state) => {
+      const nextShowState = !state.showChat;
+      return {
+        showChat: nextShowState,
+        unreadCount: nextShowState ? 0 : state.unreadCount,
+      };
     }),
-    {
-      name: "chat-storage",
-    }
-  )
-);
+  addChatMessage: (message) =>
+    set((state) => ({
+      chatMessages: [...state.chatMessages, message],
+    })),
+  clearChatMessages: () => set({ chatMessages: [] }),
+  incrementUnreadCount: () =>
+    set((state) => ({ unreadCount: state.unreadCount + 1 })),
+  resetUnreadCount: () => set({ unreadCount: 0 }),
+}));

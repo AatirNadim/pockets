@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Archivo, Montserrat } from "next/font/google";
+import { Archivo, Montserrat, Quicksand } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/custom/theme-provider";
 
 const archivo = Archivo({
   variable: "--font-archivo",
+  subsets: ["latin"],
+});
+
+const quickSand = Quicksand({
+  variable: "--font-quicksand",
   subsets: ["latin"],
 });
 
@@ -27,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${archivo.variable} ${montserrat.variable} antialiased`}
+        className={`${archivo.variable} ${montserrat.variable} ${quickSand.variable} antialiased`}
       >
         <ThemeProvider>
           {children}

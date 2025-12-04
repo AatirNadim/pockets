@@ -1,24 +1,32 @@
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
-import {
-  WebSocketMessage,
-  Room,
-  User,
-  JoinRoomMessage,
-  LeaveRoomMessage,
-  OfferMessage,
-  AnswerMessage,
-  IceCandidateMessage,
-  UserJoinedMessage,
-  UserLeftMessage,
-  ErrorMessage,
-  ExtendedWebSocket,
-} from "./util/types";
+import { WebSocketMessage, ExtendedWebSocket } from "./util/types";
 import { PORT } from "./util/constants";
-import { SocketService } from "./util/socket";
+import { SocketService } from "./services/socket.service";
 
 const socketService = new SocketService();
+
+const registerSocketEventListeners = (ws: ExtendedWebSocket) => {
+  ws.onmessage = (event) => {
+    console.debug("Received message");
+    try {
+      const message = JSON.parse(event.data.toString());
+      console.info("Parsed message:", message);
+      socketService.handleMessage(ws, message as WebSocketMessage);
+    } catch (error) {
+      console.error("Error parsing message:", error);
+    }
+  };
+
+  ws.onclose = () => {
+    console.debug("Client disconnected");
+  };
+
+  ws.onerror = (error) => {
+    console.error("WebSocket error:", error);
+  };
+};
 
 const httpServer = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
@@ -33,39 +41,16 @@ const httpServer = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer });
 
+wss.on("connection", (ws: ExtendedWebSocket) => {
+  console.debug("New client connected");
+  registerSocketEventListeners(ws);
+});
+
 httpServer.listen(PORT, () => {
   console.log(`🚀 Signaling server (HTTP + WS) running on port ${PORT}`);
   console.log(`   • Health check: http://localhost:${PORT}/health`);
 });
 
-const registerSocketEventListeners = (ws: ExtendedWebSocket) => {
-  // @ts-expect-error
-  ws.on("message", (data) => {
-    console.debug("Received message");
-    try {
-      const message = JSON.parse(data.toString());
-      console.info("Parsed message:", message);
-      socketService.handleMessage(ws, message as WebSocketMessage);
-    } catch (error) {
-      console.error("Error parsing message:", error);
-    }
-  });
-
-  // @ts-expect-error
-  ws.on("close", () => {
-    console.debug("Client disconnected");
-  });
-
-  // @ts-expect-error
-  ws.on("error", (error) => {
-    console.error("WebSocket error:", error);
-  });
-};
-
-wss.on("connection", (ws: ExtendedWebSocket) => {
-  console.debug("New client connected");
-  registerSocketEventListeners(ws);
-});
 
 const gracefulShutdown = () => {
   console.log("Server shutting down gracefully...");

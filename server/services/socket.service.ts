@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
 
-import { MAX_USERS_PER_ROOM, UserType } from "./constants";
+import { MAX_USERS_PER_ROOM, UserType } from "../util/constants";
 import {
   AnswerMessage,
   ErrorMessage,
@@ -12,64 +12,25 @@ import {
   JoinRoomMessage,
   LeaveRoomMessage,
   OfferMessage,
-  Room,
   RoomFullMessage,
   User,
   UserJoinedMessage,
   UserLeftMessage,
   WebSocketMessage,
-} from "./types";
+} from "../util/types";
+import { RequestQueueService } from "./requestQueue.service";
+import { RoomService } from "./room.service";
+import { UserService } from "./user.service";
 
 export class SocketService {
-  private rooms: Map<string, Room>;
-  private userSockets: Map<string, ExtendedWebSocket>;
-  private pendingJoinRequests: Map<string, Map<string, User>>;
+  private roomService: RoomService;
+  private userService: UserService;
+  private requestQueueService: RequestQueueService;
 
   constructor() {
-    this.rooms = new Map<string, Room>();
-    this.userSockets = new Map<string, ExtendedWebSocket>();
-    this.pendingJoinRequests = new Map<string, Map<string, User>>();
-  }
-
-  private getHostSocket(roomId: string) {
-    const room = this.rooms.get(roomId);
-    const hostId = room?.hostId;
-    if (!hostId) {
-      return null;
-    }
-    return this.userSockets.get(hostId) ?? null;
-  }
-
-  private ensurePendingMap(roomId: string) {
-    if (!this.pendingJoinRequests.has(roomId)) {
-      this.pendingJoinRequests.set(roomId, new Map<string, User>());
-    }
-    return this.pendingJoinRequests.get(roomId)!;
-  }
-
-  private queuePendingGuest(roomId: string, guest: User) {
-    const pending = this.ensurePendingMap(roomId);
-    pending.set(guest.id, guest);
-  }
-
-  private peekPendingGuest(roomId: string, guestId: string) {
-    return this.pendingJoinRequests.get(roomId)?.get(guestId);
-  }
-
-  private removePendingGuest(roomId: string, guestId: string) {
-    const pending = this.pendingJoinRequests.get(roomId);
-    if (!pending) {
-      return null;
-    }
-
-    const guest = pending.get(guestId) ?? null;
-    if (guest) {
-      pending.delete(guestId);
-      if (pending.size === 0) {
-        this.pendingJoinRequests.delete(roomId);
-      }
-    }
-    return guest;
+    this.roomService = new RoomService();
+    this.userService = new UserService();
+    this.requestQueueService = new RequestQueueService();
   }
 
   private notifyHostClosed(roomId: string, remainingUsers: User[]) {
@@ -79,7 +40,7 @@ export class SocketService {
     };
 
     const notifyUser = (userId: string) => {
-      const socket = this.userSockets.get(userId);
+      const socket = this.userService.getSocketForUser(userId);
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(hostClosedMessage));
       }
@@ -89,15 +50,16 @@ export class SocketService {
       notifyUser(user.id);
     });
 
-    const pending = this.pendingJoinRequests.get(roomId);
+    const pending =
+      this.requestQueueService.getPendingJoinRequestForRoom(roomId);
     if (pending) {
       pending.forEach((guest) => {
         notifyUser(guest.id);
       });
     }
 
-    this.pendingJoinRequests.delete(roomId);
-    this.rooms.delete(roomId);
+    this.requestQueueService.removeAllPendingGuestsForRoom(roomId);
+    this.roomService.deleteRoom(roomId);
   }
 
   private sendErrorMessage(ws: ExtendedWebSocket, message: string) {
@@ -152,8 +114,8 @@ export class SocketService {
       };
       ws.send(JSON.stringify(errorMessage));
     } finally {
-      console.log("\nroom details:", Array.from(this.rooms.keys()));
-      console.log("user sockets:", Array.from(this.userSockets.keys()), "\n");
+      console.log("\nroom details:", this.roomService.getAllRoomIds());
+      console.log("user sockets:", this.userService.getAllUserIds(), "\n");
     }
   }
 
@@ -167,7 +129,7 @@ export class SocketService {
 
     const { roomId, userId, userName, userType } = message;
 
-    const user: User = {
+    const newUser: User = {
       id: userId,
       name: userName,
       type: userType,
@@ -179,16 +141,16 @@ export class SocketService {
 
     ws.roomId = roomId;
 
-    console.log("websocket room details after assignment --> ", {
-      roomId: ws.roomId,
-      userId: ws.userId,
-      userName: ws.userName,
-      userType: ws.userType,
-    });
+    // console.log("websocket room details after assignment --> ", {
+    //   roomId: ws.roomId,
+    //   userId: ws.userId,
+    //   userName: ws.userName,
+    //   userType: ws.userType,
+    // });
 
-    this.userSockets.set(userId, ws);
+    this.userService.createOrUpdateUserSocket(userId, ws);
 
-    let room = this.rooms.get(roomId);
+    let room = this.roomService.getRoomDetails(roomId);
     if (!room) {
       if (userType !== UserType.HOST) {
         console.warn(
@@ -206,8 +168,7 @@ export class SocketService {
         roomId,
         "creating a new room"
       );
-      room = { id: roomId, hostId: userId, users: [] };
-      this.rooms.set(roomId, room);
+      room = this.roomService.createAndPopulateRoom(roomId, newUser);
     }
 
     if (userType === UserType.HOST) {
@@ -222,8 +183,7 @@ export class SocketService {
       }
 
       room.hostId = userId;
-      room.users.push(user);
-      this.rooms.set(roomId, room);
+      this.roomService.addUserToRoom(roomId, newUser);
     } else {
       if (!room.hostId) {
         console.warn(
@@ -238,7 +198,9 @@ export class SocketService {
 
       console.log("processing join request for guest, websocket still working");
 
-      const pendingCount = this.pendingJoinRequests.get(roomId)?.size ?? 0;
+      const pendingCount =
+        this.requestQueueService.getPendingJoinRequestForRoom(roomId)?.size ??
+        0;
       if (room.users.length + pendingCount >= MAX_USERS_PER_ROOM) {
         console.log(
           `Room ${roomId} is full (pending included). Rejecting ${userId}`
@@ -251,7 +213,9 @@ export class SocketService {
         return;
       }
 
-      const hostSocket = this.getHostSocket(roomId);
+      const hostSocket = this.userService.getSocketForUser(
+        this.roomService.getHostIdForRoom(roomId) ?? ""
+      );
 
       console.log("host socket fetched for guest join request:", hostSocket);
       if (!hostSocket || hostSocket.readyState !== WebSocket.OPEN) {
@@ -265,7 +229,7 @@ export class SocketService {
         return;
       }
 
-      this.queuePendingGuest(roomId, user);
+      this.requestQueueService.queuePendingGuest(roomId, newUser);
 
       console.log(
         "queued pending guest, forwarding join request to host socket:",
@@ -275,7 +239,7 @@ export class SocketService {
       const joinRequest: JoinRequestMessage = {
         type: "join-request",
         roomId,
-        guest: user,
+        guest: newUser,
       };
 
       console.log("forwarding join request to host socket:", hostSocket);
@@ -298,9 +262,9 @@ export class SocketService {
     } as UserJoinedMessage);
   }
 
-  sendSocketMessageUtil(userIds: string[], message: WebSocketMessage) {
+  private sendSocketMessageUtil(userIds: string[], message: WebSocketMessage) {
     userIds.forEach((userId) => {
-      const userSocket = this.userSockets.get(userId);
+      const userSocket = this.userService.getSocketForUser(userId);
       if (userSocket && userSocket.readyState === WebSocket.OPEN) {
         userSocket.send(JSON.stringify(message));
       } else {
@@ -314,9 +278,9 @@ export class SocketService {
     });
   }
 
-  broadcastToRoom(roomId: string, message: WebSocketMessage) {
+  private broadcastToRoom(roomId: string, message: WebSocketMessage) {
     try {
-      const room = this.rooms.get(roomId);
+      const room = this.roomService.getRoomDetails(roomId);
 
       if (!room) {
         throw new Error(`Room with ID ${roomId} does not exist.`);
@@ -383,25 +347,25 @@ export class SocketService {
   //   const { roomId, userId } = message;
   // };
 
-  handleOffer(message: OfferMessage) {
+  private handleOffer(message: OfferMessage) {
     const { toUserId } = message;
-    const targetSocket = this.userSockets.get(toUserId);
+    const targetSocket = this.userService.getSocketForUser(toUserId);
 
     console.debug("Sending offer to user:", toUserId, "message:", message);
     targetSocket?.send(JSON.stringify(message));
   }
 
-  handleAnswer(message: AnswerMessage) {
+  private handleAnswer(message: AnswerMessage) {
     const { toUserId } = message;
-    const targetSocket = this.userSockets.get(toUserId);
+    const targetSocket = this.userService.getSocketForUser(toUserId);
 
     console.debug("Sending answer to user:", toUserId, "message:", message);
     targetSocket?.send(JSON.stringify(message));
   }
 
-  handleIceCandidate(message: IceCandidateMessage) {
+  private handleIceCandidate(message: IceCandidateMessage) {
     const { toUserId } = message;
-    const targetSocket = this.userSockets.get(toUserId);
+    const targetSocket = this.userService.getSocketForUser(toUserId);
 
     if (targetSocket) {
       targetSocket.send(JSON.stringify(message));
@@ -412,7 +376,7 @@ export class SocketService {
     console.log("Handling join request decision:", message);
     const { roomId, hostUserId, guestUserId } = message;
 
-    const room = this.rooms.get(roomId);
+    const room = this.roomService.getRoomDetails(roomId);
     if (!room) {
       console.warn(
         `Received join request decision for non-existent room ${roomId}`
@@ -427,7 +391,10 @@ export class SocketService {
       return;
     }
 
-    const pendingGuest = this.peekPendingGuest(roomId, guestUserId);
+    const pendingGuest = this.requestQueueService.peekPendingGuest(
+      roomId,
+      guestUserId
+    );
     if (!pendingGuest) {
       console.warn(
         `No pending guest ${guestUserId} for room ${roomId} to process decision.`
@@ -435,9 +402,9 @@ export class SocketService {
       return;
     }
 
-    const hostSocket = this.userSockets.get(hostUserId);
+    const hostSocket = this.userService.getSocketForUser(hostUserId);
     const hostName = hostSocket?.userName ?? "Host";
-    const guestSocket = this.userSockets.get(guestUserId);
+    const guestSocket = this.userService.getSocketForUser(guestUserId);
 
     if (message.type === "join-request-accepted") {
       if (room.users.length >= MAX_USERS_PER_ROOM) {
@@ -459,11 +426,11 @@ export class SocketService {
         return;
       }
 
-      this.removePendingGuest(roomId, guestUserId);
+      this.requestQueueService.removePendingGuestForRoom(roomId, guestUserId);
       if (!room.users.find((user) => user.id === pendingGuest.id)) {
         room.users.push(pendingGuest);
       }
-      this.rooms.set(roomId, room);
+      this.roomService.updateRoom(room);
 
       guestSocket?.send(
         JSON.stringify({
@@ -483,7 +450,7 @@ export class SocketService {
       return;
     }
 
-    this.removePendingGuest(roomId, guestUserId);
+    this.requestQueueService.removePendingGuestForRoom(roomId, guestUserId);
     guestSocket?.send(
       JSON.stringify({
         ...message,
@@ -493,20 +460,22 @@ export class SocketService {
     );
   }
 
-  handleLeaveRoom(ws: ExtendedWebSocket, message: LeaveRoomMessage) {
+  private handleLeaveRoom(ws: ExtendedWebSocket, message: LeaveRoomMessage) {
     const { roomId, userId } = message;
 
-    const pendingGuest = this.removePendingGuest(roomId, userId);
+    const pendingGuest = this.requestQueueService.removePendingGuestForRoom(
+      roomId,
+      userId
+    );
     if (pendingGuest) {
       console.log(
         `Pending guest ${userId} cancelled their join request for room ${roomId}`
       );
-      this.userSockets.delete(userId);
+      this.userService.deleteUserSocket(userId);
       return;
     }
 
-    const room = this.rooms.get(roomId);
-
+    const room = this.roomService.getRoomDetails(roomId);
     if (!room) {
       console.warn(`Room with ID ${roomId} does not exist.`);
       return;
@@ -517,7 +486,7 @@ export class SocketService {
       console.warn(
         `User ${userId} attempted to leave room ${roomId} but was not a member.`
       );
-      this.userSockets.delete(userId);
+      this.userService.deleteUserSocket(userId);
       return;
     }
 
@@ -526,17 +495,17 @@ export class SocketService {
 
     if (isHostLeaving) {
       this.notifyHostClosed(roomId, room.users);
-      this.userSockets.delete(userId);
+      this.userService.deleteUserSocket(userId);
       console.log(`Host ${userId} closed room ${roomId}`);
       return;
     }
 
     // Remove empty rooms
     if (room.users.length === 0) {
-      this.rooms.delete(roomId);
-      this.pendingJoinRequests.delete(roomId);
+      this.roomService.deleteRoom(roomId);
+      this.requestQueueService.removeAllPendingGuestsForRoom(roomId);
     } else {
-      this.rooms.set(roomId, room);
+      this.roomService.updateRoom(room);
 
       // Notify remaining users
       const userLeftMessage: UserLeftMessage = {
@@ -547,7 +516,7 @@ export class SocketService {
       this.broadcastToRoom(roomId, userLeftMessage);
     }
 
-    this.userSockets.delete(userId);
+    this.userService.deleteUserSocket(userId);
 
     console.log(`User ${userId} left room ${roomId}`);
   }

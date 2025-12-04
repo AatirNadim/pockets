@@ -129,8 +129,8 @@ export interface HostClosedRoomMessage {
 }
 
 export interface ExtendedWebSocket extends WebSocket {
-  userId?: string;
-  roomId?: string;
-  userName?: string;
-  userType?: UserType;
+  userId: string;
+  roomId: string;
+  userName: string;
+  userType: UserType;
 }
