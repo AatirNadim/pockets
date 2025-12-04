@@ -1,3 +1,5 @@
+import { WebSocket } from "ws";
+
 import { MAX_USERS_PER_ROOM, UserType } from "./constants";
 import {
   AnswerMessage,
@@ -110,6 +112,10 @@ export class SocketService {
     try {
       switch (message.type) {
         case "join-room":
+          console.log(
+            "received message to join the room, websocket details --> ",
+            ws
+          );
           this.joinRoom(ws, message);
           break;
         case "leave-room":
@@ -152,6 +158,13 @@ export class SocketService {
   }
 
   private joinRoom(ws: ExtendedWebSocket, message: JoinRoomMessage) {
+    console.log(
+      "joining room handler --> websocket details --> ",
+      ws,
+      " message --> ",
+      message
+    );
+
     const { roomId, userId, userName, userType } = message;
 
     const user: User = {
@@ -165,6 +178,14 @@ export class SocketService {
     ws.userType = userType;
 
     ws.roomId = roomId;
+
+    console.log("websocket room details after assignment --> ", {
+      roomId: ws.roomId,
+      userId: ws.userId,
+      userName: ws.userName,
+      userType: ws.userType,
+    });
+
     this.userSockets.set(userId, ws);
 
     let room = this.rooms.get(roomId);
@@ -215,9 +236,13 @@ export class SocketService {
         return;
       }
 
+      console.log("processing join request for guest, websocket still working");
+
       const pendingCount = this.pendingJoinRequests.get(roomId)?.size ?? 0;
       if (room.users.length + pendingCount >= MAX_USERS_PER_ROOM) {
-        console.log(`Room ${roomId} is full (pending included). Rejecting ${userId}`);
+        console.log(
+          `Room ${roomId} is full (pending included). Rejecting ${userId}`
+        );
         const roomFullMessage: RoomFullMessage = {
           type: "room-full",
           roomId,
@@ -227,6 +252,8 @@ export class SocketService {
       }
 
       const hostSocket = this.getHostSocket(roomId);
+
+      console.log("host socket fetched for guest join request:", hostSocket);
       if (!hostSocket || hostSocket.readyState !== WebSocket.OPEN) {
         console.warn(
           `Unable to reach host ${room.hostId} for join request from ${userId}.`
@@ -240,11 +267,18 @@ export class SocketService {
 
       this.queuePendingGuest(roomId, user);
 
+      console.log(
+        "queued pending guest, forwarding join request to host socket:",
+        hostSocket
+      );
+
       const joinRequest: JoinRequestMessage = {
         type: "join-request",
         roomId,
         guest: user,
       };
+
+      console.log("forwarding join request to host socket:", hostSocket);
 
       hostSocket.send(JSON.stringify(joinRequest));
       console.log(
@@ -374,6 +408,7 @@ export class SocketService {
   }
 
   private handleJoinRequestDecision(message: JoinRequestDecisionMessage) {
+    console.log("Handling join request decision:", message);
     const { roomId, hostUserId, guestUserId } = message;
 
     const room = this.rooms.get(roomId);

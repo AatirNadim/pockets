@@ -111,6 +111,7 @@ export default function Room() {
 
     // 2. Handler to run cleanup ONLY when the page is actually unloading
     const handlePageHide = () => {
+      console.log("cleanup being called on pagehide...");
       cleanUpRef.current();
     };
 
@@ -338,6 +339,7 @@ export default function Room() {
         onCameraChange={switchCamera}
         onMicrophoneChange={switchMicrophone}
         onLeave={() => {
+          console.log("cleanup being called on leave...");
           cleanUpRef.current();
           router.push("/");
         }}

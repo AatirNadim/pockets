@@ -568,11 +568,13 @@ export const useSocket = () => {
         break;
 
       case "error":
+        console.log("error signalling message received:", message);
         setStatus("Connection failed");
         setIsConnected(false);
         toast.error("Error", {
           description: message.message || "An error occurred",
         });
+        console.log("cleanup being called after error signalling message...");
         cleanUp();
         router.push("/");
         break;
@@ -618,6 +620,7 @@ export const useSocket = () => {
               message.hostName ?? "Host"
             } declined your request to join.`,
           });
+          console.log("cleanup being called after join request rejection...");
           cleanUp();
         }
         if (userType === UserType.HOST) {
@@ -631,6 +634,7 @@ export const useSocket = () => {
             description: "The host ended this room. Returning to the lobby...",
           });
           setStatus("Host ended the room");
+          console.log("cleanup being called after host closed room...");
           cleanUp();
           router.push("/");
         }

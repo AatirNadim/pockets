@@ -1,8 +1,8 @@
-ui.localhost {
+192.168.0.117 {
   reverse_proxy localhost:3000
 }
 
 
-api.localhost {
+192.168.0.117:8443 {
   reverse_proxy localhost:8080
 }
