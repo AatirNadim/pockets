@@ -80,11 +80,11 @@ export const useSocket = () => {
     clearRemoteTrackState,
   } = useMediaStore();
 
-  const addJoinRequest = useJoinRequestStore((state) => state.addRequest);
-  const removeJoinRequestFromStore = useJoinRequestStore(
-    (state) => state.removeRequest
-  );
-  const clearJoinRequests = useJoinRequestStore((state) => state.clearRequests);
+  const {
+    addRequest: addJoinRequest,
+    removeRequest: removeJoinRequestFromStore,
+    clearRequests: clearJoinRequests,
+  } = useJoinRequestStore();
 
   const { sendFile, sendFilesToUser, registerIncomingTransferChannel } =
     useFile({
@@ -536,7 +536,11 @@ export const useSocket = () => {
         console.log(
           "a new user has joined the room, creating a peer connection..."
         );
-        createPeerConnection(message.userId, message.userName);
+        createPeerConnection(
+          message.userId,
+          message.userName,
+          message.userType
+        );
         await createOffer(message.userId);
         break;
 
@@ -680,7 +684,8 @@ export const useSocket = () => {
   const registerPCEventHandlers = (
     pc: RTCPeerConnection,
     remoteUserId: string,
-    remoteUserName: string
+    remoteUserName: string,
+    remoteUserType: UserType = UserType.GUEST
   ) => {
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
@@ -712,7 +717,7 @@ export const useSocket = () => {
             remoteUserId,
             remoteUserName
           );
-          addRemoteUser(remoteUserId, remoteUserName);
+          addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
           setIsConnected(true);
           setStatus("Connected to peer(s)...");
           toast.success("New User Joined", {
@@ -828,7 +833,8 @@ export const useSocket = () => {
 
   const createPeerConnection = (
     remoteUserId: string,
-    remoteUserName: string
+    remoteUserName: string,
+    remoteUserType: UserType = UserType.GUEST
   ) => {
     try {
       console.debug(
@@ -857,7 +863,7 @@ export const useSocket = () => {
       // registering peer connection event handlers
       console.log("running pc event handler registration...");
 
-      registerPCEventHandlers(pc, remoteUserId, remoteUserName);
+      registerPCEventHandlers(pc, remoteUserId, remoteUserName, remoteUserType);
 
       peerConnections.current[remoteUserId] = pc;
 
@@ -964,7 +970,11 @@ export const useSocket = () => {
         console.log(
           "recieved an offer from a new remote user, creating peer connection..."
         );
-        createPeerConnection(msg.fromUserId, msg.fromUserName);
+        createPeerConnection(
+          msg.fromUserId,
+          msg.fromUserName,
+          msg.fromUserType
+        );
         pc = peerConnections.current[fromUserId];
         console.log("Created new peer connection for user:", fromUserId);
       }

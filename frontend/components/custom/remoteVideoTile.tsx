@@ -1,4 +1,4 @@
-import { MicOff, VideoOff, Waves } from "lucide-react";
+import { Crown, MicOff, VideoOff, Waves } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 type RemoteVideoTileProps = {
@@ -8,6 +8,7 @@ type RemoteVideoTileProps = {
   videoEnabled: boolean;
   audioEnabled: boolean;
   voiceLevel?: number;
+  isHost?: boolean;
 };
 
 const RemoteVideoTile = ({
@@ -17,11 +18,13 @@ const RemoteVideoTile = ({
   videoEnabled,
   audioEnabled,
   voiceLevel = 0,
+  isHost = false,
 }: RemoteVideoTileProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const normalizedLevel = Math.min(Math.max(voiceLevel, 0), 1);
   const isSpeaking = audioEnabled && normalizedLevel > 0.18;
+  const displayName = userName || `Participant ${userId.slice(0, 4)}`;
 
   useEffect(() => {
     if (!videoRef.current) {
@@ -82,9 +85,20 @@ const RemoteVideoTile = ({
         }`}
       />
       <audio ref={audioRef} autoPlay className="hidden" />
-      <div className="absolute bottom-3 left-3 bg-black/70 text-white text-sm font-medium px-3 py-1 rounded-full backdrop-blur-sm">
-        {userName || `Participant ${userId.slice(0, 4)}`}
+      <div className="absolute bottom-3 left-3 rounded-full bg-[#1c0f3f]/80 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur">
+        {displayName}
       </div>
+      {isHost && (
+        <div className="absolute bottom-3 right-3 group">
+          <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
+            <Crown className="w-3 h-3" />
+            Host
+          </div>
+          <div className="pointer-events-none absolute -top-12 right-0 w-32 rounded-md bg-black/80 px-2 py-1 text-[10px] text-center text-white opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+            This participant controls the room
+          </div>
+        </div>
+      )}
       <div
         className={`absolute top-3 left-3 flex items-center gap-2 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition-all duration-150 ${
           audioEnabled ? "opacity-100" : "opacity-30"

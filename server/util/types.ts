@@ -104,6 +104,7 @@ export interface UserJoinedMessage {
   roomId: string;
   userId: string;
   userName: string;
+  userType: UserType;
 }
 
 export interface UserLeftMessage {

@@ -12,6 +12,7 @@ import {
   Minimize2,
   Maximize2,
   Sparkles,
+  Crown,
 } from "lucide-react";
 
 import ChatComponent from "@/components/custom/chatComponent";
@@ -38,7 +39,7 @@ export default function Room() {
     selectedMicrophoneId,
     remoteTrackState,
   } = useMediaStore();
-  const { remoteUsers, userType, userId } = useUserStore();
+  const { remoteUsers, userType, userId, userName } = useUserStore();
   const { levels: voiceLevels } = useVoiceActivityStore();
 
   const router = useRouter();
@@ -62,6 +63,7 @@ export default function Room() {
   const { requests } = useJoinRequestStore();
   const isHost = userType === UserType.HOST;
   const [roomCopied, setRoomCopied] = useState(false);
+  const localDisplayName = userName || "You";
 
   const remoteStreamEntries = Object.entries(mediaStreams);
   const connectionIndicatorClass = isConnected
@@ -203,21 +205,25 @@ export default function Room() {
                         : "grid-cols-1 md:grid-cols-2"
                     }`}
                   >
-                    {remoteStreamEntries.map(([remoteId, stream]) => (
-                      <RemoteVideoTile
-                        key={remoteId}
-                        stream={stream}
-                        userId={remoteId}
-                        userName={remoteUsers[remoteId]}
-                        videoEnabled={
-                          remoteTrackState[remoteId]?.videoEnabled !== false
-                        }
-                        audioEnabled={
-                          remoteTrackState[remoteId]?.audioEnabled !== false
-                        }
-                        voiceLevel={voiceLevels[remoteId] ?? 0}
-                      />
-                    ))}
+                    {remoteStreamEntries.map(([remoteId, stream]) => {
+                      const remoteMeta = remoteUsers[remoteId];
+                      return (
+                        <RemoteVideoTile
+                          key={remoteId}
+                          stream={stream}
+                          userId={remoteId}
+                          userName={remoteMeta?.name}
+                          isHost={remoteMeta?.userType === UserType.HOST}
+                          videoEnabled={
+                            remoteTrackState[remoteId]?.videoEnabled !== false
+                          }
+                          audioEnabled={
+                            remoteTrackState[remoteId]?.audioEnabled !== false
+                          }
+                          voiceLevel={voiceLevels[remoteId] ?? 0}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
@@ -245,6 +251,16 @@ export default function Room() {
                 isMinimized ? "w-16 h-12" : "w-48 h-36"
               }`}
             >
+              {isHost && !isMinimized && (
+                <div className="absolute top-2 left-2 z-10 group">
+                  <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
+                    <Crown className="w-3 h-3" />
+                  </div>
+                  <div className="pointer-events-none absolute -bottom-12 left-0 w-36 rounded-md bg-black/80 px-2 py-1 text-[10px] text-center text-white opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+                    This participant controls the room
+                  </div>
+                </div>
+              )}
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -252,6 +268,11 @@ export default function Room() {
                 muted
                 className="w-full h-full object-cover"
               />
+              {!isMinimized && (
+                <div className="absolute bottom-3 left-3 rounded-full bg-[#1c0f3f]/80 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur">
+                  {localDisplayName}
+                </div>
+              )}
               {isVideoOff && (
                 <div className="absolute inset-0 bg-slate-200 dark:bg-gray-800 flex items-center justify-center">
                   <VideoOff
@@ -264,14 +285,14 @@ export default function Room() {
 
               <div className="absolute top-2 left-2 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded px-2 py-1">
                 <div className="flex items-center gap-2">
-                  <span
+                  {/* <span
                     className={`font-medium ${
                       isMinimized ? "text-[10px]" : "text-xs"
                     }`}
                   >
                     You
-                  </span>
-                  <span
+                  </span> */}
+                  {/* <span
                     className={`flex items-center gap-1 rounded-full px-2 py-[2px] text-[9px] font-semibold uppercase tracking-wide transition-all ${
                       isSpeakingLocally
                         ? "bg-emerald-400/90 text-emerald-950"
@@ -293,7 +314,7 @@ export default function Room() {
                       }}
                     ></span>
                     {isSpeakingLocally ? "Speaking" : "Live"}
-                  </span>
+                  </span> */}
                 </div>
               </div>
 

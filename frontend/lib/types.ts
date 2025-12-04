@@ -93,6 +93,7 @@ type UserJoinedMessage = {
   roomId: string;
   userId: string;
   userName: string;
+  userType: UserType;
 };
 
 // user-left message will always come from guests; hosts cannot leave without closing the room

@@ -294,6 +294,7 @@ export class SocketService {
       type: "user-joined",
       userId,
       userName,
+      userType,
     } as UserJoinedMessage);
   }
 
@@ -477,6 +478,7 @@ export class SocketService {
         type: "user-joined",
         userId: pendingGuest.id,
         userName: pendingGuest.name,
+        userType: pendingGuest.type,
       } as UserJoinedMessage);
       return;
     }

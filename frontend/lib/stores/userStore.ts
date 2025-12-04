@@ -10,7 +10,7 @@ interface UserState {
 
   roomId: string | null;
 
-  remoteUsers: Record<string, string>;
+  remoteUsers: Record<string, { name: string; userType: UserType }>;
 }
 
 interface UserAction {
@@ -20,7 +20,11 @@ interface UserAction {
   initializeUserAsGuest: (preferredName?: string) => void;
   leaveRoom: () => void;
   clearUser: () => void;
-  addRemoteUser: (userId: string, userName: string) => void;
+  addRemoteUser: (
+    userId: string,
+    userName: string,
+    userType: UserType
+  ) => void;
   removeRemoteUser: (userId: string) => void;
   clearRemoteUsers: () => void;
   setRoomId: (roomId: string | null) => void;
@@ -120,12 +124,12 @@ export const useUserStore = create<UserState & UserAction>()(
         });
       },
 
-      addRemoteUser: (userId: string, userName: string) => {
+      addRemoteUser: (userId: string, userName: string, userType: UserType) => {
         console.debug("Adding remote user to the room:", userId, userName);
         set((state) => ({
           remoteUsers: {
             ...state.remoteUsers,
-            [userId]: userName,
+            [userId]: { name: userName, userType },
           },
         }));
       },
