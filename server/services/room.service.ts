@@ -1,11 +1,14 @@
 import { Room, User } from "../util/types";
+import { RequestQueueService } from "./requestQueue.service";
 import { UserService } from "./user.service";
 
 class RoomService {
   private rooms: Map<string, Room>;
+  private requestQueueService: RequestQueueService;
 
   constructor() {
     this.rooms = new Map<string, Room>();
+    this.requestQueueService = new RequestQueueService();
   }
 
   getHostIdForRoom(roomId: string) {
@@ -57,6 +60,25 @@ class RoomService {
       room.users = room.users.filter((user) => user.id !== userId);
       this.rooms.set(roomId, room);
     }
+  }
+
+  getPendingJoinRequestsForRoom(roomId: string) {
+    return this.requestQueueService.getPendingJoinRequestForRoom(roomId);
+  }
+
+  queuePendingGuest(roomId: string, guest: User) {
+    this.requestQueueService.queuePendingGuest(roomId, guest);
+  }
+
+  removePendingGuestForRoom(roomId: string, guestId: string) {
+    return this.requestQueueService.removePendingGuestForRoom(roomId, guestId);
+  }
+
+  removeAllPendingGuestsForRoom(roomId: string) {
+    this.requestQueueService.removeAllPendingGuestsForRoom(roomId);
+  }
+  peekPendingGuest(roomId: string, guestId: string) {
+    return this.requestQueueService.peekPendingGuest(roomId, guestId);
   }
 }
 
