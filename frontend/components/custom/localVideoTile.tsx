@@ -57,16 +57,16 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         </div>
       )}
 
-      <div className="absolute top-2 left-2 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded px-2 py-1">
+      {/* <div className="absolute top-2 left-2 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded px-2 py-1">
         <div className="flex items-center gap-2">
-          {/* <span
+          <span
                     className={`font-medium ${
                       isMinimized ? "text-[10px]" : "text-xs"
                     }`}
                   >
                     You
-                  </span> */}
-          {/* <span
+                  </span>
+          <span
                     className={`flex items-center gap-1 rounded-full px-2 py-[2px] text-[9px] font-semibold uppercase tracking-wide transition-all ${
                       isSpeakingLocally
                         ? "bg-emerald-400/90 text-emerald-950"
@@ -88,9 +88,9 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
                       }}
                     ></span>
                     {isSpeakingLocally ? "Speaking" : "Live"}
-                  </span> */}
+                  </span>
         </div>
-      </div>
+      </div> */}
 
       <Button
         onClick={() => setIsMinimized(!isMinimized)}

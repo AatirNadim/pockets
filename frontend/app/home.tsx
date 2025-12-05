@@ -82,7 +82,7 @@ export default function Home() {
         <ThemeToggle />
       </div>
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-8">
-        <div className="w-full max-w-md space-y-8 text-center">
+        <div className="w-full space-y-8 text-center max-w-280 flex flex-col items-center justify-center">
           {/* Header Section */}
           <motion.div
             className="space-y-4 text-[var(--primary)]"
@@ -104,7 +104,7 @@ export default function Home() {
 
           {/* Display name input */}
           <motion.div
-            className="p-5 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-white/60 dark:border-white/10"
+            className="p-5 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-white/60 dark:border-white/10 max-w-120"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -132,9 +132,9 @@ export default function Home() {
           </motion.div>
 
           {/* Room actions */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 md:flex-row md:gap-4 items-center justify-center">
             <motion.div
-              className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
+              className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10 h-56 max-w-120 flex items-center justify-center"
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
@@ -178,14 +178,14 @@ export default function Home() {
               </div>
             </motion.div>
 
-            <div className="flex items-center justify-center text-xs font-semibold tracking-[0.3em] text-gray-400 dark:text-gray-500">
-              <span className="px-4 py-1 rounded-full border border-gray-200 dark:border-white/20">
-                - OR -
-              </span>
+            <div className="px-4 py-1  flex items-center justify-center gap-3">
+              <span>-</span>
+              <span>OR</span>
+              <span>-</span>
             </div>
 
             <motion.div
-              className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10"
+              className="group p-6 bg-white dark:bg-gray-900/90 rounded-2xl shadow-xl border border-white/60 dark:border-white/10 h-56 w-120 flex items-center justify-center"
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
@@ -196,7 +196,7 @@ export default function Home() {
               }}
               whileHover={{ scale: 1.02 }}
             >
-              <div className="space-y-5">
+              <div className="space-y-5 w-full">
                 <div className="flex items-center justify-center space-x-2 text-[var(--primary)]">
                   <Users className="w-5 h-5" />
                   <span className="font-semibold">Join with an invite ID</span>

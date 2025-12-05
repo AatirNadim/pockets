@@ -5,15 +5,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  VideoOff,
-  Users,
-  Copy,
-  Minimize2,
-  Maximize2,
-  Sparkles,
-  Crown,
-} from "lucide-react";
+import { Users, Copy, Sparkles } from "lucide-react";
 
 import ChatComponent from "@/components/custom/chatComponent";
 import MediaControl from "@/components/custom/mediaControl";
@@ -76,9 +68,9 @@ export default function Room() {
 
   const cleanUpRef = useRef(cleanUp);
 
-  // useEffect(() => {
-  //   console.log("Local voice level:", localVoiceLevel);
-  // }, [localVoiceLevel]);
+  useEffect(() => {
+    console.log("Local voice level:", localVoiceLevel);
+  }, [localVoiceLevel]);
 
   useEffect(() => {
     if (!isValidUUID(roomId)) {
