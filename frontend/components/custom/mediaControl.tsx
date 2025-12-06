@@ -145,7 +145,7 @@ const MediaControl = ({
   const [isMuted, setIsMuted] = useState(false);
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-white/80 text-slate-700 backdrop-blur-md border-t border-slate-200 dark:bg-black/40 dark:text-white dark:border-white/10">
+    <div className="w-full bg-white/80 text-slate-700 backdrop-blur-md border-t border-slate-200 dark:bg-black/40 dark:text-white dark:border-white/10">
       <div className="flex flex-wrap items-center justify-center gap-4 p-6">
         <Button
           onClick={() => {

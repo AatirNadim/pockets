@@ -313,6 +313,9 @@ export const useSocket = () => {
       }
 
       if (kind === "audio" && userId) {
+        console.log(
+          "restarting audio level analysis for local track change..."
+        );
         audioLevelManager.startAnalyzing(userId, newTrack);
       }
 
@@ -384,13 +387,18 @@ export const useSocket = () => {
       }
 
       // if no selected devices, get default devices
+      // const constraints: MediaStreamConstraints = {
+      //   audio: selectedMicrophoneId
+      //     ? { deviceId: { exact: selectedMicrophoneId } }
+      //     : true,
+      //   video: selectedCameraId
+      //     ? { deviceId: { exact: selectedCameraId } }
+      //     : true,
+      // };
+
       const constraints: MediaStreamConstraints = {
-        audio: selectedMicrophoneId
-          ? { deviceId: { exact: selectedMicrophoneId } }
-          : true,
-        video: selectedCameraId
-          ? { deviceId: { exact: selectedCameraId } }
-          : true,
+        audio: true,
+        video: true,
       };
 
       // creating both audio and video tracks
@@ -812,6 +820,10 @@ export const useSocket = () => {
       setState(!track.muted && track.readyState === "live");
 
       if (trackType === TrackType.AUDIO) {
+        console.log(
+          "starting audio level analysis for remote peer track received from:",
+          remoteUserId
+        );
         audioLevelManager.startAnalyzing(remoteUserId, track);
       }
 

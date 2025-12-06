@@ -21,7 +21,8 @@ class AudioLevelManager {
     const AudioContextCtor =
       window.AudioContext ||
       ((window as typeof window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext ?? null);
+        .webkitAudioContext ??
+        null);
     if (!AudioContextCtor) {
       console.warn("Web Audio API unavailable in this browser.");
       return null;
@@ -50,15 +51,20 @@ class AudioLevelManager {
 
     this.stopAnalyzing(userId);
 
+    // creating a MediaStream from the track
     const stream = new MediaStream([track]);
     const source = context.createMediaStreamSource(stream);
+
+    // creating an AnalyserNode for audio analysis
     const analyser = context.createAnalyser();
     analyser.fftSize = 512;
     analyser.smoothingTimeConstant = 0.5;
     const data = new Uint8Array(analyser.fftSize);
 
+    // connecting the source to the analyser
     source.connect(analyser);
 
+    // function to update audio level, called on each animation frame
     const updateLevel = () => {
       const entry = this.analyzers.get(userId);
       if (!entry) {

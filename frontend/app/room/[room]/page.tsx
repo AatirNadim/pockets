@@ -69,10 +69,6 @@ export default function Room() {
   const cleanUpRef = useRef(cleanUp);
 
   useEffect(() => {
-    console.log("Local voice level:", localVoiceLevel);
-  }, [localVoiceLevel]);
-
-  useEffect(() => {
     if (!isValidUUID(roomId)) {
       alert("Invalid Room ID. Redirecting to home page.");
       router.push("/");
@@ -91,6 +87,31 @@ export default function Room() {
   useEffect(() => {
     connectToRoom();
   }, []);
+
+  useEffect(() => {
+    // prevent accidental back navigation without warning
+    const handlePopState = (event: PopStateEvent) => {
+      event.preventDefault();
+      const shouldLeave = window.confirm(
+        "Leaving the room will end your session. Do you want to proceed?"
+      );
+
+      if (shouldLeave) {
+        window.removeEventListener("popstate", handlePopState);
+        cleanUpRef.current();
+        router.back();
+      } else {
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [router]);
 
   useEffect(() => {
     // 1. Handler to prompt the user before reloading/closing
@@ -131,9 +152,9 @@ export default function Room() {
   }, [roomId]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-white via-indigo-50 to-purple-100 text-slate-900 dark:from-gray-900 dark:via-gray-900 dark:to-black dark:text-white">
+    <div className="relative flex h-screen max-h-screen w-screen flex-col bg-gradient-to-br from-white via-indigo-50 to-purple-100 text-slate-900 dark:from-gray-900 dark:via-gray-900 dark:to-black dark:text-white">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 bg-white/80 dark:bg-black/20 backdrop-blur-md border-b border-slate-200 dark:border-white/10 shadow-sm">
+      <div className="z-20 bg-white/80 dark:bg-black/20 backdrop-blur-md border-b border-slate-200 dark:border-white/10 shadow-sm h-20">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center space-x-3">
             <div className="p-1.5 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-lg">
@@ -176,78 +197,88 @@ export default function Room() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col sm:flex-row pt-20">
+      <div className="w-full flex flex-col sm:flex-row h-[calc(100vh-5rem)] ">
         {/* Video Area */}
         <div
           className={cn(
-            "flex-1 relative transition-all duration-300",
-            showChat ? "sm:mr-80" : ""
+            "relative transition-all duration-300 w-full",
+            "flex-1 flex flex-col-reverse"
+            // "flex-1"
+            // showChat ? "sm:mr-80" : ""
           )}
         >
-          <div className="h-full flex flex-col">
-            {/* Remote Video Grid */}
-            <div className="flex-1 relative bg-white rounded-lg m-4 overflow-hidden shadow-2xl border border-slate-200 dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 dark:border-white/10">
-              {remoteStreamEntries.length ? (
-                <div className="absolute inset-0 p-4 overflow-auto">
-                  <div
-                    className={`grid h-full gap-4 ${
-                      remoteStreamEntries.length === 1
-                        ? "grid-cols-1"
-                        : "grid-cols-1 md:grid-cols-2"
-                    }`}
-                  >
-                    {remoteStreamEntries.map(([remoteId, stream]) => {
-                      const remoteMeta = remoteUsers[remoteId];
-                      return (
-                        <RemoteVideoTile
-                          key={remoteId}
-                          stream={stream}
-                          userId={remoteId}
-                          userName={remoteMeta?.name}
-                          isHost={remoteMeta?.userType === UserType.HOST}
-                          videoEnabled={
-                            remoteTrackState[remoteId]?.videoEnabled !== false
-                          }
-                          audioEnabled={
-                            remoteTrackState[remoteId]?.audioEnabled !== false
-                          }
-                          voiceLevel={voiceLevels[remoteId] ?? 0}
-                        />
-                      );
-                    })}
+          <MediaControl
+            cameras={availableCameras}
+            microphones={availableMicrophones}
+            selectedCameraId={selectedCameraId}
+            selectedMicrophoneId={selectedMicrophoneId}
+            onCameraChange={switchCamera}
+            onMicrophoneChange={switchMicrophone}
+            onLeave={() => {
+              console.log("cleanup being called on leave...");
+              cleanUpRef.current();
+              router.push("/");
+            }}
+          />
+          {/* Remote Video Grid */}
+          <div className="flex-1 relative bg-white rounded-lg m-4 overflow-hidden shadow-2xl border border-slate-200 dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 dark:border-white/10">
+            {remoteStreamEntries.length ? (
+              <div className="absolute inset-0 p-4 overflow-auto">
+                <div
+                  className={`grid h-full gap-4 ${
+                    remoteStreamEntries.length === 1
+                      ? "grid-cols-1"
+                      : "grid-cols-1 md:grid-cols-2"
+                  }`}
+                >
+                  {remoteStreamEntries.map(([remoteId, stream]) => {
+                    const remoteMeta = remoteUsers[remoteId];
+                    return (
+                      <RemoteVideoTile
+                        key={remoteId}
+                        stream={stream}
+                        userId={remoteId}
+                        userName={remoteMeta?.name}
+                        isHost={remoteMeta?.userType === UserType.HOST}
+                        videoEnabled={
+                          remoteTrackState[remoteId]?.videoEnabled !== false
+                        }
+                        audioEnabled={
+                          remoteTrackState[remoteId]?.audioEnabled !== false
+                        }
+                        voiceLevel={voiceLevels[remoteId] ?? 0}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <div className="w-24 h-24 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-full flex items-center justify-center mx-auto">
+                    <Users className="w-12 h-12 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-700 dark:text-gray-300">
+                      Waiting for others...
+                    </h2>
+                    <p className="text-sm text-slate-500 dark:text-gray-500 mt-1">
+                      Share the room ID to invite participants
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center space-y-4">
-                    <div className="w-24 h-24 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-full flex items-center justify-center mx-auto">
-                      <Users className="w-12 h-12 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-slate-700 dark:text-gray-300">
-                        Waiting for others...
-                      </h2>
-                      <p className="text-sm text-slate-500 dark:text-gray-500 mt-1">
-                        Share the room ID to invite participants
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <LocalVideoTile localVideoRef={localVideoRef} />
+              </div>
+            )}
           </div>
-        </div>
 
+          <LocalVideoTile localVideoRef={localVideoRef} />
+        </div>
         {/* Chat Sidebar */}
         <div
           className={cn(
+            !showChat && "hidden",
             "bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-slate-200 dark:border-white/10 transition-all duration-300 sm:border-l sm:border-t-0 sm:border-b-0 sm:border-r-0",
-            "rounded-2xl sm:rounded-none shadow-xl sm:shadow-none mt-4 sm:mt-0 overflow-hidden sm:overflow-visible",
-            showChat
-              ? "w-full max-h-[70vh] sm:max-h-none sm:w-80 opacity-100 pointer-events-auto"
-              : "w-full max-h-0 sm:max-h-none sm:w-0 opacity-0 sm:opacity-100 pointer-events-none"
+            "rounded-2xl sm:rounded-none shadow-xl sm:shadow-none mt-4 sm:mt-0 w-full max-h-full sm:max-h-none overflow-hidden sm:overflow-auto sm:w-80 opacity-100 pointer-events-auto"
           )}
         >
           <ChatComponent
@@ -258,19 +289,6 @@ export default function Room() {
       </div>
 
       {/* Control Bar */}
-      <MediaControl
-        cameras={availableCameras}
-        microphones={availableMicrophones}
-        selectedCameraId={selectedCameraId}
-        selectedMicrophoneId={selectedMicrophoneId}
-        onCameraChange={switchCamera}
-        onMicrophoneChange={switchMicrophone}
-        onLeave={() => {
-          console.log("cleanup being called on leave...");
-          cleanUpRef.current();
-          router.push("/");
-        }}
-      />
 
       {isHost && requests.length > 0 && (
         <div className="fixed right-6 bottom-40 z-40 flex w-80 flex-col gap-3">
