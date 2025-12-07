@@ -57,6 +57,8 @@ export const useSocket = () => {
     getLocalFileEntry,
     clearFilesToBeSent,
     resetFileStore,
+    markDownloadRequested,
+    clearDownloadProgress,
   } = useFileStore();
 
   const addChatMessage = useChatStore((state) => state.addChatMessage);
@@ -1124,6 +1126,7 @@ export const useSocket = () => {
     }
 
     try {
+      // check whether the file is still available locally
       const entry = getLocalFileEntry(payload.fileId);
       if (!entry) {
         sendEnvelope(
@@ -1140,6 +1143,7 @@ export const useSocket = () => {
         return;
       }
 
+      // send acceptance response
       sendEnvelope(
         {
           kind: "file-download-response",
@@ -1151,6 +1155,7 @@ export const useSocket = () => {
         payload.requesterId
       );
 
+      // initiate file transfer
       await sendFilesToUser(payload.requesterId, [payload.fileId]);
     } catch (error) {
       console.error("Failed to fulfill download request", error);
@@ -1179,6 +1184,8 @@ export const useSocket = () => {
       });
       return;
     }
+
+    clearDownloadProgress(payload.fileId);
 
     const reason =
       payload.reason ||
@@ -1220,8 +1227,11 @@ export const useSocket = () => {
       try {
         const parsed = JSON.parse(event.data) as ChatDataEnvelope | ChatMessage;
 
+        // check whether the parsed data is an envelope or a direct chat message
         if ((parsed as ChatDataEnvelope)?.kind) {
           const envelope = parsed as ChatDataEnvelope;
+
+          // the parsed data is an envelope; handle based on its kind
           switch (envelope.kind) {
             case "chat-message":
               handleIncomingChatMessage(envelope.payload);
@@ -1239,6 +1249,7 @@ export const useSocket = () => {
           return;
         }
 
+        // the parsed data is a direct chat message
         handleIncomingChatMessage(parsed as ChatMessage);
       } catch (error) {
         console.error("Error parsing chat payload:", error);
@@ -1308,7 +1319,9 @@ export const useSocket = () => {
       return false;
     }
 
-    return sendEnvelope(
+    markDownloadRequested(fileId);
+
+    const delivered = sendEnvelope(
       {
         kind: "file-download-request",
         payload: {
@@ -1319,6 +1332,12 @@ export const useSocket = () => {
       },
       ownerId
     );
+
+    if (!delivered) {
+      clearDownloadProgress(fileId);
+    }
+
+    return delivered;
   };
 
   const cleanUp = () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, MessageSquare, Paperclip, Send } from "lucide-react";
+import { Download, MessageSquare, Paperclip, Send, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../../lib/stores/chatStore";
 import { useUserStore } from "@/lib/stores/userStore";
@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, FileAttachment } from "@/lib/types";
 import { useFileStore } from "@/lib/stores/fileStore";
+import DownloadIndicator from "./downloadIndicator";
 
 const MotionButton = motion(Button);
 
@@ -24,8 +25,18 @@ const ChatComponent = ({
 }: ChatComponentProps) => {
   const { chatMessages } = useChatStore();
   const { userId } = useUserStore();
-  const { getLocalFile, getReceivedFile, hasLocalFile } = useFileStore();
+  const {
+    receivedFiles,
+    getLocalFile,
+    getReceivedFile,
+    hasLocalFile,
+    filesToBeSent,
+    addFiles,
+    removeFile,
+    downloadProgress,
+  } = useFileStore();
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [chatMessage, setChatMessage] = useState("");
 
   useEffect(() => {
@@ -34,6 +45,10 @@ const ChatComponent = ({
         chatContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    console.log("Updated received files:", receivedFiles);
+  }, [receivedFiles]);
 
   const handleSend = () => {
     if (!chatMessage.trim()) {
@@ -50,6 +65,22 @@ const ChatComponent = ({
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files ?? []);
+    if (selectedFiles.length) {
+      addFiles(selectedFiles);
+    }
+    event.target.value = "";
+  };
+
+  const handleRemoveQueuedFile = (fileId: string) => {
+    removeFile(fileId);
   };
 
   const formatTimestamp = (timestamp: number) => {
@@ -119,6 +150,11 @@ const ChatComponent = ({
 
   const handleAttachmentAction = (attachment: FileAttachment) => {
     const state = deriveAttachmentState(attachment);
+    const progressTracker = downloadProgress[attachment.id];
+
+    if (progressTracker && state === "remote") {
+      return;
+    }
 
     if (state === "local") {
       const file = getLocalFile(attachment.id);
@@ -137,6 +173,24 @@ const ChatComponent = ({
     }
 
     onRequestFile(attachment.id, attachment.ownerId);
+  };
+
+  const renderDownloadIndicator = (attachmentId: string) => {
+    const tracker = downloadProgress[attachmentId];
+    if (!tracker) {
+      return <Download className="h-3.5 w-3.5 opacity-80" />;
+    }
+
+    const total = tracker.totalBytes ?? 1;
+    const progress =
+      tracker.status === "requested"
+        ? 0
+        : Math.min(1, tracker.receivedBytes / total);
+    const radius = 7;
+    const circumference = 2 * Math.PI * radius;
+    const dashOffset = circumference * (1 - progress);
+
+    return <DownloadIndicator radius={radius} dashOffset={dashOffset} />;
   };
 
   return (
@@ -192,26 +246,56 @@ const ChatComponent = ({
                     <div className="mt-2 space-y-1">
                       {msg.attachments.map((attachment) => {
                         const state = deriveAttachmentState(attachment);
+                        const tracker = downloadProgress[attachment.id];
+                        const isDownloading = Boolean(tracker);
                         const label =
                           state === "local"
                             ? "Open"
                             : state === "ready"
                             ? "Download"
+                            : isDownloading
+                            ? "Downloading"
                             : "Request";
+                        const total = tracker?.totalBytes ?? 1;
+                        const percent = tracker
+                          ? tracker.status === "requested"
+                            ? 0
+                            : Math.min(
+                                100,
+                                Math.round(
+                                  (tracker.receivedBytes / total) * 100 || 0
+                                )
+                              )
+                          : 0;
 
                         return (
                           <button
                             key={attachment.id}
                             type="button"
                             onClick={() => handleAttachmentAction(attachment)}
-                            className="w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                            disabled={state === "remote" && isDownloading}
+                            className={cn(
+                              "w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+                              state === "remote" &&
+                                isDownloading &&
+                                "cursor-not-allowed opacity-80"
+                            )}
                           >
                             <div className="flex items-center gap-2">
                               <Paperclip className="h-3.5 w-3.5" />
                               <div className="flex-1 truncate text-[11px] font-medium">
                                 {attachment.name}
                               </div>
-                              <Download className="h-3.5 w-3.5 opacity-80" />
+                              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide">
+                                {state === "remote" && isDownloading ? (
+                                  <>
+                                    {renderDownloadIndicator(attachment.id)}
+                                    <span>{percent}%</span>
+                                  </>
+                                ) : (
+                                  <Download className="h-3.5 w-3.5 opacity-80" />
+                                )}
+                              </div>
                             </div>
                             <div className="mt-1 flex items-center justify-between text-[10px] uppercase tracking-wide opacity-70">
                               <span>{formatBytes(attachment.size)}</span>
@@ -233,7 +317,41 @@ const ChatComponent = ({
       </div>
 
       <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-white/80 dark:bg-transparent">
+        {filesToBeSent.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {filesToBeSent.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center gap-2 rounded-full bg-slate-200/70 px-3 py-1 text-xs text-slate-700 dark:bg-white/10 dark:text-gray-200"
+              >
+                <div className="max-w-[140px] truncate font-medium">
+                  {entry.file.name}
+                </div>
+                <span className="text-[10px] uppercase tracking-wide opacity-70">
+                  {formatBytes(entry.file.size)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveQueuedFile(entry.id)}
+                  className="rounded-full bg-white/50 p-1 text-slate-600 transition hover:bg-white hover:text-slate-900 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20"
+                  aria-label="Remove file"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex space-x-2">
+          <Button
+            type="button"
+            onClick={handleAttachClick}
+            variant="ghost"
+            size="sm"
+            className="h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:bg-gray-800 dark:text-gray-200"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
           <Input
             value={chatMessage}
             onChange={(e) => setChatMessage(e.target.value)}
@@ -252,6 +370,13 @@ const ChatComponent = ({
             <Send className="w-4 h-4" />
           </MotionButton>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          onChange={handleFileSelection}
+        />
       </div>
     </div>
   );

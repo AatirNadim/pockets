@@ -24,6 +24,9 @@ export const useFile = ({
     setSendingFile,
     registerReceivedFile,
     getLocalFileEntry,
+    beginDownload,
+    updateDownloadProgress,
+    clearDownloadProgress,
   } = useFileStore();
   const ownerId = useUserStore((state) => state.userId);
 
@@ -224,6 +227,12 @@ export const useFile = ({
     totalGlobalSize: number,
     ownerId: string
   ): Promise<void> => {
+    console.log(
+      `Processing file queue on channel ${channel.label} for ${remoteUserId}`,
+      {
+        queue,
+      }
+    );
     return new Promise((resolve, reject) => {
       const startQueueProcessing = async () => {
         console.log(`Channel ${channel.label} open for ${remoteUserId}`);
@@ -232,11 +241,19 @@ export const useFile = ({
           // Send files serially in this queue
           for (const entry of queue) {
             setSendingFile(entry.file);
+            console.log("Sending file", entry.file.name, "to", remoteUserId);
             await sendFileOverChannel(channel, entry, totalGlobalSize, ownerId);
             console.log(
               `File ${entry.file.name} sent to ${remoteUserId} via ${channel.label}`
             );
           }
+          console.log(
+            "All files in queue sent via",
+            channel.label,
+            "to",
+            remoteUserId,
+            "closing channel"
+          );
           channel.close();
           resolve();
         } catch (error) {
@@ -292,6 +309,12 @@ export const useFile = ({
       };
 
       try {
+        console.log(
+          "sending metadata for file",
+          file.name,
+          "over channel",
+          channel.label
+        );
         channel.send(JSON.stringify(envelope));
       } catch (error) {
         return reject(error);
@@ -345,6 +368,12 @@ export const useFile = ({
               return;
             }
 
+            console.log(
+              "sending chunk of size",
+              chunkSize,
+              "over channel",
+              channel.label
+            );
             channel.send(chunk);
             offset += chunkSize;
             globalTransferredRef.current += chunkSize;
@@ -384,8 +413,14 @@ export const useFile = ({
       if (typeof event.data === "string") {
         try {
           const envelope = JSON.parse(event.data) as DataChannelEnvelope;
+          console.log(
+            "Received metadata envelope on channel",
+            channel.label,
+            envelope
+          );
           if (envelope.kind === "file-metadata") {
             transfer.metadata = envelope.payload;
+            beginDownload(envelope.payload.fileId, envelope.payload.size);
           }
         } catch (error) {
           console.error("Failed to parse transfer metadata", error);
@@ -398,6 +433,13 @@ export const useFile = ({
         return;
       }
 
+      console.log(
+        "received chunk on channel",
+        channel.label,
+        "of size",
+        event.data.byteLength ||
+          (event.data instanceof ArrayBuffer ? event.data.byteLength : 0)
+      );
       const chunkBuffer =
         event.data instanceof ArrayBuffer
           ? event.data
@@ -405,8 +447,22 @@ export const useFile = ({
 
       transfer.chunks.push(chunkBuffer);
       transfer.receivedBytes += chunkBuffer.byteLength;
+      console.log(
+        `Progress for file ${transfer.metadata.name} on channel ${channel.label}: ${transfer.receivedBytes}/${transfer.metadata.size}`
+      );
+      if (transfer.metadata) {
+        updateDownloadProgress(
+          transfer.metadata.fileId,
+          transfer.receivedBytes
+        );
+      }
 
       if (transfer.receivedBytes >= transfer.metadata.size) {
+        console.log(
+          "Completed receiving file on channel",
+          channel.label,
+          transfer.metadata.name
+        );
         finalizeIncomingTransfer(channel.label);
         channel.close();
       }
@@ -431,16 +487,22 @@ export const useFile = ({
     delete incomingTransfersRef.current[label];
 
     if (options?.skipPersist || !chunks.length) {
+      clearDownloadProgress(metadata.fileId);
+      toast.error("Download interrupted", {
+        description: `${metadata.name} did not finish transferring. Please request it again.`,
+      });
       return;
     }
 
     try {
+      console.log("creating a blob with the received chunks for file");
       const blob = new Blob(chunks, {
         type: metadata.type || "application/octet-stream",
       });
       const url =
         typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
 
+      
       registerReceivedFile({
         id: metadata.fileId,
         ownerId: metadata.ownerId,
@@ -450,10 +512,12 @@ export const useFile = ({
         url,
         receivedAt: Date.now(),
       });
+      clearDownloadProgress(metadata.fileId);
 
       toast.success(`Received ${metadata.name}`);
     } catch (error) {
       console.error("Failed to finalize incoming transfer", error);
+      clearDownloadProgress(metadata.fileId);
       toast.error("Download failed", {
         description: `Could not process ${metadata.name}.`,
       });
