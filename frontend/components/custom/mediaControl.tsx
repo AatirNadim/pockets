@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Button } from "../ui/button";
 import {
   Camera,
@@ -127,6 +127,7 @@ type MediaControlProps = {
   selectedMicrophoneId: string | null;
   onCameraChange: (deviceId: string) => void | Promise<void>;
   onMicrophoneChange: (deviceId: string) => void | Promise<void>;
+  onToggleMute: (nextMuted: boolean) => Promise<void>;
   onLeave: () => void;
 };
 
@@ -137,29 +138,36 @@ const MediaControl = ({
   selectedMicrophoneId,
   onCameraChange,
   onMicrophoneChange,
+  onToggleMute,
   onLeave,
 }: MediaControlProps) => {
-  const { isVideoOff, isSpeakerOff, toggleSpeakerOff, toggleVideoOff } =
-    useMediaStore();
+  const {
+    isVideoOff,
+    isSpeakerOff,
+    isMicrophoneMuted,
+    toggleSpeakerOff,
+    toggleVideoOff,
+  } = useMediaStore();
   const { showChat, toggleShowChat } = useChatStore();
-  const [isMuted, setIsMuted] = useState(false);
 
   return (
     <div className="w-full bg-white/80 text-slate-700 backdrop-blur-md border-t border-slate-200 dark:bg-black/40 dark:text-white dark:border-white/10">
       <div className="flex flex-wrap items-center justify-center gap-4 p-6">
         <Button
           onClick={() => {
-            setIsMuted((prev) => !prev);
+            onToggleMute(!isMicrophoneMuted).then(() => {
+              console.log("toggle mute complete");
+            });
           }}
           variant="ghost"
           size="lg"
           className={`w-12 h-12 rounded-full transition-all duration-200 ${
-            isMuted
+            isMicrophoneMuted
               ? "bg-red-600 hover:bg-red-700 text-white"
               : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
           }`}
         >
-          {isMuted ? (
+          {isMicrophoneMuted ? (
             <MicOff className="w-5 h-5" />
           ) : (
             <Mic className="w-5 h-5" />

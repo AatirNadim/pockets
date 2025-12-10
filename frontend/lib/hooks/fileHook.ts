@@ -139,6 +139,8 @@ export const useFile = ({
     setIsSending(true);
     globalTransferredRef.current = 0;
 
+    console.log("initiating targeted file send to", remoteUserId, fileEntries);
+
     const totalSize = fileEntries.reduce(
       (acc, entry) => acc + entry.file.size,
       0
@@ -181,6 +183,9 @@ export const useFile = ({
     );
 
     // Round-robin distribution
+    console.log(
+      `Distributing ${files.length} files across ${numChannels} channels for peer ${remoteUserId}`
+    );
     files.forEach((file, index) => {
       queues[index % numChannels].push(file);
     });
@@ -250,8 +255,8 @@ export const useFile = ({
           console.log(
             "All files in queue sent via",
             channel.label,
-            "to",
             remoteUserId,
+            "to",
             "closing channel"
           );
           channel.close();
@@ -502,7 +507,6 @@ export const useFile = ({
       const url =
         typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
 
-      
       registerReceivedFile({
         id: metadata.fileId,
         ownerId: metadata.ownerId,

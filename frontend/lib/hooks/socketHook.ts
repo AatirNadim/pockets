@@ -32,6 +32,8 @@ export const useSocket = () => {
   const socketRef = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const dataChannelMap = useRef<Record<string, RTCDataChannel | null>>({});
+  const audioSendersRef = useRef<Record<string, RTCRtpSender | null>>({});
+  const videoSendersRef = useRef<Record<string, RTCRtpSender | null>>({});
 
   const [status, setStatus] = useState("Connecting to room...");
   const [isConnected, setIsConnected] = useState(false);
@@ -79,6 +81,9 @@ export const useSocket = () => {
     removeMediaStream,
     clearMediaStreams,
     setRemoteTrackEnabled,
+    setMicrophoneMuted,
+    isMicrophoneMuted,
+    removeTrackFromStream,
     clearRemoteTrackState,
   } = useMediaStore();
 
@@ -259,14 +264,50 @@ export const useSocket = () => {
     };
   }, [populateAvailableDevices]);
 
+  const replaceTrackForPeers = async (
+    kind: "video" | "audio",
+    track: MediaStreamTrack | null
+  ) => {
+    const senderRegistry =
+      kind === "audio" ? audioSendersRef.current : videoSendersRef.current;
+
+    const peerEntries = Object.entries(peerConnections.current);
+
+    await Promise.all(
+      peerEntries.map(async ([remoteUserId, pc]) => {
+        let sender = senderRegistry[remoteUserId];
+
+        if (!sender && track && localStream.current) {
+          sender = pc.addTrack(track, localStream.current as MediaStream);
+          if (kind === "audio") {
+            audioSendersRef.current[remoteUserId] = sender;
+          } else {
+            videoSendersRef.current[remoteUserId] = sender;
+          }
+          return;
+        }
+
+        if (!sender) {
+          return;
+        }
+
+        try {
+          console.log(`Replacing ${kind} track for peer ${remoteUserId}...`);
+          await sender.replaceTrack(track);
+        } catch (error) {
+          console.error(
+            `Failed to replace ${kind} track for peer ${remoteUserId}`,
+            error
+          );
+        }
+      })
+    );
+  };
+
   const replaceLocalTrack = async (
     kind: "video" | "audio",
-    deviceId: string
+    deviceId?: string
   ): Promise<boolean> => {
-    if (!deviceId) {
-      return false;
-    }
-
     if (
       typeof navigator === "undefined" ||
       !navigator.mediaDevices?.getUserMedia
@@ -280,8 +321,14 @@ export const useSocket = () => {
     try {
       const constraints: MediaStreamConstraints =
         kind === "video"
-          ? { video: { deviceId: { exact: deviceId } }, audio: false }
-          : { video: false, audio: { deviceId: { exact: deviceId } } };
+          ? {
+              video: deviceId ? { deviceId: { exact: deviceId } } : true,
+              audio: false,
+            }
+          : {
+              video: false,
+              audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+            };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const newTrack =
@@ -321,21 +368,14 @@ export const useSocket = () => {
         audioLevelManager.startAnalyzing(userId, newTrack);
       }
 
-      // TODO: Handle audio element if needed
-      Object.values(peerConnections.current).forEach((pc) => {
-        pc.getSenders().forEach((sender) => {
-          if (sender.track?.kind === kind) {
-            sender.replaceTrack(newTrack);
-          }
-        });
-      });
+      await replaceTrackForPeers(kind, newTrack);
 
       const appliedDeviceId = newTrack.getSettings().deviceId || deviceId;
 
       if (kind === "video") {
-        currentVideoDeviceId.current = appliedDeviceId;
+        currentVideoDeviceId.current = appliedDeviceId ?? null;
       } else {
-        currentAudioDeviceId.current = appliedDeviceId;
+        currentAudioDeviceId.current = appliedDeviceId ?? null;
       }
       return true;
     } catch (error) {
@@ -373,10 +413,55 @@ export const useSocket = () => {
       return;
     }
 
+    if (isMicrophoneMuted) {
+      currentAudioDeviceId.current = deviceId;
+      setSelectedMicrophoneId(deviceId);
+      return;
+    }
+
     const switched = await replaceLocalTrack("audio", deviceId);
     if (switched) {
       setSelectedMicrophoneId(deviceId);
     }
+  };
+
+  const updateMicrophoneMuteState = async (nextMuted: boolean) => {
+    console.log("updating microphone mute state to:", nextMuted);
+    if (nextMuted === isMicrophoneMuted) {
+      return;
+    }
+
+    if (nextMuted) {
+      const audioTracks = localStream.current?.getAudioTracks() ?? [];
+      audioTracks.forEach((track) => {
+        track.enabled = false;
+      });
+
+      await replaceTrackForPeers("audio", null);
+
+      if (userId) {
+        audioLevelManager.stopAnalyzing(userId);
+        audioLevelManager.markSilent(userId);
+      }
+
+      setMicrophoneMuted(true);
+      return;
+    }
+
+    const targetDeviceId =
+      selectedMicrophoneId || currentAudioDeviceId.current || undefined;
+
+    const restored = await replaceLocalTrack("audio", targetDeviceId);
+
+    if (!restored) {
+      toast.error("Microphone unavailable", {
+        description:
+          "Unable to access your microphone. Please check permissions and try again.",
+      });
+      return;
+    }
+
+    setMicrophoneMuted(false);
   };
 
   const createMediaStreams = async () => {
@@ -414,9 +499,12 @@ export const useSocket = () => {
 
       captureDeviceIdsFromStream(localStream.current);
       await populateAvailableDevices();
-      if (userId) {
-        const audioTrack = localStream.current.getAudioTracks()[0];
-        if (audioTrack) {
+      const audioTrack = localStream.current.getAudioTracks()[0];
+      if (audioTrack) {
+        if (isMicrophoneMuted) {
+          audioTrack.stop();
+          localStream.current.removeTrack(audioTrack);
+        } else if (userId) {
           audioLevelManager.startAnalyzing(userId, audioTrack);
         }
       }
@@ -821,6 +909,32 @@ export const useSocket = () => {
 
       setState(!track.muted && track.readyState === "live");
 
+      const handleMute = () => {
+        setState(false);
+        if (trackType === TrackType.AUDIO) {
+          audioLevelManager.markSilent(remoteUserId);
+        }
+      };
+
+      const handleUnmute = () => {
+        setState(true);
+      };
+
+      const detachTrackListeners = () => {
+        track.removeEventListener("mute", handleMute);
+        track.removeEventListener("unmute", handleUnmute);
+        track.removeEventListener("ended", handleEnded);
+      };
+
+      const handleEnded = () => {
+        handleMute();
+        detachTrackListeners();
+        removeTrackFromStream(remoteUserId, trackType);
+        if (trackType === TrackType.AUDIO) {
+          audioLevelManager.stopAnalyzing(remoteUserId);
+        }
+      };
+
       if (trackType === TrackType.AUDIO) {
         console.log(
           "starting audio level analysis for remote peer track received from:",
@@ -829,19 +943,9 @@ export const useSocket = () => {
         audioLevelManager.startAnalyzing(remoteUserId, track);
       }
 
-      track.onmute = () => {
-        setState(false);
-        if (trackType === TrackType.AUDIO) {
-          audioLevelManager.markSilent(remoteUserId);
-        }
-      };
-      track.onunmute = () => setState(true);
-      track.onended = () => {
-        setState(false);
-        if (trackType === TrackType.AUDIO) {
-          audioLevelManager.stopAnalyzing(remoteUserId);
-        }
-      };
+      track.addEventListener("mute", handleMute);
+      track.addEventListener("unmute", handleUnmute);
+      track.addEventListener("ended", handleEnded);
     };
   };
 
@@ -883,7 +987,19 @@ export const useSocket = () => {
 
       if (localStream.current) {
         localStream.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStream.current as MediaStream);
+          const sender = pc.addTrack(track, localStream.current as MediaStream);
+
+          if (track.kind === "audio") {
+            audioSendersRef.current[remoteUserId] = sender;
+
+            if (isMicrophoneMuted) {
+              void sender.replaceTrack(null).catch((error) => {
+                console.error("Failed to sync mute state for new peer", error);
+              });
+            }
+          } else if (track.kind === "video") {
+            videoSendersRef.current[remoteUserId] = sender;
+          }
         });
       } else {
         console.warn(
@@ -1088,6 +1204,8 @@ export const useSocket = () => {
       peerConnections.current[remoteUserId]?.close();
       delete peerConnections.current[remoteUserId];
       delete dataChannelMap.current[remoteUserId];
+      delete audioSendersRef.current[remoteUserId];
+      delete videoSendersRef.current[remoteUserId];
 
       if (Object.keys(peerConnections.current).length === 0) {
         setStatus("Waiting for other users...");
@@ -1126,9 +1244,12 @@ export const useSocket = () => {
     }
 
     try {
+      console.log("received file download request:", payload);
+
       // check whether the file is still available locally
       const entry = getLocalFileEntry(payload.fileId);
       if (!entry) {
+        console.log("requested file is no longer available locally:", payload);
         sendEnvelope(
           {
             kind: "file-download-response",
@@ -1144,6 +1265,7 @@ export const useSocket = () => {
       }
 
       // send acceptance response
+      console.log("fulfilling download request for file:", payload.fileId);
       sendEnvelope(
         {
           kind: "file-download-response",
@@ -1321,6 +1443,8 @@ export const useSocket = () => {
 
     markDownloadRequested(fileId);
 
+    console.log("sending file download request for file:", fileId);
+
     const delivered = sendEnvelope(
       {
         kind: "file-download-request",
@@ -1358,6 +1482,8 @@ export const useSocket = () => {
       localStream.current = null;
       currentVideoDeviceId.current = null;
       currentAudioDeviceId.current = null;
+      audioSendersRef.current = {};
+      videoSendersRef.current = {};
       clearChatMessages();
       resetUnreadCount();
       resetFileStore();
@@ -1393,6 +1519,7 @@ export const useSocket = () => {
     handleIceCandidate,
     switchCamera,
     switchMicrophone,
+    toggleMicrophoneMute: updateMicrophoneMuteState,
     cleanUp,
     respondToJoinRequest,
   };

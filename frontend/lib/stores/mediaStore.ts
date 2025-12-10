@@ -12,12 +12,16 @@ type MediaState = {
   isAudioOnly: boolean;
   isScreenSharing: boolean;
   isVideoOff: boolean;
+  isMicrophoneMuted: boolean;
   isSpeakerOff: boolean;
   availableCameras: MediaDeviceOption[];
   availableMicrophones: MediaDeviceOption[];
   selectedCameraId: string | null;
   selectedMicrophoneId: string | null;
-  remoteTrackState: Record<string, { videoEnabled: boolean; audioEnabled: boolean }>;
+  remoteTrackState: Record<
+    string,
+    { videoEnabled: boolean; audioEnabled: boolean }
+  >;
 };
 
 type MediaActions = {
@@ -31,6 +35,7 @@ type MediaActions = {
   toggleAudioOnly: () => void;
   setScreenSharing: (isSharing: boolean) => void;
   toggleVideoOff: () => void;
+  setMicrophoneMuted: (muted: boolean) => void;
   toggleSpeakerOff: () => void;
   setAvailableCameras: (devices: MediaDeviceOption[]) => void;
   setAvailableMicrophones: (devices: MediaDeviceOption[]) => void;
@@ -41,6 +46,7 @@ type MediaActions = {
     kind: "video" | "audio",
     enabled: boolean
   ) => void;
+  removeTrackFromStream: (userId: string, trackType: TrackType) => void;
   clearRemoteTrackState: (userId: string) => void;
 };
 
@@ -53,7 +59,9 @@ export const useMediaStore = create<MediaState & MediaActions>()(
       isAudioOnly: false,
       isScreenSharing: false,
       isVideoOff: false,
+      isMicrophoneMuted: false,
       toggleVideoOff: () => set((state) => ({ isVideoOff: !state.isVideoOff })),
+      setMicrophoneMuted: (muted) => set({ isMicrophoneMuted: muted }),
       isSpeakerOff: false,
       toggleSpeakerOff: () =>
         set((state) => ({ isSpeakerOff: !state.isSpeakerOff })),
@@ -116,8 +124,7 @@ export const useMediaStore = create<MediaState & MediaActions>()(
             remoteTrackState: updatedTrackState,
           };
         }),
-      clearMediaStreams: () =>
-        set({ mediaStreams: {}, remoteTrackState: {} }),
+      clearMediaStreams: () => set({ mediaStreams: {}, remoteTrackState: {} }),
       toggleAudioOnly: () =>
         set((state) => ({ isAudioOnly: !state.isAudioOnly })),
       setScreenSharing: (isSharing) => set({ isScreenSharing: isSharing }),
@@ -146,6 +153,72 @@ export const useMediaStore = create<MediaState & MediaActions>()(
 
           return { remoteTrackState: nextState };
         }),
+      removeTrackFromStream: (userId, trackType) =>
+        set((state) => {
+          const stream = state.mediaStreams[userId];
+          if (!stream) {
+            return state;
+          }
+
+          const tracksToRemove =
+            trackType === TrackType.VIDEO
+              ? stream.getVideoTracks()
+              : stream.getAudioTracks();
+
+          if (!tracksToRemove.length) {
+            return state;
+          }
+
+          tracksToRemove.forEach((track) => {
+            stream.removeTrack(track);
+          });
+
+          const nextStreams = { ...state.mediaStreams };
+          const remainingTracks = stream.getTracks().length;
+
+          if (remainingTracks === 0) {
+            delete nextStreams[userId];
+          } else {
+            nextStreams[userId] = stream;
+          }
+
+          const fallbackTrackState = state.remoteTrackState[userId] ?? {
+            videoEnabled: true,
+            audioEnabled: true,
+          };
+
+          let nextTrackState: typeof state.remoteTrackState | undefined;
+
+          if (remainingTracks === 0) {
+            if (state.remoteTrackState[userId]) {
+              nextTrackState = { ...state.remoteTrackState };
+              delete nextTrackState[userId];
+            }
+          } else {
+            const updatedEntry = {
+              videoEnabled:
+                trackType === TrackType.VIDEO
+                  ? false
+                  : fallbackTrackState.videoEnabled,
+              audioEnabled:
+                trackType === TrackType.AUDIO
+                  ? false
+                  : fallbackTrackState.audioEnabled,
+            };
+
+            nextTrackState = {
+              ...state.remoteTrackState,
+              [userId]: updatedEntry,
+            };
+          }
+
+          return nextTrackState
+            ? {
+                mediaStreams: nextStreams,
+                remoteTrackState: nextTrackState,
+              }
+            : { mediaStreams: nextStreams };
+        }),
       clearRemoteTrackState: (userId) =>
         set((state) => {
           if (!state.remoteTrackState[userId]) {
@@ -163,6 +236,7 @@ export const useMediaStore = create<MediaState & MediaActions>()(
         isAudioOnly: state.isAudioOnly,
         isScreenSharing: state.isScreenSharing,
         isVideoOff: state.isVideoOff,
+        isMicrophoneMuted: state.isMicrophoneMuted,
         isSpeakerOff: state.isSpeakerOff,
       }),
     }
