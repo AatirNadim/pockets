@@ -17,6 +17,12 @@ enum UserType {
   GUEST = "guest",
 }
 
+enum AttachmentState {
+  LOCAL = "local",
+  READY = "ready",
+  REMOTE = "remote",
+}
+
 export {
   CHUNK_SIZE,
   MAX_CHANNELS_FOR_DATA_TRANSMISSION,
@@ -26,4 +32,5 @@ export {
   MAX_QUEUED_FILES,
   serverPath,
   UserType,
+  AttachmentState,
 };

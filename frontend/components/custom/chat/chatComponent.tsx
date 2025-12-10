@@ -1,16 +1,17 @@
 "use client";
 
 import { Download, MessageSquare, Paperclip, Send, X } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
-import { useChatStore } from "../../lib/stores/chatStore";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useChatStore } from "../../../lib/stores/chatStore";
 import { useUserStore } from "@/lib/stores/userStore";
-import { Input } from "../ui/input";
-import { Button } from "../ui/button";
+import { Input } from "../../ui/input";
+import { Button } from "../../ui/button";
 import { AnimatePresence, motion } from "framer-motion";
-import { cn } from "@/lib/utils";
-import type { ChatMessage, FileAttachment } from "@/lib/types";
+import { cn, formatBytes, formatTimestamp, resolveSender } from "@/lib/utils";
+import { ChatMessage, FileAttachment } from "@/lib/types";
 import { useFileStore } from "@/lib/stores/fileStore";
-import DownloadIndicator from "./downloadIndicator";
+import DownloadIndicator from "../downloadIndicator";
+import { AttachmentState } from "@/lib/constants";
 
 const MotionButton = motion(Button);
 
@@ -50,7 +51,7 @@ const ChatComponent = ({
     console.log("Updated received files:", receivedFiles);
   }, [receivedFiles]);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (!chatMessage.trim()) {
       return;
     }
@@ -58,65 +59,39 @@ const ChatComponent = ({
     if (sent) {
       setChatMessage("");
     }
-  };
+  }, [chatMessage, onSendMessage]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [handleSend]
+  );
 
   const handleAttachClick = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files ?? []);
-    if (selectedFiles.length) {
-      addFiles(selectedFiles);
-    }
-    event.target.value = "";
-  };
+  const handleFileSelection = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = Array.from(event.target.files ?? []);
+      if (selectedFiles.length) {
+        addFiles(selectedFiles);
+      }
+      event.target.value = "";
+    },
+    [addFiles]
+  );
 
-  const handleRemoveQueuedFile = (fileId: string) => {
-    removeFile(fileId);
-  };
-
-  const formatTimestamp = (timestamp: number) => {
-    const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) {
-      return "--:--";
-    }
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const resolveSender = (message: ChatMessage & { user?: string }) => {
-    if (message.userName) {
-      return message.userName;
-    }
-    if (message.user) {
-      return message.user;
-    }
-    if (message.userId && message.userId === userId) {
-      return "You";
-    }
-    return "Guest";
-  };
-
-  const formatBytes = (size: number) => {
-    if (!size) return "0 B";
-    const units = ["B", "KB", "MB", "GB"];
-    const exponent = Math.min(
-      Math.floor(Math.log(size) / Math.log(1024)),
-      units.length - 1
-    );
-    const value = size / 1024 ** exponent;
-    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[exponent]}`;
-  };
+  const handleRemoveQueuedFile = useCallback(
+    (fileId: string) => {
+      removeFile(fileId);
+    },
+    [removeFile]
+  );
 
   const downloadBlob = (url: string, name: string) => {
     const anchor = document.createElement("a");
@@ -131,32 +106,30 @@ const ChatComponent = ({
     URL.revokeObjectURL(localUrl);
   };
 
-  type AttachmentState = "local" | "ready" | "remote";
-
   const deriveAttachmentState = (
     attachment: FileAttachment
   ): AttachmentState => {
     if (attachment.ownerId === userId || hasLocalFile(attachment.id)) {
-      return "local";
+      return AttachmentState.LOCAL;
     }
 
     const received = getReceivedFile(attachment.id);
     if (received?.url) {
-      return "ready";
+      return AttachmentState.READY;
     }
 
-    return "remote";
+    return AttachmentState.REMOTE;
   };
 
   const handleAttachmentAction = (attachment: FileAttachment) => {
     const state = deriveAttachmentState(attachment);
     const progressTracker = downloadProgress[attachment.id];
 
-    if (progressTracker && state === "remote") {
+    if (progressTracker && state === AttachmentState.REMOTE) {
       return;
     }
 
-    if (state === "local") {
+    if (state === AttachmentState.LOCAL) {
       const file = getLocalFile(attachment.id);
       if (file) {
         triggerLocalDownload(file, attachment.name);
@@ -164,7 +137,7 @@ const ChatComponent = ({
       return;
     }
 
-    if (state === "ready") {
+    if (state === AttachmentState.READY) {
       const received = getReceivedFile(attachment.id);
       if (received?.url) {
         downloadBlob(received.url, attachment.name);
@@ -237,7 +210,10 @@ const ChatComponent = ({
                   )}
                 >
                   <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
-                    {resolveSender(msg as ChatMessage & { user?: string })}
+                    {resolveSender(
+                      msg as ChatMessage & { user?: string },
+                      userId || ""
+                    )}
                   </div>
                   <div className="text-sm break-words whitespace-pre-wrap">
                     {msg.message}
@@ -249,9 +225,9 @@ const ChatComponent = ({
                         const tracker = downloadProgress[attachment.id];
                         const isDownloading = Boolean(tracker);
                         const label =
-                          state === "local"
+                          state === AttachmentState.LOCAL
                             ? "Open"
-                            : state === "ready"
+                            : state === AttachmentState.READY
                             ? "Download"
                             : isDownloading
                             ? "Downloading"
@@ -273,10 +249,12 @@ const ChatComponent = ({
                             key={attachment.id}
                             type="button"
                             onClick={() => handleAttachmentAction(attachment)}
-                            disabled={state === "remote" && isDownloading}
+                            disabled={
+                              state === AttachmentState.REMOTE && isDownloading
+                            }
                             className={cn(
                               "w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
-                              state === "remote" &&
+                              state === AttachmentState.REMOTE &&
                                 isDownloading &&
                                 "cursor-not-allowed opacity-80"
                             )}
@@ -287,7 +265,8 @@ const ChatComponent = ({
                                 {attachment.name}
                               </div>
                               <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide">
-                                {state === "remote" && isDownloading ? (
+                                {state === AttachmentState.REMOTE &&
+                                isDownloading ? (
                                   <>
                                     {renderDownloadIndicator(attachment.id)}
                                     <span>{percent}%</span>
