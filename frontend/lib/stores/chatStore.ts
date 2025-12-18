@@ -1,7 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
-import type { ChatMessage } from "../types";
+import type { ChatMessage } from "@pockets/shared";
 
 interface ChatState {
   chatMessages: ChatMessage[];

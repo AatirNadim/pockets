@@ -8,7 +8,7 @@ import type {
   DataChannelEnvelope,
   FileMetadataPayload,
   IncomingTransferState,
-} from "../types";
+} from "@pockets/shared";
 
 export const useFile = ({
   peerConnections,
