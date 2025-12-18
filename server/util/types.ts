@@ -40,7 +40,9 @@ export type WebSocketMessage =
   | UserLeftMessage
   | ErrorMessage
   | HostClosedRoomMessage
-  | RoomFullMessage;
+  | RoomFullMessage
+  | AudioMuteMessage
+  | AudioUnmuteMessage;
 
 export interface JoinRoomMessage {
   type: "join-room";
@@ -121,6 +123,18 @@ export interface ErrorMessage {
 export interface RoomFullMessage {
   type: "room-full";
   roomId: string;
+}
+
+export interface AudioMuteMessage {
+  type: "audio-mute";
+  roomId: string;
+  userId: string;
+}
+
+export interface AudioUnmuteMessage {
+  type: "audio-unmute";
+  roomId: string;
+  userId: string;
 }
 
 export interface HostClosedRoomMessage {

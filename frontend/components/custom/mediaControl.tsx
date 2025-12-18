@@ -143,13 +143,8 @@ const MediaControl = ({
   onToggleVideo,
   onLeave,
 }: MediaControlProps) => {
-  const {
-    isVideoOff,
-    isSpeakerOff,
-    isMicrophoneMuted,
-    toggleSpeakerOff,
-    toggleVideoOff,
-  } = useMediaStore();
+  const { isVideoOff, isSpeakerOff, isMicrophoneMuted, toggleSpeakerOff } =
+    useMediaStore();
   const { showChat, toggleShowChat } = useChatStore();
 
   return (

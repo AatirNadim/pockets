@@ -20,6 +20,8 @@ import {
 import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
 import type {
+  AudioMuteMessage,
+  AudioUnmuteMessage,
   ChatDataEnvelope,
   ChatMessage,
   FileDownloadRequest,
@@ -106,6 +108,20 @@ export const useSocket = () => {
       dataChannelMap,
     });
 
+  useEffect(() => {
+    if (!roomId || !userId) return;
+
+    if (isMicrophoneMuted) {
+      sendWsMessage({ roomId, userId, type: "audio-mute" } as AudioMuteMessage);
+    } else {
+      sendWsMessage({
+        roomId,
+        userId,
+        type: "audio-unmute",
+      } as AudioUnmuteMessage);
+    }
+  }, [roomId, userId, isMicrophoneMuted]);
+
   const switchCamera = (deviceId: string) => {
     switchCameraForPeers(deviceId, peerConnections.current);
   };
@@ -176,6 +192,9 @@ export const useSocket = () => {
 
       await replaceTrackForPeers("audio", null, peerConnections.current);
 
+      console.log("sending audio-mute message to the room...");
+      // sendWsMessage({ roomId, userId, type: "audio-mute" } as AudioMuteMessage);
+
       if (userId) {
         // stopAudioAnalysis(userId);
         markAudioAsSilentForUser(userId);
@@ -188,6 +207,13 @@ export const useSocket = () => {
     await replaceLocalTrackForPeers("audio", peerConnections.current);
 
     setMicrophoneMuted(false);
+
+    console.log("sending audio-unmute message to the room...");
+    // sendWsMessage({
+    //   roomId,
+    //   userId,
+    //   type: "audio-unmute",
+    // } as AudioUnmuteMessage);
   };
 
   const updateVideoSendStateForPeers = async (toDisable: boolean) => {
@@ -207,58 +233,6 @@ export const useSocket = () => {
       setIsVideoOff(false);
     }
   };
-
-  // const createMediaStreams = async () => {
-  //   try {
-  //     if (
-  //       typeof navigator === "undefined" ||
-  //       !navigator.mediaDevices?.getUserMedia
-  //     ) {
-  //       throw new Error("Media devices API unavailable");
-  //     }
-
-  //     // if no selected devices, get default devices
-  //     // const constraints: MediaStreamConstraints = {
-  //     //   audio: selectedMicrophoneId
-  //     //     ? { deviceId: { exact: selectedMicrophoneId } }
-  //     //     : true,
-  //     //   video: selectedCameraId
-  //     //     ? { deviceId: { exact: selectedCameraId } }
-  //     //     : true,
-  //     // };
-
-  //     const constraints: MediaStreamConstraints = {
-  //       audio: true,
-  //       video: true,
-  //     };
-
-  //     // creating both audio and video tracks
-  //     localStream.current = await navigator.mediaDevices.getUserMedia(
-  //       constraints
-  //     );
-  //     if (localVideoRef.current) {
-  //       console.debug("Accessing local media streams...");
-  //       localVideoRef.current.srcObject = localStream.current;
-  //     }
-
-  //     captureDeviceIdsFromStream(localStream.current);
-  //     await populateAvailableDevices();
-  //     const audioTrack = localStream.current.getAudioTracks()[0];
-  //     if (audioTrack) {
-  //       if (isMicrophoneMuted) {
-  //         audioTrack.stop();
-  //         localStream.current.removeTrack(audioTrack);
-  //       } else if (userId) {
-  //         audioLevelManager.startAnalyzing(userId, audioTrack);
-  //       }
-  //     }
-  //   } catch (error) {
-  //     console.error("Error accessing media devices:", error);
-  //     toast.error(
-  //       "Could not access camera or microphone. Please check permissions and try again."
-  //     );
-  //   }
-  // };
 
   const registerListenersForSocket = (socket: WebSocket) => {
     try {
@@ -474,6 +448,14 @@ export const useSocket = () => {
         }
         break;
 
+      case "audio-mute":
+        handleRemoteUserMuted(message);
+        break;
+
+      case "audio-unmute":
+        handleRemoteUserUnmuted(message);
+        break;
+
       case "host-closed-room":
         if (userType === UserType.GUEST) {
           toast.error("Room Closed", {
@@ -498,6 +480,16 @@ export const useSocket = () => {
     } catch (error) {
       console.error("Error sending WebSocket message:", error);
     }
+  };
+
+  const handleRemoteUserMuted = (message: AudioMuteMessage) => {
+    console.log("remote user muted, received signal for:", message.userId);
+    setRemoteTrackEnabled(message.userId, TrackType.AUDIO, false);
+  };
+
+  const handleRemoteUserUnmuted = (message: AudioUnmuteMessage) => {
+    console.log("remote user unmuted, received signal for:", message.userId);
+    setRemoteTrackEnabled(message.userId, TrackType.AUDIO, true);
   };
 
   const respondToJoinRequest = (

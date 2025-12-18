@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import MediaControl from "@/components/custom/mediaControl";
@@ -48,9 +48,6 @@ export default function Room() {
   } = useSocket();
   const { requests } = useJoinRequestStore();
   const isHost = userType === UserType.HOST;
-
-  const localVoiceLevel = userId ? voiceLevels[userId] ?? 0 : 0;
-  const isSpeakingLocally = localVoiceLevel > 0.18;
 
   const cleanUpRef = useRef(cleanUp);
 
@@ -128,6 +125,12 @@ export default function Room() {
     };
   }, []);
 
+  const onLeave = useCallback(() => {
+    console.log("cleanup being called on leave...");
+    cleanUpRef.current();
+    router.push("/");
+  }, [router]);
+
   return (
     <div className="relative flex h-screen max-h-screen w-screen flex-col bg-gradient-to-br from-white via-indigo-50 to-purple-100 text-slate-900 dark:from-gray-900 dark:via-gray-900 dark:to-black dark:text-white">
       {/* Header */}
@@ -152,12 +155,8 @@ export default function Room() {
             onCameraChange={switchCamera}
             onMicrophoneChange={switchMicrophone}
             onToggleMute={updateAudioSendStateForPeers}
-            onToggleVideo = {updateVideoSendStateForPeers}
-            onLeave={() => {
-              console.log("cleanup being called on leave...");
-              cleanUpRef.current();
-              router.push("/");
-            }}
+            onToggleVideo={updateVideoSendStateForPeers}
+            onLeave={onLeave}
           />
           {/* Remote Video Grid */}
           <RemoteVideoGrid />

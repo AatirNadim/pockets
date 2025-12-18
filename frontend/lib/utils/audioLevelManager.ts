@@ -102,10 +102,6 @@ class AudioLevelManager {
     this.analyzers.set(userId, entry);
   }
 
-  markSilent(userId: string) {
-    useVoiceActivityStore.getState().setLevel(userId, 0);
-  }
-
   stopAnalyzing(userId: string) {
     const entry = this.analyzers.get(userId);
     if (!entry) {

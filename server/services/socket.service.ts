@@ -99,6 +99,20 @@ export class SocketService {
         case "join-request-rejected":
           this.handleJoinRequestDecision(message);
           break;
+        case "audio-mute":
+          this.broadCastToRoomFromSource(
+            message.roomId,
+            message.userId,
+            message
+          );
+          break;
+        case "audio-unmute":
+          this.broadCastToRoomFromSource(
+            message.roomId,
+            message.userId,
+            message
+          );
+          break;
         default:
           console.warn("Unknown message type:", message.type);
           throw new Error(`Unknown message type: ${message.type}`);
@@ -514,9 +528,9 @@ export class SocketService {
         userId,
       };
       this.broadcastToRoom(roomId, userLeftMessage);
-      this.userService.deleteUserSocket(userId);
     }
 
+    this.userService.deleteUserSocket(userId);
     console.log(`User ${userId} left room ${roomId}`);
   }
 }

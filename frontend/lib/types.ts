@@ -27,8 +27,9 @@ type WebSocketMessage =
   | UserLeftMessage
   | ErrorMessage
   | HostClosedRoomMessage
-  | RoomFullMessage;
-
+  | RoomFullMessage
+  | AudioMuteMessage
+  | AudioUnmuteMessage;
 type JoinRoomMessage = {
   type: "join-room";
   roomId: string;
@@ -111,6 +112,18 @@ type ErrorMessage = {
 type RoomFullMessage = {
   type: "room-full";
   roomId: string;
+};
+
+type AudioMuteMessage = {
+  type: "audio-mute";
+  roomId: string;
+  userId: string;
+};
+
+type AudioUnmuteMessage = {
+  type: "audio-unmute";
+  roomId: string;
+  userId: string;
 };
 
 type HostClosedRoomMessage = {
@@ -197,6 +210,8 @@ export type {
   ErrorMessage,
   HostClosedRoomMessage,
   RoomFullMessage,
+  AudioMuteMessage,
+  AudioUnmuteMessage,
   FileAttachment,
   ChatMessage,
   FileDownloadRequest,

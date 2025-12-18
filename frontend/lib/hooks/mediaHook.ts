@@ -22,21 +22,12 @@ const useMedia = () => {
     setAvailableMicrophones,
     setSelectedCameraId,
     setSelectedMicrophoneId,
-    isMicrophoneMuted,
   } = useMediaStore();
 
-  useEffect(() => {
-    console.log("current videosenders ref updated:", videoSendersRef.current);
-  }, [videoSendersRef.current]);
-
-  useEffect(() => {
-    console.log("current audiosenders ref updated:", audioSendersRef.current);
-  }, [audioSendersRef.current]);
-
-  const handleRemoteSenderLeft = (userId: string) => {
+  const handleRemoteSenderLeft = useCallback((userId: string) => {
     delete audioSendersRef.current[userId];
     delete videoSendersRef.current[userId];
-  };
+  }, []);
 
   const handleMediaCleanup = () => {
     currentVideoDeviceId.current = null;
@@ -161,78 +152,6 @@ const useMedia = () => {
       console.warn("No audio device ID found in the stream.");
     }
   };
-
-  // const replaceLocalTrack = async (
-  //   kind: "video" | "audio",
-  //   deviceId: string
-  // ): Promise<boolean> => {
-  //   if (!deviceId) {
-  //     return false;
-  //   }
-
-  //   if (
-  //     typeof navigator === "undefined" ||
-  //     !navigator.mediaDevices?.getUserMedia
-  //   ) {
-  //     toast.error("Media devices unavailable", {
-  //       description: "Unable to access browser media APIs.",
-  //     });
-  //     return false;
-  //   }
-
-  //   try {
-  //     const constraints: MediaStreamConstraints =
-  //       kind === "video"
-  //         ? { video: { deviceId: { exact: deviceId } }, audio: false }
-  //         : { video: false, audio: { deviceId: { exact: deviceId } } };
-
-  //     const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-  //     const newTrack =
-  //       kind === "video"
-  //         ? newStream.getVideoTracks()[0]
-  //         : newStream.getAudioTracks()[0];
-
-  //     if (!newTrack) {
-  //       throw new Error(`No ${kind} track returned for device ${deviceId}`);
-  //     }
-
-  //     if (!localStream.current) {
-  //       localStream.current = new MediaStream();
-  //     }
-
-  //     const tracksToReplace =
-  //       kind === "video"
-  //         ? localStream.current.getVideoTracks()
-  //         : localStream.current.getAudioTracks();
-
-  //     tracksToReplace.forEach((track) => {
-  //       track.stop();
-  //       localStream.current?.removeTrack(track);
-  //     });
-
-  //     localStream.current.addTrack(newTrack);
-
-  //     if (kind === "video" && localVideoRef.current) {
-  //       localVideoRef.current.srcObject = null;
-  //       localVideoRef.current.srcObject = localStream.current;
-  //     }
-
-  //     const appliedDeviceId = newTrack.getSettings().deviceId || deviceId;
-
-  //     if (kind === "video") {
-  //       currentVideoDeviceId.current = appliedDeviceId;
-  //     } else {
-  //       currentAudioDeviceId.current = appliedDeviceId;
-  //     }
-  //     return true;
-  //   } catch (error) {
-  //     console.error(`Failed to switch ${kind} device:`, error);
-  //     toast.error("Device Switch Failed", {
-  //       description: `Unable to switch ${kind} source. Please try again.`,
-  //     });
-  //     return false;
-  //   }
-  // };
 
   const getNewTrackForTrackType = async (
     kind: "video" | "audio",
@@ -493,6 +412,7 @@ const useMedia = () => {
       };
 
       // creating both audio and video tracks
+      // media tracks are created regardless of whether they are muted or not
       localStream.current = await navigator.mediaDevices.getUserMedia(
         constraints
       );
@@ -503,15 +423,6 @@ const useMedia = () => {
 
       captureDeviceIdsFromStream(localStream.current);
       await populateAvailableDevices();
-      // const audioTrack = localStream.current.getAudioTracks()[0];
-      // if (audioTrack) {
-      //   if (isMicrophoneMuted) {
-      //     audioTrack.stop();
-      //     localStream.current.removeTrack(audioTrack);
-      //   } else if (userId) {
-      //     audioLevelManager.startAnalyzing(userId, audioTrack);
-      //   }
-      // }
     } catch (error) {
       console.error("Error accessing media devices:", error);
       toast.error(
@@ -529,13 +440,11 @@ const useMedia = () => {
 
   const markAudioAsSilentForUser = (userId: string) => {
     console.log("marking audio as silent for user:", userId);
-    audioLevelManager.markSilent(userId);
   };
 
   const stopAudioAnalysis = (userId: string) => {
     console.log("stopping audio analysis for user:", userId);
     audioLevelManager.stopAnalyzing(userId);
-    audioLevelManager.markSilent(userId);
   };
 
   const cleanUpMediaDevices = () => {
