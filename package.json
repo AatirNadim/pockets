@@ -1,0 +1,10 @@
+{
+  "name": "pockets-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev:frontend": "pnpm --filter pockets dev",
+    "dev:server": "pnpm --filter pockets-signaling-server dev"
+  }
+}

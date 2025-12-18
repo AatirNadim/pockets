@@ -7,6 +7,8 @@ const MAX_FILE_SIZE_MB_MULTIPLE_SEND = 6;
 const MAX_FILES_TO_SEND_TOGETHER = 5;
 const MAX_QUEUED_FILES = 10;
 
+import { UserType } from "@pockets/shared";
+
 const STUN_SERVERS_LIST = [
   "stun:stun.l.google.com:19302",
   "stun:stun1.l.google.com:19302",
@@ -17,11 +19,6 @@ const serverPort: string = process.env.NEXT_PUBLIC_SERVER_PORT || "8080";
 
 const serverPath =
   process.env.NEXT_PUBLIC_SERVER_PATH || `localhost:${serverPort}`;
-
-enum UserType {
-  HOST = "host",
-  GUEST = "guest",
-}
 
 enum AttachmentState {
   LOCAL = "local",

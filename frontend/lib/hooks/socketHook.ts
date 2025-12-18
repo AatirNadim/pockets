@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
-import { serverPath, STUN_SERVERS_LIST, UserType } from "@/lib/constants";
+import { serverPath, STUN_SERVERS_LIST } from "@/lib/constants";
 
 import { toast } from "sonner";
 import { useJoinRequestStore } from "../stores/joinRequestStore";
@@ -16,18 +16,16 @@ import {
   IceCandidateMessage,
   LeaveRoomMessage,
   TrackType,
-} from "@/lib/types";
-import { useMediaStore } from "../stores/mediaStore";
-import { useFile } from "./fileHook";
-import type {
   AudioMuteMessage,
   AudioUnmuteMessage,
   ChatDataEnvelope,
   ChatMessage,
   FileDownloadRequest,
   FileDownloadResponse,
-} from "../types";
-
+  UserType,
+} from "@pockets/shared";
+import { useMediaStore } from "../stores/mediaStore";
+import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
 
 export const useSocket = () => {

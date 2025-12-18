@@ -1,21 +1,30 @@
-// Shared types between client and server
+import { UserType } from "./constants";
 
-import { UserType } from "@/lib/constants";
-
-type User = {
+export type User = {
   id: string;
   name: string;
   type: UserType;
 };
 
-type Room = {
+export type Room = {
   id: string;
   hostId: string;
   users: User[];
 };
+export interface SignalingSessionDescription {
+  type: "offer" | "answer" | "pranswer" | "rollback";
+  sdp: string;
+}
+
+export interface SignalingIceCandidate {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
 
 // WebSocket message types
-type WebSocketMessage =
+export type WebSocketMessage =
   | JoinRoomMessage
   | LeaveRoomMessage
   | OfferMessage
@@ -30,7 +39,8 @@ type WebSocketMessage =
   | RoomFullMessage
   | AudioMuteMessage
   | AudioUnmuteMessage;
-type JoinRoomMessage = {
+
+export type JoinRoomMessage = {
   type: "join-room";
   roomId: string;
   userId: string;
@@ -38,48 +48,47 @@ type JoinRoomMessage = {
   userType: UserType;
 };
 
-type LeaveRoomMessage = {
+export type LeaveRoomMessage = {
   type: "leave-room";
   roomId: string;
   userId: string;
 };
 
-// usertype is required for offer and answer for the peers to have information about the other peers
-type OfferMessage = {
+export type OfferMessage = {
   type: "offer";
   roomId: string;
   fromUserId: string;
   toUserId: string;
   fromUserName: string;
   fromUserType: UserType;
-  offer: RTCSessionDescriptionInit;
+  offer: SignalingSessionDescription;
 };
 
-type AnswerMessage = {
+export type AnswerMessage = {
   type: "answer";
   roomId: string;
   fromUserId: string;
   toUserId: string;
   fromUserName: string;
   fromUserType: UserType;
-  answer: RTCSessionDescriptionInit;
+  answer: SignalingSessionDescription;
 };
 
-type IceCandidateMessage = {
+export type IceCandidateMessage = {
   type: "ice-candidate";
   roomId: string;
   fromUserId: string;
   toUserId: string;
-  candidate: RTCIceCandidateInit;
+  candidate: SignalingIceCandidate;
 };
 
-type JoinRequestMessage = {
+export type JoinRequestMessage = {
   type: "join-request";
   roomId: string;
   guest: User;
 };
 
-type JoinRequestDecisionMessage = {
+export type JoinRequestDecisionMessage = {
   type: "join-request-accepted" | "join-request-rejected";
   roomId: string;
   hostUserId: string;
@@ -88,8 +97,7 @@ type JoinRequestDecisionMessage = {
   guestName?: string;
 };
 
-// user-joined message will always come from guests
-type UserJoinedMessage = {
+export type UserJoinedMessage = {
   type: "user-joined";
   roomId: string;
   userId: string;
@@ -97,41 +105,40 @@ type UserJoinedMessage = {
   userType: UserType;
 };
 
-// user-left message will always come from guests; hosts cannot leave without closing the room
-type UserLeftMessage = {
+export type UserLeftMessage = {
   type: "user-left";
   roomId: string;
   userId: string;
 };
 
-type ErrorMessage = {
+export type ErrorMessage = {
   type: "error";
   message: string;
 };
 
-type RoomFullMessage = {
+export type RoomFullMessage = {
   type: "room-full";
   roomId: string;
 };
 
-type AudioMuteMessage = {
+export type AudioMuteMessage = {
   type: "audio-mute";
   roomId: string;
   userId: string;
 };
 
-type AudioUnmuteMessage = {
+export type AudioUnmuteMessage = {
   type: "audio-unmute";
   roomId: string;
   userId: string;
 };
 
-type HostClosedRoomMessage = {
+export type HostClosedRoomMessage = {
   type: "host-closed-room";
   roomId: string;
 };
 
-type FileAttachment = {
+export type FileAttachment = {
   id: string;
   ownerId: string;
   name: string;
@@ -139,7 +146,7 @@ type FileAttachment = {
   type: string;
 };
 
-type ChatMessage = {
+export type ChatMessage = {
   id: string;
   userId: string;
   userName: string;
@@ -148,29 +155,29 @@ type ChatMessage = {
   attachments?: FileAttachment[];
 };
 
-type FileDownloadRequest = {
+export type FileDownloadRequest = {
   fileId: string;
   ownerId: string;
   requesterId: string;
 };
 
-type FileDownloadResponse = FileDownloadRequest & {
+export type FileDownloadResponse = FileDownloadRequest & {
   status: "accepted" | "rejected" | "unavailable";
   reason?: string;
 };
 
-type ChatSystemNotice = {
+export type ChatSystemNotice = {
   id: string;
   message: string;
 };
 
-type ChatDataEnvelope =
+export type ChatDataEnvelope =
   | { kind: "chat-message"; payload: ChatMessage }
   | { kind: "file-download-request"; payload: FileDownloadRequest }
   | { kind: "file-download-response"; payload: FileDownloadResponse }
   | { kind: "system"; payload: ChatSystemNotice };
 
-type FileMetadataPayload = {
+export type FileMetadataPayload = {
   fileId: string;
   ownerId: string;
   name: string;
@@ -178,14 +185,14 @@ type FileMetadataPayload = {
   size: number;
 };
 
-type IncomingTransferState = {
+export type IncomingTransferState = {
   metadata?: FileMetadataPayload;
   chunks: ArrayBuffer[];
   receivedBytes: number;
   remoteUserId?: string;
 };
 
-type DataChannelEnvelope =
+export type DataChannelEnvelope =
   | { kind: "file-metadata"; payload: FileMetadataPayload }
   | { kind: "control"; payload: Record<string, unknown> };
 
@@ -193,32 +200,3 @@ export enum TrackType {
   AUDIO = "audio",
   VIDEO = "video",
 }
-
-export type {
-  User,
-  Room,
-  WebSocketMessage,
-  JoinRoomMessage,
-  LeaveRoomMessage,
-  OfferMessage,
-  AnswerMessage,
-  IceCandidateMessage,
-  JoinRequestMessage,
-  JoinRequestDecisionMessage,
-  UserJoinedMessage,
-  UserLeftMessage,
-  ErrorMessage,
-  HostClosedRoomMessage,
-  RoomFullMessage,
-  AudioMuteMessage,
-  AudioUnmuteMessage,
-  FileAttachment,
-  ChatMessage,
-  FileDownloadRequest,
-  FileDownloadResponse,
-  ChatSystemNotice,
-  ChatDataEnvelope,
-  IncomingTransferState,
-  DataChannelEnvelope,
-  FileMetadataPayload,
-};

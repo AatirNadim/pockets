@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { TrackType } from "../types";
+import { TrackType } from "@pockets/shared";
 
 type MediaDeviceOption = {
   deviceId: string;

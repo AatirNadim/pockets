@@ -1,10 +1,13 @@
 import { WebSocket } from "ws";
 
-import { MAX_USERS_PER_ROOM, UserType } from "../util/constants";
+import { ExtendedWebSocket } from "../util/types";
+import { RoomService } from "./room.service";
+import { UserService } from "./user.service";
 import {
   AnswerMessage,
+  MAX_USERS_PER_ROOM,
+  UserType,
   ErrorMessage,
-  ExtendedWebSocket,
   HostClosedRoomMessage,
   IceCandidateMessage,
   JoinRequestDecisionMessage,
@@ -17,9 +20,7 @@ import {
   UserJoinedMessage,
   UserLeftMessage,
   WebSocketMessage,
-} from "../util/types";
-import { RoomService } from "./room.service";
-import { UserService } from "./user.service";
+} from "@pockets/shared";
 
 export class SocketService {
   private roomService: RoomService;
@@ -30,33 +31,30 @@ export class SocketService {
     this.userService = new UserService();
   }
 
+  private notifyUser = (userId: string, msg: string) => {
+    const socket = this.userService.getSocketForUser(userId);
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(msg);
+    }
+  };
+
   private notifyHostClosed(roomId: string) {
     const hostClosedMessage: HostClosedRoomMessage = {
       type: "host-closed-room",
       roomId,
     };
 
-    const notifyUser = (userId: string) => {
-      const socket = this.userService.getSocketForUser(userId);
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(hostClosedMessage));
-      }
-    };
-
     const remainingUsers = this.roomService.getRoomDetails(roomId)?.users || [];
     remainingUsers.forEach((user) => {
-      notifyUser(user.id);
+      this.notifyUser(user.id, JSON.stringify(hostClosedMessage));
     });
 
     const pending = this.roomService.getPendingJoinRequestsForRoom(roomId);
     if (pending) {
       pending.forEach((guest) => {
-        notifyUser(guest.id);
+        this.notifyUser(guest.id, JSON.stringify(hostClosedMessage));
       });
     }
-
-    // this.roomService.removeAllPendingGuestsForRoom(roomId);
-    // this.roomService.deleteRoom(roomId);
   }
 
   private sendErrorMessage(ws: ExtendedWebSocket, message: string) {
@@ -507,7 +505,6 @@ export class SocketService {
 
     if (isHostLeaving) {
       this.notifyHostClosed(roomId);
-      // this.userService.deleteUserSocket(userId);
       const userIdsToDelete = room.users.map((u) => u.id);
       this.userService.deleteMultipleUserSockets(userIdsToDelete);
       room.users = [];

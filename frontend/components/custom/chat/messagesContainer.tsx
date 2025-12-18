@@ -4,7 +4,7 @@ import { AttachmentState } from "@/lib/constants";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useFileStore } from "@/lib/stores/fileStore";
 import { useUserStore } from "@/lib/stores/userStore";
-import { ChatMessage, FileAttachment } from "@/lib/types";
+import type { ChatMessage, FileAttachment } from "@pockets/shared";
 import { cn, formatBytes, formatTimestamp, resolveSender } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { Download, Paperclip } from "lucide-react";

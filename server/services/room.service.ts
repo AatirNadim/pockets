@@ -1,4 +1,4 @@
-import { Room, User } from "../util/types";
+import { Room, User } from "@pockets/shared";
 import { RequestQueueService } from "./requestQueue.service";
 import { UserService } from "./user.service";
 
