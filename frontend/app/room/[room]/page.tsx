@@ -40,7 +40,8 @@ export default function Room() {
     cleanUp,
     switchCamera,
     switchMicrophone,
-    toggleMicrophoneMute,
+    updateAudioSendStateForPeers,
+    updateVideoSendStateForPeers,
     respondToJoinRequest,
     sendChatMessage,
     requestFileDownload,
@@ -150,7 +151,8 @@ export default function Room() {
             selectedMicrophoneId={selectedMicrophoneId}
             onCameraChange={switchCamera}
             onMicrophoneChange={switchMicrophone}
-            onToggleMute={toggleMicrophoneMute}
+            onToggleMute={updateAudioSendStateForPeers}
+            onToggleVideo = {updateVideoSendStateForPeers}
             onLeave={() => {
               console.log("cleanup being called on leave...");
               cleanUpRef.current();

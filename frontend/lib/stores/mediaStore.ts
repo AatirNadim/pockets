@@ -34,6 +34,7 @@ type MediaActions = {
   clearMediaStreams: () => void;
   toggleAudioOnly: () => void;
   setScreenSharing: (isSharing: boolean) => void;
+  setIsVideoOff: (val: boolean) => void;
   toggleVideoOff: () => void;
   setMicrophoneMuted: (muted: boolean) => void;
   toggleSpeakerOff: () => void;
@@ -60,6 +61,7 @@ export const useMediaStore = create<MediaState & MediaActions>()(
       isScreenSharing: false,
       isVideoOff: false,
       isMicrophoneMuted: false,
+      setIsVideoOff: (val) => set({ isVideoOff: val }),
       toggleVideoOff: () => set((state) => ({ isVideoOff: !state.isVideoOff })),
       setMicrophoneMuted: (muted) => set({ isMicrophoneMuted: muted }),
       isSpeakerOff: false,

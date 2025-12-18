@@ -7,6 +7,12 @@ const MAX_FILE_SIZE_MB_MULTIPLE_SEND = 6;
 const MAX_FILES_TO_SEND_TOGETHER = 5;
 const MAX_QUEUED_FILES = 10;
 
+const STUN_SERVERS_LIST = [
+  "stun:stun.l.google.com:19302",
+  "stun:stun1.l.google.com:19302",
+  "stun:stun2.l.google.com:19302",
+];
+
 const serverPort: string = process.env.NEXT_PUBLIC_SERVER_PORT || "8080";
 
 const serverPath =
@@ -30,6 +36,7 @@ export {
   MAX_FILE_SIZE_MB_MULTIPLE_SEND,
   MAX_FILES_TO_SEND_TOGETHER,
   MAX_QUEUED_FILES,
+  STUN_SERVERS_LIST,
   serverPath,
   UserType,
   AttachmentState,

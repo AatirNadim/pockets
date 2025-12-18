@@ -26,6 +26,10 @@ class UserService {
   deleteUserSocket(userId: string) {
     this.userSockets.delete(userId);
   }
+
+  deleteMultipleUserSockets(userIds: string[]) {
+    userIds.forEach((userId) => this.userSockets.delete(userId));
+  }
 }
 
 export { UserService };

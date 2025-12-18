@@ -55,8 +55,8 @@ export class SocketService {
       });
     }
 
-    this.roomService.removeAllPendingGuestsForRoom(roomId);
-    this.roomService.deleteRoom(roomId);
+    // this.roomService.removeAllPendingGuestsForRoom(roomId);
+    // this.roomService.deleteRoom(roomId);
   }
 
   private sendErrorMessage(ws: ExtendedWebSocket, message: string) {
@@ -493,9 +493,11 @@ export class SocketService {
 
     if (isHostLeaving) {
       this.notifyHostClosed(roomId);
-      this.userService.deleteUserSocket(userId);
+      // this.userService.deleteUserSocket(userId);
+      const userIdsToDelete = room.users.map((u) => u.id);
+      this.userService.deleteMultipleUserSockets(userIdsToDelete);
+      room.users = [];
       console.log(`Host ${userId} closed room ${roomId}`);
-      return;
     }
 
     // Remove empty rooms
@@ -512,9 +514,8 @@ export class SocketService {
         userId,
       };
       this.broadcastToRoom(roomId, userLeftMessage);
+      this.userService.deleteUserSocket(userId);
     }
-
-    this.userService.deleteUserSocket(userId);
 
     console.log(`User ${userId} left room ${roomId}`);
   }

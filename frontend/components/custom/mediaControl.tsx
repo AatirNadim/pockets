@@ -128,6 +128,7 @@ type MediaControlProps = {
   onCameraChange: (deviceId: string) => void | Promise<void>;
   onMicrophoneChange: (deviceId: string) => void | Promise<void>;
   onToggleMute: (nextMuted: boolean) => Promise<void>;
+  onToggleVideo: (disabled: boolean) => Promise<void>;
   onLeave: () => void;
 };
 
@@ -139,6 +140,7 @@ const MediaControl = ({
   onCameraChange,
   onMicrophoneChange,
   onToggleMute,
+  onToggleVideo,
   onLeave,
 }: MediaControlProps) => {
   const {
@@ -175,7 +177,11 @@ const MediaControl = ({
         </Button>
 
         <Button
-          onClick={toggleVideoOff}
+          onClick={() => {
+            onToggleVideo(!isVideoOff).then(() => {
+              console.log("toggle video complete");
+            });
+          }}
           variant="ghost"
           size="lg"
           className={`w-12 h-12 rounded-full transition-all duration-200 ${

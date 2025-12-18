@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
-import { serverPath, UserType } from "@/lib/constants";
+import { serverPath, STUN_SERVERS_LIST, UserType } from "@/lib/constants";
 
 import { toast } from "sonner";
 import { useJoinRequestStore } from "../stores/joinRequestStore";
@@ -25,23 +25,34 @@ import type {
   FileDownloadRequest,
   FileDownloadResponse,
 } from "../types";
-import { audioLevelManager } from "@/lib/utils/audioLevelManager";
+
+import useMedia from "./mediaHook";
 
 export const useSocket = () => {
   const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const dataChannelMap = useRef<Record<string, RTCDataChannel | null>>({});
-  const audioSendersRef = useRef<Record<string, RTCRtpSender | null>>({});
-  const videoSendersRef = useRef<Record<string, RTCRtpSender | null>>({});
 
   const [status, setStatus] = useState("Connecting to room...");
   const [isConnected, setIsConnected] = useState(false);
   const [isRoomFull, setIsRoomFull] = useState(false);
-  const localStream = useRef<MediaStream | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const currentVideoDeviceId = useRef<string | null>(null);
-  const currentAudioDeviceId = useRef<string | null>(null);
+
+  const {
+    localStream,
+    localVideoRef,
+    audioSendersRef,
+    videoSendersRef,
+    switchCameraForPeers,
+    switchMicrophoneForPeers,
+    replaceLocalTrackForPeers,
+    replaceTrackForPeers,
+    cleanUpMediaDevices,
+    createMediaStreams,
+    startAudioAnalysis,
+    stopAudioAnalysis,
+    markAudioAsSilentForUser,
+  } = useMedia();
 
   const {
     userId,
@@ -71,12 +82,8 @@ export const useSocket = () => {
   const clearChatMessages = useChatStore((state) => state.clearChatMessages);
 
   const {
-    selectedCameraId,
-    selectedMicrophoneId,
-    setAvailableCameras,
-    setAvailableMicrophones,
-    setSelectedCameraId,
-    setSelectedMicrophoneId,
+    isVideoOff,
+    setIsVideoOff,
     addMediaStream,
     removeMediaStream,
     clearMediaStreams,
@@ -98,6 +105,14 @@ export const useSocket = () => {
       peerConnections,
       dataChannelMap,
     });
+
+  const switchCamera = (deviceId: string) => {
+    switchCameraForPeers(deviceId, peerConnections.current);
+  };
+
+  const switchMicrophone = (deviceId: string) => {
+    switchMicrophoneForPeers(deviceId, peerConnections.current);
+  };
 
   const sendEnvelope = (
     envelope: ChatDataEnvelope,
@@ -147,374 +162,103 @@ export const useSocket = () => {
     return deliveredChannels > 0;
   };
 
-  const captureDeviceIdsFromStream = (stream: MediaStream) => {
-    const videoTrack = stream.getVideoTracks()[0];
-    const audioTrack = stream.getAudioTracks()[0];
-
-    const videoDeviceId = videoTrack?.getSettings().deviceId || null;
-    const audioDeviceId = audioTrack?.getSettings().deviceId || null;
-
-    if (!videoDeviceId && !audioDeviceId) {
-      console.warn("No video or audio device IDs found in the stream.");
+  const updateAudioSendStateForPeers = async (toBeMuted: boolean) => {
+    console.log("updating microphone mute state to:", toBeMuted);
+    if (toBeMuted === isMicrophoneMuted) {
       return;
     }
 
-    if (videoDeviceId) {
-      currentVideoDeviceId.current = videoDeviceId;
-      if (!selectedCameraId) {
-        setSelectedCameraId(videoDeviceId);
-      }
-    } else {
-      console.warn("No video device ID found in the stream.");
-    }
-
-    if (audioDeviceId) {
-      currentAudioDeviceId.current = audioDeviceId;
-      if (!selectedMicrophoneId) {
-        setSelectedMicrophoneId(audioDeviceId);
-      }
-    } else {
-      console.warn("No audio device ID found in the stream.");
-    }
-  };
-
-  const populateAvailableDevices = useCallback(async () => {
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.enumerateDevices
-    ) {
-      return;
-    }
-
-    try {
-      console.log("Enumerating available media devices...");
-      const devices = await navigator.mediaDevices.enumerateDevices();
-
-      const videoInputs = devices
-        .filter((device) => device.kind === ("videoinput" as MediaDeviceKind))
-        .map((device, index) => ({
-          deviceId: device.deviceId,
-          label: device.label || `Camera ${index + 1}`,
-        }));
-
-      console.log("Video inputs:", videoInputs);
-
-      const audioInputs = devices
-        .filter((device) => device.kind === ("audioinput" as MediaDeviceKind))
-        .map((device, index) => ({
-          deviceId: device.deviceId,
-          label: device.label || `Microphone ${index + 1}`,
-        }));
-
-      console.log("Audio inputs:", audioInputs);
-
-      setAvailableCameras(videoInputs);
-      setAvailableMicrophones(audioInputs);
-
-      if (
-        selectedCameraId &&
-        !videoInputs.some((option) => option.deviceId === selectedCameraId)
-      ) {
-        setSelectedCameraId(videoInputs[0]?.deviceId ?? null);
-      } else if (!selectedCameraId && videoInputs.length) {
-        setSelectedCameraId(videoInputs[0].deviceId);
-      }
-
-      if (
-        selectedMicrophoneId &&
-        !audioInputs.some((option) => option.deviceId === selectedMicrophoneId)
-      ) {
-        setSelectedMicrophoneId(audioInputs[0]?.deviceId ?? null);
-      } else if (!selectedMicrophoneId && audioInputs.length) {
-        setSelectedMicrophoneId(audioInputs[0].deviceId);
-      }
-    } catch (error) {
-      console.error("Error enumerating media devices:", error);
-    }
-  }, [
-    selectedCameraId,
-    selectedMicrophoneId,
-    setAvailableCameras,
-    setAvailableMicrophones,
-    setSelectedCameraId,
-    setSelectedMicrophoneId,
-  ]);
-
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices) {
-      return;
-    }
-
-    const mediaDevices = navigator.mediaDevices;
-    const handleDeviceChange = () => {
-      populateAvailableDevices();
-    };
-
-    if (mediaDevices.addEventListener) {
-      mediaDevices.addEventListener("devicechange", handleDeviceChange);
-      return () => {
-        mediaDevices.removeEventListener("devicechange", handleDeviceChange);
-      };
-    }
-
-    const originalHandler = mediaDevices.ondevicechange;
-    mediaDevices.ondevicechange = handleDeviceChange;
-    return () => {
-      mediaDevices.ondevicechange = originalHandler || null;
-    };
-  }, [populateAvailableDevices]);
-
-  const replaceTrackForPeers = async (
-    kind: "video" | "audio",
-    track: MediaStreamTrack | null
-  ) => {
-    const senderRegistry =
-      kind === "audio" ? audioSendersRef.current : videoSendersRef.current;
-
-    const peerEntries = Object.entries(peerConnections.current);
-
-    await Promise.all(
-      peerEntries.map(async ([remoteUserId, pc]) => {
-        let sender = senderRegistry[remoteUserId];
-
-        if (!sender && track && localStream.current) {
-          sender = pc.addTrack(track, localStream.current as MediaStream);
-          if (kind === "audio") {
-            audioSendersRef.current[remoteUserId] = sender;
-          } else {
-            videoSendersRef.current[remoteUserId] = sender;
-          }
-          return;
-        }
-
-        if (!sender) {
-          return;
-        }
-
-        try {
-          console.log(`Replacing ${kind} track for peer ${remoteUserId}...`);
-          await sender.replaceTrack(track);
-        } catch (error) {
-          console.error(
-            `Failed to replace ${kind} track for peer ${remoteUserId}`,
-            error
-          );
-        }
-      })
-    );
-  };
-
-  const replaceLocalTrack = async (
-    kind: "video" | "audio",
-    deviceId?: string
-  ): Promise<boolean> => {
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia
-    ) {
-      toast.error("Media devices unavailable", {
-        description: "Unable to access browser media APIs.",
-      });
-      return false;
-    }
-
-    try {
-      const constraints: MediaStreamConstraints =
-        kind === "video"
-          ? {
-              video: deviceId ? { deviceId: { exact: deviceId } } : true,
-              audio: false,
-            }
-          : {
-              video: false,
-              audio: deviceId ? { deviceId: { exact: deviceId } } : true,
-            };
-
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      const newTrack =
-        kind === "video"
-          ? newStream.getVideoTracks()[0]
-          : newStream.getAudioTracks()[0];
-
-      if (!newTrack) {
-        throw new Error(`No ${kind} track returned for device ${deviceId}`);
-      }
-
-      if (!localStream.current) {
-        localStream.current = new MediaStream();
-      }
-
-      const tracksToReplace =
-        kind === "video"
-          ? localStream.current.getVideoTracks()
-          : localStream.current.getAudioTracks();
-
-      tracksToReplace.forEach((track) => {
-        track.stop();
-        localStream.current?.removeTrack(track);
-      });
-
-      localStream.current.addTrack(newTrack);
-
-      if (kind === "video" && localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-        localVideoRef.current.srcObject = localStream.current;
-      }
-
-      if (kind === "audio" && userId) {
-        console.log(
-          "restarting audio level analysis for local track change..."
-        );
-        audioLevelManager.startAnalyzing(userId, newTrack);
-      }
-
-      await replaceTrackForPeers(kind, newTrack);
-
-      const appliedDeviceId = newTrack.getSettings().deviceId || deviceId;
-
-      if (kind === "video") {
-        currentVideoDeviceId.current = appliedDeviceId ?? null;
-      } else {
-        currentAudioDeviceId.current = appliedDeviceId ?? null;
-      }
-      return true;
-    } catch (error) {
-      console.error(`Failed to switch ${kind} device:`, error);
-      toast.error("Device Switch Failed", {
-        description: `Unable to switch ${kind} source. Please try again.`,
-      });
-      return false;
-    }
-  };
-
-  const switchCamera = async (deviceId: string) => {
-    if (!deviceId) {
-      return;
-    }
-
-    if (deviceId === currentVideoDeviceId.current) {
-      setSelectedCameraId(deviceId);
-      return;
-    }
-
-    const switched = await replaceLocalTrack("video", deviceId);
-    if (switched) {
-      setSelectedCameraId(deviceId);
-    }
-  };
-
-  const switchMicrophone = async (deviceId: string) => {
-    if (!deviceId) {
-      return;
-    }
-
-    if (deviceId === currentAudioDeviceId.current) {
-      setSelectedMicrophoneId(deviceId);
-      return;
-    }
-
-    if (isMicrophoneMuted) {
-      currentAudioDeviceId.current = deviceId;
-      setSelectedMicrophoneId(deviceId);
-      return;
-    }
-
-    const switched = await replaceLocalTrack("audio", deviceId);
-    if (switched) {
-      setSelectedMicrophoneId(deviceId);
-    }
-  };
-
-  const updateMicrophoneMuteState = async (nextMuted: boolean) => {
-    console.log("updating microphone mute state to:", nextMuted);
-    if (nextMuted === isMicrophoneMuted) {
-      return;
-    }
-
-    if (nextMuted) {
+    if (toBeMuted) {
       const audioTracks = localStream.current?.getAudioTracks() ?? [];
       audioTracks.forEach((track) => {
         track.enabled = false;
       });
 
-      await replaceTrackForPeers("audio", null);
+      await replaceTrackForPeers("audio", null, peerConnections.current);
 
       if (userId) {
-        audioLevelManager.stopAnalyzing(userId);
-        audioLevelManager.markSilent(userId);
+        // stopAudioAnalysis(userId);
+        markAudioAsSilentForUser(userId);
       }
 
       setMicrophoneMuted(true);
       return;
     }
 
-    const targetDeviceId =
-      selectedMicrophoneId || currentAudioDeviceId.current || undefined;
-
-    const restored = await replaceLocalTrack("audio", targetDeviceId);
-
-    if (!restored) {
-      toast.error("Microphone unavailable", {
-        description:
-          "Unable to access your microphone. Please check permissions and try again.",
-      });
-      return;
-    }
+    await replaceLocalTrackForPeers("audio", peerConnections.current);
 
     setMicrophoneMuted(false);
   };
 
-  const createMediaStreams = async () => {
-    try {
-      if (
-        typeof navigator === "undefined" ||
-        !navigator.mediaDevices?.getUserMedia
-      ) {
-        throw new Error("Media devices API unavailable");
-      }
+  const updateVideoSendStateForPeers = async (toDisable: boolean) => {
+    if (toDisable === isVideoOff) {
+      return;
+    }
+    if (toDisable) {
+      const videoTracks = localStream.current?.getVideoTracks() ?? [];
+      videoTracks.forEach((track) => {
+        track.enabled = false;
+      });
 
-      // if no selected devices, get default devices
-      // const constraints: MediaStreamConstraints = {
-      //   audio: selectedMicrophoneId
-      //     ? { deviceId: { exact: selectedMicrophoneId } }
-      //     : true,
-      //   video: selectedCameraId
-      //     ? { deviceId: { exact: selectedCameraId } }
-      //     : true,
-      // };
-
-      const constraints: MediaStreamConstraints = {
-        audio: true,
-        video: true,
-      };
-
-      // creating both audio and video tracks
-      localStream.current = await navigator.mediaDevices.getUserMedia(
-        constraints
-      );
-      if (localVideoRef.current) {
-        console.debug("Accessing local media streams...");
-        localVideoRef.current.srcObject = localStream.current;
-      }
-
-      captureDeviceIdsFromStream(localStream.current);
-      await populateAvailableDevices();
-      const audioTrack = localStream.current.getAudioTracks()[0];
-      if (audioTrack) {
-        if (isMicrophoneMuted) {
-          audioTrack.stop();
-          localStream.current.removeTrack(audioTrack);
-        } else if (userId) {
-          audioLevelManager.startAnalyzing(userId, audioTrack);
-        }
-      }
-    } catch (error) {
-      console.error("Error accessing media devices:", error);
-      toast.error(
-        "Could not access camera or microphone. Please check permissions and try again."
-      );
+      await replaceTrackForPeers("video", null, peerConnections.current);
+      setIsVideoOff(true);
+    } else {
+      await replaceLocalTrackForPeers("video", peerConnections.current);
+      setIsVideoOff(false);
     }
   };
+
+  // const createMediaStreams = async () => {
+  //   try {
+  //     if (
+  //       typeof navigator === "undefined" ||
+  //       !navigator.mediaDevices?.getUserMedia
+  //     ) {
+  //       throw new Error("Media devices API unavailable");
+  //     }
+
+  //     // if no selected devices, get default devices
+  //     // const constraints: MediaStreamConstraints = {
+  //     //   audio: selectedMicrophoneId
+  //     //     ? { deviceId: { exact: selectedMicrophoneId } }
+  //     //     : true,
+  //     //   video: selectedCameraId
+  //     //     ? { deviceId: { exact: selectedCameraId } }
+  //     //     : true,
+  //     // };
+
+  //     const constraints: MediaStreamConstraints = {
+  //       audio: true,
+  //       video: true,
+  //     };
+
+  //     // creating both audio and video tracks
+  //     localStream.current = await navigator.mediaDevices.getUserMedia(
+  //       constraints
+  //     );
+  //     if (localVideoRef.current) {
+  //       console.debug("Accessing local media streams...");
+  //       localVideoRef.current.srcObject = localStream.current;
+  //     }
+
+  //     captureDeviceIdsFromStream(localStream.current);
+  //     await populateAvailableDevices();
+  //     const audioTrack = localStream.current.getAudioTracks()[0];
+  //     if (audioTrack) {
+  //       if (isMicrophoneMuted) {
+  //         audioTrack.stop();
+  //         localStream.current.removeTrack(audioTrack);
+  //       } else if (userId) {
+  //         audioLevelManager.startAnalyzing(userId, audioTrack);
+  //       }
+  //     }
+  //   } catch (error) {
+  //     console.error("Error accessing media devices:", error);
+  //     toast.error(
+  //       "Could not access camera or microphone. Please check permissions and try again."
+  //     );
+  //   }
+  // };
 
   const registerListenersForSocket = (socket: WebSocket) => {
     try {
@@ -910,13 +654,15 @@ export const useSocket = () => {
       setState(!track.muted && track.readyState === "live");
 
       const handleMute = () => {
+        console.log("remote track ", track, "muted for user:", remoteUserId);
         setState(false);
         if (trackType === TrackType.AUDIO) {
-          audioLevelManager.markSilent(remoteUserId);
+          markAudioAsSilentForUser(remoteUserId);
         }
       };
 
       const handleUnmute = () => {
+        console.log("remote track ", track, "unmuted for user:", remoteUserId);
         setState(true);
       };
 
@@ -931,7 +677,7 @@ export const useSocket = () => {
         detachTrackListeners();
         removeTrackFromStream(remoteUserId, trackType);
         if (trackType === TrackType.AUDIO) {
-          audioLevelManager.stopAnalyzing(remoteUserId);
+          stopAudioAnalysis(remoteUserId);
         }
       };
 
@@ -940,7 +686,7 @@ export const useSocket = () => {
           "starting audio level analysis for remote peer track received from:",
           remoteUserId
         );
-        audioLevelManager.startAnalyzing(remoteUserId, track);
+        startAudioAnalysis(remoteUserId, track);
       }
 
       track.addEventListener("mute", handleMute);
@@ -968,11 +714,7 @@ export const useSocket = () => {
       const pc = new RTCPeerConnection({
         iceServers: [
           {
-            urls: [
-              "stun:stun.l.google.com:19302",
-              "stun:stun1.l.google.com:19302",
-              "stun:stun2.l.google.com:19302",
-            ],
+            urls: STUN_SERVERS_LIST,
           },
         ],
         iceCandidatePoolSize: 10,
@@ -985,7 +727,13 @@ export const useSocket = () => {
 
       peerConnections.current[remoteUserId] = pc;
 
+      console.log(
+        "adding local tracks to peer connection... with local stream:",
+        localStream.current
+      );
       if (localStream.current) {
+        console.log("local stream available, adding tracks to pc...");
+
         localStream.current.getTracks().forEach((track) => {
           const sender = pc.addTrack(track, localStream.current as MediaStream);
 
@@ -997,8 +745,18 @@ export const useSocket = () => {
                 console.error("Failed to sync mute state for new peer", error);
               });
             }
+            console.log(
+              "added audio track sender for user:",
+              remoteUserId,
+              audioSendersRef.current
+            );
           } else if (track.kind === "video") {
             videoSendersRef.current[remoteUserId] = sender;
+            console.log(
+              "added video track sender for user:",
+              remoteUserId,
+              videoSendersRef.current
+            );
           }
         });
       } else {
@@ -1216,7 +974,7 @@ export const useSocket = () => {
       removeRemoteUser(remoteUserId);
       removeMediaStream(remoteUserId);
       clearRemoteTrackState(remoteUserId);
-      audioLevelManager.stopAnalyzing(remoteUserId);
+      stopAudioAnalysis(remoteUserId);
       // if there is only a single peer connection left and its connectivity is failed,
       // set isConnected to false
     } catch (error) {
@@ -1480,17 +1238,13 @@ export const useSocket = () => {
       socketRef.current?.close();
       localStream.current?.getTracks().forEach((track) => track.stop());
       localStream.current = null;
-      currentVideoDeviceId.current = null;
-      currentAudioDeviceId.current = null;
-      audioSendersRef.current = {};
-      videoSendersRef.current = {};
+      cleanUpMediaDevices();
       clearChatMessages();
       resetUnreadCount();
       resetFileStore();
       leaveRoom();
       clearMediaStreams();
       clearJoinRequests();
-      audioLevelManager.stopAll();
     } catch (error) {
       console.error("Error cleaning up WebSocket connection:", error);
     }
@@ -1505,6 +1259,8 @@ export const useSocket = () => {
     isRoomFull,
     localStream,
     localVideoRef,
+    switchCamera,
+    switchMicrophone,
     connectToRoom,
     createWSConnection,
     sendWsMessage,
@@ -1517,10 +1273,9 @@ export const useSocket = () => {
     handleOffer,
     handleAnswer,
     handleIceCandidate,
-    switchCamera,
-    switchMicrophone,
-    toggleMicrophoneMute: updateMicrophoneMuteState,
     cleanUp,
     respondToJoinRequest,
+    updateVideoSendStateForPeers,
+    updateAudioSendStateForPeers,
   };
 };
