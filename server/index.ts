@@ -1,11 +1,14 @@
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
-import { WebSocketMessage, ExtendedWebSocket } from "./util/types";
+import { ExtendedWebSocket } from "./util/types";
 import { PORT } from "./util/constants";
-import { SocketService } from "./services/socket.service";
+import { SocketService } from "./src/services/socket.service";
+import { createPersistenceClient } from "./src/repo/persistence/create-persistence";
+import { WebSocketMessage } from "@pockets/shared";
 
-const socketService = new SocketService();
+const persistence = await createPersistenceClient();
+const socketService = new SocketService(persistence);
 
 const registerSocketEventListeners = (ws: ExtendedWebSocket) => {
   ws.onmessage = (event) => {
@@ -50,7 +53,6 @@ httpServer.listen(PORT, () => {
   console.log(`🚀 Signaling server (HTTP + WS) running on port ${PORT}`);
   console.log(`   • Health check: http://localhost:${PORT}/health`);
 });
-
 
 const gracefulShutdown = () => {
   console.log("Server shutting down gracefully...");

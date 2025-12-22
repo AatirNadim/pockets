@@ -237,7 +237,7 @@ export default function Home() {
 
           {/* Footer */}
           <div className="pt-8 text-center text-[var(--primary)]">
-            <p className="text-sm">Secure • Fast • Collaborative</p>
+            <p className="text-sm">Secure • Clean • Fast • Collaborative</p>
           </div>
         </div>
       </div>

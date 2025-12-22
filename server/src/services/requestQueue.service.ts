@@ -1,4 +1,4 @@
-import { User } from "../util/types";
+import { User } from "@pockets/shared";
 
 class RequestQueueService {
   private pendingJoinRequests: Map<string, Map<string, User>>;
