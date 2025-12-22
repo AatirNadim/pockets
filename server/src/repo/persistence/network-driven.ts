@@ -58,7 +58,12 @@ export class RedisPersistenceClient implements PersistenceClient {
   }
 
   async createRoom(roomId: string, hostId: string): Promise<Room> {
-    const room = { id: roomId, hostId } as Room;
+    const room = {
+      id: roomId,
+      hostId,
+      guestIds: [] as string[],
+      pendingGuestIds: [] as string[],
+    } as Room;
     await this.client.set(this.roomKey(roomId), JSON.stringify(room));
     await this.client.sAdd(this.roomsIndexKey(), roomId);
     await this.touchRoomKeys(roomId);

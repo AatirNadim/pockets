@@ -12,7 +12,12 @@ export class InMemoryPersistenceClient implements PersistenceClient {
   }
 
   async createRoom(roomId: string, hostId: string): Promise<Room> {
-    this.rooms.set(roomId, { id: roomId, hostId } as Room);
+    this.rooms.set(roomId, {
+      id: roomId,
+      hostId,
+      guestIds: [] as string[],
+      pendingGuestIds: [] as string[],
+    } as Room);
     console.log("current rooms:\n\n", this.rooms, "\n\n");
     return this.rooms.get(roomId)!;
   }
