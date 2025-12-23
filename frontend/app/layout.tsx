@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
-import { Archivo, Montserrat, Quicksand } from "next/font/google";
+import {
+  Archivo,
+  Montserrat,
+  Quicksand,
+  Inter,
+  Poppins,
+} from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/custom/theme-provider";
@@ -19,6 +25,11 @@ const montserrat = Montserrat({
   subsets: ["latin"],
 });
 
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "Pockets",
   description: "Pockets into collaborative spaces",
@@ -32,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${archivo.variable} ${montserrat.variable} ${quickSand.variable} antialiased`}
+        className={`${archivo.variable} ${montserrat.variable} ${quickSand.variable} ${inter.variable} antialiased`}
       >
         <ThemeProvider>
           {children}

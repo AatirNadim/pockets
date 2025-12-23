@@ -171,8 +171,15 @@ export default function Room() {
       </div>
 
       {isHost && requests.length > 0 && (
-        <div className="fixed right-6 bottom-40 z-40 flex w-80 flex-col gap-3">
-          <JoinRequestList respondToJoinRequest={respondToJoinRequest} />
+        <div
+          className={cn([
+            "fixed right-6 bottom-40 md:bottom-65 z-40 flex w-80 flex-col gap-3 overflow-auto max-h-[40vh] p-2 md:p-4",
+            "border border-slate-200/60 bg-black/60 shadow-xl transition-all duration-200 dark:border-white/10 rounded-2xl",
+          ])}
+        >
+          <div className="flex flex-col gap-3">
+            <JoinRequestList respondToJoinRequest={respondToJoinRequest} />
+          </div>
         </div>
       )}
 

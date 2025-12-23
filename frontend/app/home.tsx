@@ -92,11 +92,11 @@ export default function Home() {
           >
             <div className="flex items-center justify-center space-x-2 mb-2">
               <Sparkle />
-              <h1 className="text-5xl font-bold font-heading drop-shadow-md">
-                Pockets
-              </h1>
+              <div className="text-5xl font-inter drop-shadow-md">
+                Whereas
+              </div>
             </div>
-            <p className="text-lg max-w-sm mx-auto leading-relaxed font-semibold">
+            <p className="text-lg max-w-sm mx-auto leading-relaxed font-inter">
               Create instant collaborative spaces or join existing ones with
               your friends
             </p>

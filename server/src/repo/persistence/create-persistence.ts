@@ -6,8 +6,11 @@ export async function createPersistenceClient(): Promise<PersistenceClient> {
   const redisUrl = process.env.REDIS_URL?.trim();
 
   if (!redisUrl) {
+    console.log("REDIS_URL not set, using in-memory persistence");
     return new InMemoryPersistenceClient();
   }
+
+  console.log("Using Redis persistence at", redisUrl);
 
   const client = new RedisPersistenceClient(redisUrl, {
     keyPrefix: "pockets",
@@ -15,5 +18,6 @@ export async function createPersistenceClient(): Promise<PersistenceClient> {
   });
 
   await client.connect();
+  console.log("Connected to Redis");
   return client;
 }

@@ -1,7 +1,5 @@
 import { User } from "@pockets/shared";
-import { ExtendedWebSocket } from "../../util/types";
 import { PersistenceClient } from "../repo/persistence/persistence-client";
-import { UserSocketRepo } from "../repo/user-socket.repo";
 
 class UserService {
   // use this client to make the calls to persistence layer

@@ -207,11 +207,6 @@ export const useSocket = () => {
     setMicrophoneMuted(false);
 
     console.log("sending audio-unmute message to the room...");
-    // sendWsMessage({
-    //   roomId,
-    //   userId,
-    //   type: "audio-unmute",
-    // } as AudioUnmuteMessage);
   };
 
   const updateVideoSendStateForPeers = async (toDisable: boolean) => {
@@ -263,14 +258,13 @@ export const useSocket = () => {
       };
 
       socket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        handleSignalingMessage(message);
+        handleSignalingMessage(JSON.parse(event.data));
       };
 
       socket.onclose = () => {
         setStatus("Disconnected from server");
         setIsConnected(false);
-        toast.error("Disconnected", {
+        toast.info("Disconnected", {
           description:
             "Disconnected from signaling server. Returning to home page.",
         });
@@ -296,6 +290,9 @@ export const useSocket = () => {
       };
     } catch (error) {
       console.error("Error registering WebSocket listeners:", error);
+      toast.error("Connection Error", {
+        description: "Failed to connect to signaling server",
+      });
     }
   };
 
@@ -437,6 +434,7 @@ export const useSocket = () => {
             description: `${
               message.hostName ?? "Host"
             } declined your request to join.`,
+            duration: 5000,
           });
           console.log("cleanup being called after join request rejection...");
           cleanUp();
@@ -458,6 +456,7 @@ export const useSocket = () => {
         if (userType === UserType.GUEST) {
           toast.error("Room Closed", {
             description: "The host ended this room. Returning to the lobby...",
+            duration: 5000,
           });
           setStatus("Host ended the room");
           console.log("cleanup being called after host closed room...");
