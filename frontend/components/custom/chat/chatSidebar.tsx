@@ -18,8 +18,8 @@ const ChatSidebar = ({
     <div
       className={cn(
         !showChat && "hidden",
-        "bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-slate-200 dark:border-white/10 transition-all duration-300 sm:border-l sm:border-t-0 sm:border-b-0 sm:border-r-0",
-        "rounded-2xl sm:rounded-none shadow-xl sm:shadow-none mt-4 sm:mt-0 w-full max-h-full sm:max-h-none overflow-hidden sm:overflow-auto sm:w-80 opacity-100 pointer-events-auto"
+        "bg-white/90 dark:bg-stone-900/90 backdrop-blur-xl border border-stone-200/50 dark:border-stone-700/50 transition-all duration-300 sm:border-l sm:border-t-0 sm:border-b-0 sm:border-r-0",
+        "rounded-3xl sm:rounded-none shadow-xl sm:shadow-none mt-4 sm:mt-0 w-full max-h-full sm:max-h-none overflow-hidden sm:overflow-auto sm:w-80 opacity-100 pointer-events-auto"
       )}
     >
       <ChatComponent

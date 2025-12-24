@@ -2,12 +2,16 @@
   "name": "pockets-signaling-server",
   "version": "1.0.0",
   "description": "WebSocket signaling server for Pockets WebRTC app",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "dev": "tsx watch index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "build": "node esbuild.config.mjs",
+    "build:watch": "node esbuild.config.mjs --watch",
+    "build:tsc": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "start": "NODE_ENV=production node dist/index.js",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@pockets/shared": "workspace:*",
@@ -20,6 +24,7 @@
     "@types/uuid": "^10.0.0",
     "@types/webrtc": "^0.0.46",
     "@types/ws": "^8.5.13",
+    "esbuild": "^0.24.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }

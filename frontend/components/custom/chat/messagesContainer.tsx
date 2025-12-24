@@ -122,7 +122,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
   return (
     <div
       ref={chatContainerRef}
-      className="flex-1 overflow-y-auto p-4 space-y-3 bg-white/60 dark:bg-transparent"
+      className="flex-1 overflow-y-auto p-4 space-y-3 bg-stone-50/60 dark:bg-stone-900/40"
     >
       <AnimatePresence initial={false}>
         {chatMessages.map((msg) => {
@@ -150,8 +150,8 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                 className={cn(
                   "max-w-[85%] rounded-2xl px-4 py-2 shadow-sm",
                   isOwnMessage
-                    ? "bg-[#635bff] text-white rounded-br-sm"
-                    : "bg-gray-100 text-slate-800 dark:bg-gray-800 dark:text-gray-100 rounded-bl-sm"
+                    ? "bg-amber-500 text-white rounded-br-sm"
+                    : "bg-stone-100 text-stone-800 dark:bg-stone-800 dark:text-stone-100 rounded-bl-sm"
                 )}
               >
                 <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
@@ -198,7 +198,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                             state === AttachmentState.REMOTE && isDownloading
                           }
                           className={cn(
-                            "w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+                            "w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
                             state === AttachmentState.REMOTE &&
                               isDownloading &&
                               "cursor-not-allowed opacity-80"

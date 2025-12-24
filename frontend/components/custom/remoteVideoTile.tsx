@@ -61,15 +61,15 @@ const RemoteVideoTile = ({
 
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden border border-slate-200/60 bg-black/60 shadow-xl transition-all duration-200 dark:border-white/10 ${
+      className={`relative rounded-2xl overflow-hidden border border-stone-200/50 bg-stone-900/60 shadow-xl transition-all duration-200 dark:border-stone-700/50 ${
         isSpeaking
-          ? "ring-2 ring-cyan-300 drop-shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+          ? "ring-2 ring-amber-400 drop-shadow-[0_0_18px_rgba(251,191,36,0.35)]"
           : ""
       }`}
       style={
         isSpeaking
           ? {
-              boxShadow: `0 0 ${18 + normalizedLevel * 20}px rgba(59,130,246,${
+              boxShadow: `0 0 ${18 + normalizedLevel * 20}px rgba(251,191,36,${
                 0.2 + normalizedLevel * 0.4
               })`,
             }
@@ -85,16 +85,16 @@ const RemoteVideoTile = ({
         }`}
       />
       <audio ref={audioRef} autoPlay className="hidden" />
-      <div className="absolute bottom-3 left-3 rounded-full bg-[#1c0f3f]/80 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur">
+      <div className="absolute bottom-3 left-3 rounded-full bg-stone-900/80 dark:bg-stone-800/90 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
         {displayName}
       </div>
       {isHost && (
         <div className="absolute bottom-3 right-3 group">
-          <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
+          <div className="flex items-center gap-1 rounded-full bg-linear-to-r from-amber-400 via-orange-500 to-rose-500 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
             <Crown className="w-3 h-3" />
             Host
           </div>
-          <div className="pointer-events-none absolute -top-12 right-0 w-32 rounded-md bg-black/80 px-2 py-1 text-[10px] text-center text-white opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+          <div className="pointer-events-none absolute -top-12 right-0 w-32 rounded-xl bg-stone-900/90 dark:bg-stone-800/90 px-2 py-1 text-[10px] text-center text-white opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
             This participant controls the room
           </div>
         </div>
@@ -104,8 +104,8 @@ const RemoteVideoTile = ({
           audioEnabled ? "opacity-100" : "opacity-30"
         }`}
         style={{
-          backgroundColor: isSpeaking ? "rgba(16,185,129,0.9)" : "rgba(0,0,0,0.45)",
-          color: isSpeaking ? "#062c1d" : undefined,
+          backgroundColor: isSpeaking ? "rgba(251,191,36,0.9)" : "rgba(0,0,0,0.45)",
+          color: isSpeaking ? "#451a03" : undefined,
         }}
       >
         <span
@@ -123,13 +123,13 @@ const RemoteVideoTile = ({
         {isSpeaking ? "Speaking" : "Live"}
       </div>
       {!videoEnabled && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 text-white">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-800/80 text-white">
           <VideoOff className="w-10 h-10" />
           <span className="text-sm font-semibold">Video unavailable</span>
         </div>
       )}
       {!audioEnabled && (
-        <div className="absolute top-3 right-3 rounded-full bg-black/70 p-2 text-white">
+        <div className="absolute top-3 right-3 rounded-full bg-stone-900/80 p-2 text-white">
           <MicOff className="w-4 h-4" />
         </div>
       )}

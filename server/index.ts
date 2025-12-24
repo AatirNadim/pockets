@@ -1,8 +1,6 @@
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
-import { ExtendedWebSocket } from "./util/types";
-import { PORT } from "./util/constants";
 import { SocketService } from "./src/services/socket.service";
 import { createPersistenceClient } from "./src/repo/persistence/create-persistence";
 import { WebSocketMessage } from "@pockets/shared";
@@ -54,6 +52,8 @@ wss.on("connection", (ws: WebSocket) => {
   console.debug("New client connected");
   registerSocketEventListeners(ws);
 });
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Signaling server (HTTP + WS) running on port ${PORT}`);

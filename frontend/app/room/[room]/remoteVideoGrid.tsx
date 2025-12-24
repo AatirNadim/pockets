@@ -17,7 +17,7 @@ const RemoteVideoGrid = () => {
   const remoteStreamEntries = Object.entries(mediaStreams);
 
   return (
-    <div className="flex-1 relative bg-white rounded-lg m-4 overflow-hidden shadow-2xl border border-slate-200 dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 dark:border-white/10">
+    <div className="flex-1 relative bg-white/60 dark:bg-stone-900/60 rounded-3xl m-4 overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm">
       {remoteStreamEntries.length ? (
         <div className="absolute inset-0 p-4 overflow-auto">
           <div
@@ -51,14 +51,14 @@ const RemoteVideoGrid = () => {
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center space-y-4">
-            <div className="w-24 h-24 bg-gradient-to-r from-[#635bff] to-[#00d4ff] rounded-full flex items-center justify-center mx-auto">
+            <div className="w-24 h-24 bg-linear-to-br from-amber-400 via-orange-500 to-rose-500 rounded-3xl flex items-center justify-center mx-auto shadow-lg">
               <Users className="w-12 h-12 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-slate-700 dark:text-gray-300">
+              <h2 className="text-xl font-semibold text-stone-700 dark:text-stone-300">
                 Waiting for others...
               </h2>
-              <p className="text-sm text-slate-500 dark:text-gray-500 mt-1">
+              <p className="text-sm text-stone-500 dark:text-stone-500 mt-1">
                 Share the room ID to invite participants
               </p>
             </div>

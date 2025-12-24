@@ -132,7 +132,10 @@ export default function Room() {
   }, [router]);
 
   return (
-    <div className="relative flex h-screen max-h-screen w-screen flex-col bg-gradient-to-br from-white via-indigo-50 to-purple-100 text-slate-900 dark:from-gray-900 dark:via-gray-900 dark:to-black dark:text-white">
+    <div className="relative flex h-screen max-h-screen w-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+      {/* Subtle ambient gradient */}
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-amber-50/30 via-transparent to-rose-50/20 dark:from-amber-900/10 dark:via-transparent dark:to-rose-900/5" />
+      
       {/* Header */}
       <Header roomId={roomId} />
 
@@ -174,7 +177,7 @@ export default function Room() {
         <div
           className={cn([
             "fixed right-6 bottom-40 md:bottom-65 z-40 flex w-80 flex-col gap-3 overflow-auto max-h-[40vh] p-2 md:p-4",
-            "border border-slate-200/60 bg-black/60 shadow-xl transition-all duration-200 dark:border-white/10 rounded-2xl",
+            "glass-strong rounded-3xl",
           ])}
         >
           <div className="flex flex-col gap-3">

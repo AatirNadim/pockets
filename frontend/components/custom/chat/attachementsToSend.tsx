@@ -18,7 +18,7 @@ const AttachementsToSend = ({
       {filesToBeSent.map((entry) => (
         <div
           key={entry.id}
-          className="flex items-center gap-2 rounded-full bg-slate-200/70 px-3 py-1 text-xs text-slate-700 dark:bg-white/10 dark:text-gray-200"
+          className="flex items-center gap-2 rounded-xl bg-stone-100/80 px-3 py-1 text-xs text-stone-700 dark:bg-stone-800 dark:text-stone-200"
         >
           <div className="max-w-[140px] truncate font-medium">
             {entry.file.name}
@@ -29,7 +29,7 @@ const AttachementsToSend = ({
           <button
             type="button"
             onClick={() => handleRemoveQueuedFile(entry.id)}
-            className="rounded-full bg-white/50 p-1 text-slate-600 transition hover:bg-white hover:text-slate-900 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20"
+            className="rounded-full bg-white/50 p-1 text-stone-600 transition hover:bg-white hover:text-stone-900 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600"
             aria-label="Remove file"
           >
             <X className="h-3 w-3" />

@@ -16,18 +16,18 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
       {requests.map((request) => (
         <div
           key={request.guestId}
-          className="rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-xl backdrop-blur dark:border-white/10 dark:bg-gray-900/90"
+          className="rounded-2xl border border-stone-200/50 bg-white/95 p-4 shadow-lg backdrop-blur-xl dark:border-stone-700/50 dark:bg-stone-900/90"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                 {request.guestName}
               </p>
-              <p className="text-xs text-slate-500 dark:text-gray-400">
+              <p className="text-xs text-stone-500 dark:text-stone-400">
                 wants to join this room
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-gray-300">
+            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:bg-stone-800 dark:text-stone-300">
               Guest
             </span>
           </div>
@@ -35,7 +35,7 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
           <div className="mt-4 flex gap-2">
             <Button
               size="sm"
-              className="flex-1 bg-[#635bff] text-white hover:bg-[#4f48ca]"
+              className="flex-1 bg-amber-500 text-white hover:bg-amber-600 rounded-xl"
               onClick={() => respondToJoinRequest(request.guestId, "accept")}
             >
               Accept
@@ -43,7 +43,7 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
             <Button
               size="sm"
               variant="secondary"
-              className="flex-1 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20"
+              className="flex-1 bg-stone-100 text-stone-700 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700 rounded-xl"
               onClick={() => respondToJoinRequest(request.guestId, "reject")}
             >
               Reject

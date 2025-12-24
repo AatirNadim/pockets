@@ -1,5 +1,5 @@
 import { User } from "@pockets/shared";
-import { PersistenceClient } from "../repo/persistence/persistence-client";
+import { PersistenceClient } from "../repo/persistence/persistence-client.ts";
 
 class UserService {
   // use this client to make the calls to persistence layer
