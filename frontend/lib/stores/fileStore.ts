@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 
-import type { FileAttachment } from "../types";
+import type { FileAttachment } from "@pockets/shared";
 import { MAX_QUEUED_FILES } from "../constants";
 
 export type QueuedFile = {

@@ -57,10 +57,10 @@ const DeviceDropdown = ({
           variant="ghost"
           size="lg"
           className={cn(
-            "min-w-[160px] justify-between rounded-full px-4 text-sm font-medium",
+            "min-w-40 justify-between rounded-2xl px-4 text-sm font-medium",
             isDisabled
-              ? "cursor-not-allowed bg-slate-200 text-slate-500 opacity-50 dark:bg-white/5 dark:text-gray-500"
-              : "bg-slate-200 text-slate-700 hover:bg-slate-300 hover:text-slate-900 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20 dark:hover:text-white"
+              ? "cursor-not-allowed bg-stone-200 text-stone-500 opacity-50 dark:bg-stone-800 dark:text-stone-500"
+              : "bg-stone-100 text-stone-700 hover:bg-stone-200 hover:text-stone-900 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-white"
           )}
           disabled={isDisabled}
         >
@@ -85,9 +85,9 @@ const DeviceDropdown = ({
         align="center"
         side="top"
         sideOffset={12}
-        className="w-64"
+        className="w-64 rounded-2xl border-stone-200/50 dark:border-stone-700/50 bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl"
       >
-        <DropdownMenuLabel className="text-xs tracking-wide uppercase">
+        <DropdownMenuLabel className="text-xs tracking-wide uppercase text-stone-500 dark:text-stone-400">
           {label}
         </DropdownMenuLabel>
         <div className="max-h-56 overflow-y-auto">
@@ -99,8 +99,8 @@ const DeviceDropdown = ({
                   handleSelect(device.deviceId);
                 }}
                 className={cn(
-                  "flex items-center justify-between gap-3",
-                  selectedId === device.deviceId && "text-[#635bff]"
+                  "flex items-center justify-between gap-3 rounded-xl",
+                  selectedId === device.deviceId && "text-amber-600 dark:text-amber-400"
                 )}
               >
                 <span className="truncate text-sm">{device.label}</span>
@@ -110,7 +110,7 @@ const DeviceDropdown = ({
               </DropdownMenuItem>
             ))
           ) : (
-            <div className="px-2 py-3 text-sm text-slate-500 dark:text-gray-400">
+            <div className="px-2 py-3 text-sm text-stone-500 dark:text-stone-400">
               No devices detected
             </div>
           )}
@@ -148,7 +148,7 @@ const MediaControl = ({
   const { showChat, toggleShowChat } = useChatStore();
 
   return (
-    <div className="w-full bg-white/80 text-slate-700 backdrop-blur-md border-t border-slate-200 dark:bg-black/40 dark:text-white dark:border-white/10">
+    <div className="w-full glass border-t border-stone-200/50 dark:border-stone-700/50">
       <div className="flex flex-wrap items-center justify-center gap-4 p-6">
         <Button
           onClick={() => {
@@ -158,10 +158,10 @@ const MediaControl = ({
           }}
           variant="ghost"
           size="lg"
-          className={`w-12 h-12 rounded-full transition-all duration-200 ${
+          className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isMicrophoneMuted
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
+              ? "bg-rose-500 hover:bg-rose-600 text-white"
+              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
           }`}
         >
           {isMicrophoneMuted ? (
@@ -179,10 +179,10 @@ const MediaControl = ({
           }}
           variant="ghost"
           size="lg"
-          className={`w-12 h-12 rounded-full transition-all duration-200 ${
+          className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isVideoOff
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
+              ? "bg-rose-500 hover:bg-rose-600 text-white"
+              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
           }`}
         >
           {isVideoOff ? (
@@ -196,10 +196,10 @@ const MediaControl = ({
           onClick={toggleSpeakerOff}
           variant="ghost"
           size="lg"
-          className={`w-12 h-12 rounded-full transition-all duration-200 ${
+          className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isSpeakerOff
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
+              ? "bg-rose-500 hover:bg-rose-600 text-white"
+              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
           }`}
         >
           {isSpeakerOff ? (
@@ -229,10 +229,10 @@ const MediaControl = ({
           onClick={toggleShowChat}
           variant="ghost"
           size="lg"
-          className={`w-12 h-12 rounded-full transition-all duration-200 ${
+          className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             showChat
-              ? "bg-[#635bff] hover:bg-[#544dc9] text-white"
-              : "bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
+              ? "bg-amber-500 hover:bg-amber-600 text-white"
+              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
           }`}
         >
           <MessageSquare className="w-5 h-5" />
@@ -241,18 +241,18 @@ const MediaControl = ({
         <Button
           variant="ghost"
           size="lg"
-          className="w-12 h-12 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 transition-all duration-200 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-300 dark:hover:text-white"
+          className="w-12 h-12 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 transition-all duration-200 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
         >
           <Settings className="w-5 h-5" />
         </Button>
 
-        <div className="w-px h-8 bg-slate-300 dark:bg-white/20 mx-2"></div>
+        <div className="w-px h-8 bg-stone-300 dark:bg-stone-600 mx-2"></div>
 
         <Button
           onClick={onLeave}
           variant="ghost"
           size="lg"
-          className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 transform hover:scale-105"
+          className="w-12 h-12 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white transition-all duration-200 transform hover:scale-105"
         >
           <PhoneOff className="w-5 h-5" />
         </Button>

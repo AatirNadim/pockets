@@ -1,6 +1,4 @@
-import { useFileStore } from "@/lib/stores/fileStore";
-import { Download } from "lucide-react";
-import React, { useEffect, useRef } from "react";
+import React from "react";
 
 type DownloadIndicatorProps = {
   radius: number;

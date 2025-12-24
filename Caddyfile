@@ -1,8 +1,8 @@
-10.26.174.254 {
+lucious.local {
   reverse_proxy localhost:3000
 }
 
 
-10.26.174.254:8443 {
+lucious.local:8443 {
   reverse_proxy localhost:8080
 }

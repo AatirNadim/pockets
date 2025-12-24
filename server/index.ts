@@ -1,19 +1,25 @@
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
-import { WebSocketMessage, ExtendedWebSocket } from "./util/types";
-import { PORT } from "./util/constants";
-import { SocketService } from "./services/socket.service";
+import { SocketService } from "./src/services/socket.service";
+import { createPersistenceClient } from "./src/repo/persistence/create-persistence";
+import { WebSocketMessage } from "@pockets/shared";
+import dotenv from "dotenv";
 
-const socketService = new SocketService();
+dotenv.config(
+  process.env.NODE_ENV !== "production" ? { path: ".env.local" } : undefined
+);
 
-const registerSocketEventListeners = (ws: ExtendedWebSocket) => {
-  ws.onmessage = (event) => {
+const persistence = await createPersistenceClient();
+const socketService = new SocketService(persistence);
+
+const registerSocketEventListeners = (ws: WebSocket) => {
+  ws.onmessage = async (event) => {
     console.debug("Received message");
     try {
       const message = JSON.parse(event.data.toString());
       console.info("Parsed message:", message);
-      socketService.handleMessage(ws, message as WebSocketMessage);
+      await socketService.handleMessage(ws, message as WebSocketMessage);
     } catch (error) {
       console.error("Error parsing message:", error);
     }
@@ -41,16 +47,17 @@ const httpServer = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer });
 
-wss.on("connection", (ws: ExtendedWebSocket) => {
+wss.on("connection", (ws: WebSocket) => {
   console.debug("New client connected");
   registerSocketEventListeners(ws);
 });
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Signaling server (HTTP + WS) running on port ${PORT}`);
   console.log(`   • Health check: http://localhost:${PORT}/health`);
 });
-
 
 const gracefulShutdown = () => {
   console.log("Server shutting down gracefully...");

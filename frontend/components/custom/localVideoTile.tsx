@@ -21,16 +21,16 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
 
   return (
     <div
-      className={`absolute bottom-24 right-8 bg-white rounded-lg overflow-hidden shadow-xl border-2 border-white/70 dark:bg-gradient-to-br dark:from-gray-700 dark:to-gray-800 dark:border-white/20 transition-all duration-300 ${
+      className={`absolute bottom-24 right-8 bg-white/80 dark:bg-stone-900/80 rounded-2xl overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm transition-all duration-300 ${
         isMinimized ? "w-16 h-12" : "w-48 h-36"
       }`}
     >
       {isHost && !isMinimized && (
         <div className="absolute top-2 left-2 z-10 group">
-          <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
+          <div className="flex items-center gap-1 rounded-full bg-linear-to-r from-amber-400 via-orange-500 to-rose-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
             <Crown className="w-3 h-3" />
           </div>
-          <div className="pointer-events-none absolute -bottom-12 left-0 w-36 rounded-md bg-black/80 px-2 py-1 text-[10px] text-center text-white opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+          <div className="pointer-events-none absolute -bottom-12 left-0 w-36 rounded-xl bg-stone-900/90 dark:bg-stone-800/90 px-2 py-1 text-[10px] text-center text-white opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
             This participant controls the room
           </div>
         </div>
@@ -43,14 +43,14 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         className="w-full h-full object-cover"
       />
       {!isMinimized && (
-        <div className="absolute bottom-3 left-3 rounded-full bg-[#1c0f3f]/80 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur">
+        <div className="absolute bottom-3 left-3 rounded-full bg-stone-900/80 dark:bg-stone-800/90 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
           {localDisplayName}
         </div>
       )}
       {isVideoOff && (
-        <div className="absolute inset-0 bg-slate-200 dark:bg-gray-800 flex items-center justify-center">
+        <div className="absolute inset-0 bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
           <VideoOff
-            className={`text-slate-500 dark:text-gray-400 ${
+            className={`text-stone-500 dark:text-stone-400 ${
               isMinimized ? "w-4 h-4" : "w-8 h-8"
             }`}
           />
@@ -96,7 +96,7 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         onClick={() => setIsMinimized(!isMinimized)}
         variant="ghost"
         size="sm"
-        className="absolute top-2 right-2 w-6 h-6 p-0 bg-white/70 text-slate-700 hover:bg-white/90 dark:bg-black/50 dark:hover:bg-black/70 dark:text-white transition-colors"
+        className="absolute top-2 right-2 w-6 h-6 p-0 bg-white/80 text-stone-700 hover:bg-white dark:bg-stone-800/80 dark:hover:bg-stone-700 dark:text-white transition-colors rounded-lg"
       >
         {isMinimized ? (
           <Maximize2 className="w-3 h-3" />

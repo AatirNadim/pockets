@@ -9,7 +9,8 @@ export type User = {
 export type Room = {
   id: string;
   hostId: string;
-  users: User[];
+  guestIds: string[];
+  pendingGuestIds: string[];
 };
 export interface SignalingSessionDescription {
   type: "offer" | "answer" | "pranswer" | "rollback";
