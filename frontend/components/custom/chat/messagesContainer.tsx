@@ -160,7 +160,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                     userId || ""
                   )}
                 </div>
-                <div className="text-sm break-words whitespace-pre-wrap">
+                <div className="text-sm wrap-break-word whitespace-pre-wrap">
                   {msg.message}
                 </div>
                 {msg.attachments?.length ? (

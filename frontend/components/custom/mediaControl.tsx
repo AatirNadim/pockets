@@ -57,7 +57,7 @@ const DeviceDropdown = ({
           variant="ghost"
           size="lg"
           className={cn(
-            "min-w-[160px] justify-between rounded-2xl px-4 text-sm font-medium",
+            "min-w-40 justify-between rounded-2xl px-4 text-sm font-medium",
             isDisabled
               ? "cursor-not-allowed bg-stone-200 text-stone-500 opacity-50 dark:bg-stone-800 dark:text-stone-500"
               : "bg-stone-100 text-stone-700 hover:bg-stone-200 hover:text-stone-900 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-white"

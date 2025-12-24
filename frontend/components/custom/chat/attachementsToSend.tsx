@@ -20,7 +20,7 @@ const AttachementsToSend = ({
           key={entry.id}
           className="flex items-center gap-2 rounded-xl bg-stone-100/80 px-3 py-1 text-xs text-stone-700 dark:bg-stone-800 dark:text-stone-200"
         >
-          <div className="max-w-[140px] truncate font-medium">
+          <div className="`max-w-35 truncate font-medium">
             {entry.file.name}
           </div>
           <span className="text-[10px] uppercase tracking-wide opacity-70">

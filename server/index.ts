@@ -6,10 +6,9 @@ import { createPersistenceClient } from "./src/repo/persistence/create-persisten
 import { WebSocketMessage } from "@pockets/shared";
 import dotenv from "dotenv";
 
-dotenv.config({
-  path:
-    process.env.NODE_ENV === "production" ? ".env.production" : ".env.local",
-});
+dotenv.config(
+  process.env.NODE_ENV !== "production" ? { path: ".env.local" } : undefined
+);
 
 const persistence = await createPersistenceClient();
 const socketService = new SocketService(persistence);
