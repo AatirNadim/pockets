@@ -16,8 +16,9 @@ This README captures **what is being built**, **why specific subsystems exist**,
 ## System Architecture
 
 - **Frontend** – Next.js 15 App Router, React 19, Tailwind, Radix UI, Zustand stores, and Framer Motion finishings. The entire RTC lifecycle (media capture, peer negotiation, chat/file data channels, join-request UX) happens here.
-- **Signaling Server** – Minimal Node.js WebSocket service (`server/`) that enforces host/guest invariants, room capacity, and relays SDP/ICE payloads. No persistent DB is required for development.
-- **Shared Contract** – `shared/types.*` keep signaling envelopes, join-request payloads, and UserType enums in sync between client and server.
+- **Signaling Server** – Minimal Node.js WebSocket service (`server/`) that enforces host/guest invariants, room capacity, and relays SDP/ICE payloads. Optionally backed by **Redis** for room persistence across restarts.
+- **Shared Contract** – `shared/` package keeps signaling envelopes, join-request payloads, and UserType enums in sync between client and server.
+- **Monorepo** – pnpm workspaces manage three packages (`frontend`, `server`, `shared`) with shared dependencies and coordinated builds.
 
 ## Core Collaboration Features
 
@@ -74,6 +75,9 @@ This README captures **what is being built**, **why specific subsystems exist**,
 - **Tailwind + Shadcn + Framer Motion** for interactivity.
 - **Zustand** for persistent yet minimal state (user identity, media state, chat, files, join requests).
 - **Node.js WebSocket server** powered by `ws`, with graceful shutdown handlers.
+- **Redis** (optional) for room state persistence across server restarts.
+- **esbuild** for fast production builds of server and shared packages.
+- **pnpm workspaces** for monorepo package management.
 
 ## Repository Layout
 
@@ -85,23 +89,29 @@ pockets/
 │   ├── lib/
 │   │   ├── hooks/          # socketHook, fileHook, mediaHook
 │   │   ├── stores/         # Zustand stores for user/media/chat/file/join requests
-│   │   ├── constants.ts    # UserType, chunk sizes, channel limits
-│   │   └── types.ts        # Chat + file envelopes used by RTC channels
+│   │   └── utils/          # Audio level management utilities
 │   └── public/             # Static assets
 ├── server/
-│   ├── util/constants.ts   # PORT, MAX_USERS_PER_ROOM, enums shared with server
-│   ├── util/socket.ts      # Room registry, join request queue, signaling relays
+│   ├── src/
+│   │   ├── repo/           # User and socket repositories
+│   │   │   └── persistence/ # Redis and in-memory persistence layers
+│   │   └── services/       # Room, socket, user, and request queue services
+│   ├── util/               # Constants and types
+│   ├── docker-compose.yml  # Redis for local development
 │   └── index.ts            # WebSocket bootstrap + lifecycle hooks
 ├── shared/                 # Cross-runtime TypeScript definitions for signaling
-└── LOCAL_DEVELOPMENT.md    # LAN-focused setup guide (multi-device testing)
+├── Caddyfile               # Local HTTPS reverse proxy config (optional)
+├── pnpm-workspace.yaml     # Monorepo workspace configuration
+└── LOCAL_DEVELOPMENT.md    # Full local setup guide
 ```
 
 ## Running the Project Locally
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm (preferred) or npm
+- Node.js 20+
+- pnpm (`corepack enable pnpm`)
+- Docker (for Redis persistence)
 - Camera + microphone on each test device
 - Machines on the same LAN if you want multi-device realism (see `LOCAL_DEVELOPMENT.md`)
 
@@ -111,28 +121,30 @@ pockets/
 git clone https://github.com/AatirNadim/pockets.git
 cd pockets
 
-# Frontend deps
-cd frontend
+# Install all dependencies (monorepo-wide)
 pnpm install
 
-# Signaling server deps
-cd ../server
-pnpm install
+# Copy environment files
+cp server/.env.example server/.env.local
+cp frontend/.env.example frontend/.env.local
 ```
 
 ### Running
 
 ```bash
-# Terminal 1 – signaling server
-cd server
-pnpm dev
+# Optional: Start Redis for room persistence
+cd server && docker compose up -d && cd ..
 
-# Terminal 2 – Next.js over LAN (hostname already 0.0.0.0)
-cd ../frontend
-pnpm dev
+# Terminal 1 – signaling server (from project root)
+pnpm dev:server
+
+# Terminal 2 – Next.js frontend (from project root)
+pnpm dev:frontend
 ```
 
-Point every test device to `http://<host-ip>:3000` and make sure `NEXT_PUBLIC_SERVER_PATH` resolves to that same IP. A deeper LAN checklist (firewalls, AP isolation, port exposure) lives in [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md).
+The frontend runs on `http://localhost:3000` and the server on `http://localhost:8080`.
+
+Point every test device to `http://<host-ip>:3000` and make sure `NEXT_PUBLIC_SERVER_PATH` in `frontend/.env.local` resolves to that same IP. A deeper LAN checklist (firewalls, AP isolation, port exposure, Caddy HTTPS setup) lives in [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md).
 
 ## Testing Scenarios to Try
 

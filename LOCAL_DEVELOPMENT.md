@@ -1,87 +1,241 @@
-# Local Development Over LAN
+# Local Development Guide
 
-This guide walks through everything needed to run the Pockets frontend and signaling server so that **multiple machines on the same network** can join the same development room with full audio/video support.
+This guide covers setting up and running the Pockets application locally.
 
-## 1. Hardware & Software Requirements
-- **Host machine** that runs both the Next.js frontend (port `3000`) and the signaling server (port `8080` by default).
-- **At least one additional client device** (laptop, tablet, or phone) with a modern Chromium- or Firefox-based browser.
-- Working **camera, microphone, and speakers/headset** on each device.
-- **Node.js 18+** and **pnpm** installed on the host (clients only need a browser).
-- Stable **Wi‑Fi/LAN network**. Prefer 5 GHz Wi‑Fi or wired Ethernet for better media quality.
+## Project Structure
 
-## 2. Network Checklist
-1. **Same subnet:** All devices must be on the same Wi‑Fi or Ethernet network. Disable VPNs or corporate proxies that might reroute traffic.
-2. **Discover host IP:** On the host machine run `hostname -I | awk '{print $1}'` (Linux) or `ipconfig getifaddr <interface>` (macOS) to get an address like `192.168.1.42`.
-3. **Optional DHCP reservation:** Reserve the host IP on your router to prevent it from changing mid-session.
-4. **Router isolation:** Ensure "AP/Client Isolation" is disabled so devices can talk to each other.
+This is a **pnpm monorepo** with three packages:
 
-## 3. Firewall & Port Exposure
-Open the frontend (`3000`) and signaling server (`8080`) ports on the host operating system. Examples for Ubuntu:
+```
+pockets/
+├── frontend/          # Next.js 15 web application
+├── server/            # WebSocket signaling server
+├── shared/            # Shared types and constants
+├── Caddyfile          # Local HTTPS reverse proxy config
+├── pnpm-workspace.yaml
+└── package.json       # Root workspace scripts
+```
+
+## Prerequisites
+
+- **Node.js** v20+
+- **pnpm** (install via `corepack enable pnpm`)
+- **Docker** (for Redis persistence)
+- **Caddy** (optional, for HTTPS with mDNS hostname)
+
+## Quick Start
+
+### 1. Install Dependencies
+
+From the project root:
 
 ```bash
-sudo ufw allow 3000/tcp
-sudo ufw allow 8080/tcp
-sudo ufw reload
+pnpm install
 ```
 
-For `firewalld` (RHEL/Fedora):
+This installs dependencies for all packages (frontend, server, shared).
+
+### 2. Set Up Environment Files
+
+#### Server (`server/.env.local`)
 
 ```bash
-sudo firewall-cmd --add-port=3000/tcp --permanent
-sudo firewall-cmd --add-port=8080/tcp --permanent
-sudo firewall-cmd --reload
+SERVER_PORT=8080
+REDIS_URL=redis://localhost:6379
+ROOM_TTL_SECONDS=3600
 ```
 
-If another process already uses one of these ports, stop it or adjust the app/server configuration accordingly.
+#### Frontend (`frontend/.env.local`)
 
-## 4. Environment Configuration
-Create `frontend/.env.local` with the signaling endpoint that all clients (including remote machines) can reach:
-
-```env
-NEXT_PUBLIC_SERVER_PATH=192.168.1.42
-NEXT_PUBLIC_SERVER_PORT=8080
+```bash
+NEXT_PUBLIC_SERVER_PATH=localhost:8080
 ```
 
-Replace `192.168.1.42` with the host IP you collected earlier. Restart the Next.js dev server whenever `.env.local` changes.
+> **Note:** If using Caddy with mDNS (see below), update this to your mDNS hostname.
 
-## 5. Running the Signaling Server
+### 3. Start Redis (Optional)
+
+The server supports Redis for room persistence across restarts. Without Redis, it falls back to in-memory storage.
+
 ```bash
 cd server
-pnpm install   # first run only
-pnpm dev       # runs tsx watch index.ts (listens on 0.0.0.0:8080)
+docker compose up -d
 ```
 
-The server binds to `0.0.0.0`, so every LAN client can reach it at `ws://<host-ip>:8080`. Keep this terminal open.
+This starts Redis on port 6379 with data persistence via a Docker volume.
 
-## 6. Running the Next.js Frontend
+### 4. Start Development Servers
+
+From the project root, run both frontend and server:
+
 ```bash
-cd frontend
-pnpm install   # first run only
-pnpm dev       # script already uses: next dev --turbopack --hostname 0.0.0.0
+# Terminal 1 - Start the server (with hot reload)
+pnpm dev:server
+
+# Terminal 2 - Start the frontend
+pnpm dev:frontend
 ```
 
-Key points:
-- Binding to `0.0.0.0` lets the dev server accept traffic from other machines.
-- If you change the port (`NEXT_PUBLIC_PORT` or `--port`), update both the firewall rules and the URLs you share with testers.
-- Consider adding your host IP to `allowedDevOrigins` (if configured) in `next.config.ts` to allow React refresh over LAN.
+Or run them individually:
 
-## 7. Joining From Another Machine
-1. Make sure the additional device uses the **same LAN** and has a modern browser.
-2. Enter `http://<host-ip>:3000` in the browser (for example, `http://192.168.1.42:3000`).
-3. Allow camera and microphone permissions when prompted.
-4. Create or join a room. The browser will contact the signaling server at `ws://<host-ip>:8080`, so both ports must remain open.
+```bash
+# Server only
+cd server && pnpm dev
 
-## 8. Media Device Tips
-- Plug in or pair every camera/mic you plan to test before launching the browsers.
-- Close video-call apps (Zoom, Meet, FaceTime) so they do not lock the webcam.
-- Use headsets to avoid audio feedback when multiple devices are in the same room.
-- In Chrome/Edge, use `chrome://settings/content/camera` to verify the correct device is selected.
+# Frontend only
+cd frontend && pnpm dev
+```
 
-## 9. Troubleshooting Checklist
-- **Cannot reach the site:** Verify you can `ping <host-ip>` and run `ss -tlnp | grep 3000` on the host to confirm the dev server is listening.
-- **WebSocket fails:** Confirm `pnpm dev` is running inside `server/`, port `8080` is open, and `.env.local` points to the host IP.
-- **Mixed content errors:** If you access via `https://` but the dev server is `http://`, disable forced HTTPS (some corporate browsers enforce it).
-- **No media devices:** Clear browser permissions, reload the page, or test with `chrome://webrtc-internals` to inspect WebRTC negotiation.
-- **Different networks:** Guest Wi‑Fi networks often block peer-to-peer traffic. Move all devices to the same primary network.
+The frontend runs on `http://localhost:3000` and the server on `http://localhost:8080`.
 
-With these steps in place, every developer on the LAN can open the shared room URL, exchange media, and debug multi-device behaviour in real time.
+---
+
+## Caddy Reverse Proxy (Optional)
+
+For HTTPS access and testing with mDNS hostnames (useful for WebRTC and mobile testing on the same network):
+
+### Caddyfile Configuration
+
+The included `Caddyfile` is configured for an mDNS hostname. You'll need to update it for your machine:
+
+```caddyfile
+{
+    auto_https disable_redirects
+}
+
+# Replace 'yourhostname.local' with your machine's mDNS name
+yourhostname.local {
+    reverse_proxy localhost:3000
+}
+
+yourhostname.local:8443 {
+    reverse_proxy localhost:8080
+}
+```
+
+> **Finding your mDNS hostname:** On macOS/Linux, run `hostname` or check System Preferences. It's typically `yourmachinename.local`.
+
+### Running Caddy
+
+```bash
+caddy run --config Caddyfile
+```
+
+Then update `frontend/.env.local`:
+
+```bash
+NEXT_PUBLIC_SERVER_PATH=yourhostname.local:8443
+```
+
+---
+
+## Build Commands
+
+### Development
+
+```bash
+pnpm dev:frontend    # Start Next.js dev server with Turbopack
+pnpm dev:server      # Start server with tsx watch (hot reload)
+```
+
+### Production Build
+
+The server and shared packages use **esbuild** for production builds:
+
+```bash
+# Build all packages
+pnpm build
+
+# Or build individually
+cd shared && pnpm build    # Builds to shared/dist/
+cd server && pnpm build    # Builds to server/dist/
+cd frontend && pnpm build  # Next.js production build
+```
+
+### Running Production Server
+
+```bash
+cd server
+node dist/index.js
+```
+
+> **Note:** In production, environment variables should be set directly (not via .env.local files).
+
+---
+
+## Environment Variables Reference
+
+### Server
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SERVER_PORT` | Port for the WebSocket server | `8080` |
+| `REDIS_URL` | Redis connection URL for persistence | (optional, falls back to in-memory) |
+| `ROOM_TTL_SECONDS` | Time-to-live for rooms in seconds | `3600` |
+| `NODE_ENV` | Environment mode | `development` |
+
+### Frontend
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_SERVER_PATH` | Server hostname:port for WebSocket connection | `localhost:8080` |
+
+---
+
+## Docker Services
+
+### Redis (`server/docker-compose.yml`)
+
+```yaml
+services:
+  redis:
+    image: redis:8.4.0-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+```
+
+**Commands:**
+
+```bash
+cd server
+docker compose up -d      # Start Redis in background
+docker compose down       # Stop Redis
+docker compose logs -f    # View Redis logs
+```
+
+---
+
+## Troubleshooting
+
+### "Cannot find module" errors in server build
+
+The server uses esbuild to bundle all imports. If you see module resolution errors:
+
+1. Ensure you've built the shared package first: `cd shared && pnpm build`
+2. Rebuild the server: `cd server && pnpm build`
+
+### WebSocket connection fails
+
+1. Verify the server is running on the expected port
+2. Check `NEXT_PUBLIC_SERVER_PATH` matches your server address
+3. If using Caddy, ensure it's running and the hostname resolves
+
+### Redis connection errors
+
+The server gracefully falls back to in-memory storage if Redis is unavailable. To use Redis:
+
+1. Start Redis: `cd server && docker compose up -d`
+2. Verify it's running: `docker ps`
+3. Check the `REDIS_URL` in your `.env.local`
+
+---
+
+## Architecture Notes
+
+- **Signaling Server:** The server handles WebRTC signaling via WebSocket connections. It doesn't process media—peers connect directly for video/audio.
+- **Persistence:** Room state can be persisted to Redis, allowing rooms to survive server restarts. Without Redis, rooms are stored in memory.
+- **Shared Package:** Contains TypeScript types and constants shared between frontend and server.
