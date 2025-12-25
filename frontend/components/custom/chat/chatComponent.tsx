@@ -7,8 +7,21 @@ import { Button } from "../../ui/button";
 import { motion } from "framer-motion";
 import { formatBytes } from "@/lib/utils";
 import { useFileStore } from "@/lib/stores/fileStore";
-import AttachementsToSend from "./attachementsToSend";
-import MessagesContainer from "./messagesContainer";
+import dynamic from "next/dynamic";
+
+const MessagesContainer = dynamic(() => import("./messagesContainer"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
+
+const AttachementsToSend = dynamic(() => import("./attachementsToSend"), {
+  ssr: false,
+  loading: () => null,
+});
 
 const MotionButton = motion(Button);
 

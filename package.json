@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:frontend": "pnpm --filter pockets-ui dev",
     "dev:server": "pnpm --filter pockets-signaling-server dev",
     "build:shared": "pnpm --filter @pockets/shared build",
     "build:server": "pnpm --filter @pockets/shared build && pnpm --filter pockets-signaling-server build",
-    "build:frontend": "pnpm --filter @pockets/shared build && pnpm --filter frontend build",
+    "build:frontend": "pnpm --filter @pockets/shared build && pnpm --filter pockets-ui build",
     "start:server": "pnpm --filter pockets-signaling-server start",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r clean"

@@ -1,7 +1,16 @@
 import { cn } from "@/lib/utils";
 import React from "react";
-import ChatComponent from "./chatComponent";
 import { useChatStore } from "@/lib/stores/chatStore";
+import dynamic from "next/dynamic";
+
+const ChatComponent = dynamic(() => import("./chatComponent"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
 
 type ChatSidebarProps = {
   sendChatMessage: (message: string) => boolean;

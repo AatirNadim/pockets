@@ -1,11 +1,11 @@
 {
-  "name": "pockets",
+  "name": "pockets-ui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack --hostname 0.0.0.0",
-    "build": "next build",
+    "build": "rm -rf .next && next build",
     "start": "next start",
     "lint": "next lint"
   },

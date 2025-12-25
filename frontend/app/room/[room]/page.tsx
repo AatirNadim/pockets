@@ -5,7 +5,6 @@ import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-import MediaControl from "@/components/custom/mediaControl";
 import { useMediaStore } from "@/lib/stores/mediaStore";
 import { useVoiceActivityStore } from "@/lib/stores/voiceActivityStore";
 import { useSocket } from "@/lib/hooks/socketHook";
@@ -13,12 +12,37 @@ import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
 import { UserType } from "@/lib/constants";
 import { cn, isValidUUID } from "@/lib/utils";
-import LocalVideoTile from "@/components/custom/localVideoTile";
-import JoinRequestList from "@/components/custom/joinRequestList";
-import Header from "./header";
-import RemoteVideoGrid from "./remoteVideoGrid";
-import ChatSidebar from "@/components/custom/chat/chatSidebar";
-import RoomIdDisplay from "@/components/custom/roomIdDisplay";
+import dynamic from "next/dynamic";
+
+const Header = dynamic(() => import("./header"), { ssr: false });
+
+const MediaControl = dynamic(() => import("@/components/custom/mediaControl"), {
+  ssr: false,
+});
+
+const LocalVideoTile = dynamic(
+  () => import("@/components/custom/localVideoTile"),
+  { ssr: false }
+);
+
+const RemoteVideoGrid = dynamic(() => import("./remoteVideoGrid"), {
+  ssr: false,
+});
+
+const ChatSidebar = dynamic(
+  () => import("@/components/custom/chat/chatSidebar"),
+  { ssr: false }
+);
+
+const JoinRequestList = dynamic(
+  () => import("@/components/custom/joinRequestList"),
+  { ssr: false }
+);
+
+const RoomIdDisplay = dynamic(
+  () => import("@/components/custom/roomIdDisplay"),
+  { ssr: false }
+);
 
 export default function Room() {
   const {
@@ -135,7 +159,7 @@ export default function Room() {
     <div className="relative flex h-screen max-h-screen w-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       {/* Subtle ambient gradient */}
       <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-amber-50/30 via-transparent to-rose-50/20 dark:from-amber-900/10 dark:via-transparent dark:to-rose-900/5" />
-      
+
       {/* Header */}
       <Header roomId={roomId} />
 

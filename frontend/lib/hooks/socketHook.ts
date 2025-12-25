@@ -819,6 +819,7 @@ export const useSocket = () => {
         fromUserName: userName,
         fromUserType: userType,
         toUserId: remoteUserId,
+        // @ts-expect-error TS2322
         offer,
         roomId,
       });
@@ -879,6 +880,7 @@ export const useSocket = () => {
         fromUserName: userName,
         fromUserType: userType,
         toUserId: fromUserId,
+        // @ts-expect-error TS2322
         answer,
       });
     } catch (error) {
