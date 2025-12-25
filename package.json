@@ -9,6 +9,7 @@
     "build:server": "pnpm --filter @pockets/shared build && pnpm --filter pockets-signaling-server build",
     "build:frontend": "pnpm --filter @pockets/shared build && pnpm --filter pockets-ui build",
     "start:server": "pnpm --filter pockets-signaling-server start",
+    "start:frontend": "pnpm --filter pockets-ui start",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r clean"
   }
