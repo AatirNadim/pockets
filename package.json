@@ -12,5 +12,8 @@
     "start:frontend": "pnpm --filter pockets-ui start",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "next": "15.4.2"
   }
 }
