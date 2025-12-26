@@ -250,6 +250,7 @@ export const useSocket = () => {
         socket.send(JSON.stringify(msg));
 
         console.debug("WebSocket connection established");
+        console.log("setting the header status for usertype:", userType);
         setStatus(
           userType === UserType.GUEST
             ? "Waiting for host approval..."

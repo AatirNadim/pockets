@@ -76,10 +76,7 @@ export class SocketService {
     try {
       switch (message.type) {
         case "join-room":
-          console.log(
-            "received message to join the room, websocket details --> ",
-            ws
-          );
+          console.log("received message to join the room --> ", message);
           await this.joinRoom(ws, message);
           break;
         case "leave-room":

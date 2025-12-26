@@ -2,19 +2,24 @@
 
 import { ThemeToggle } from "@/components/custom/themeToggle";
 import { Button } from "@/components/ui/button";
-import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
 import { Copy, Sparkles, Users } from "lucide-react";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 type HeaderProps = {
   roomId: string;
+  status: string;
+  isConnected: boolean;
+  isRoomFull: boolean;
 };
 
-const Header = ({ roomId }: HeaderProps) => {
+const Header = ({ roomId, status, isConnected, isRoomFull }: HeaderProps) => {
   const [roomCopied, setRoomCopied] = useState(false);
-  const { status, isConnected, isRoomFull } = useSocket();
   const { remoteUsers } = useUserStore();
+
+  useEffect(() => {
+    console.log("Header status changed:", status);
+  }, [status]);
 
   const copyRoomId = useCallback(async () => {
     try {
@@ -40,9 +45,7 @@ const Header = ({ roomId }: HeaderProps) => {
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gradient-warm">
-              Pockets
-            </h1>
+            <h1 className="text-lg font-bold text-gradient-warm">Pockets</h1>
             <div className="flex items-center space-x-2 text-xs text-stone-500 dark:text-stone-400">
               <div
                 className={`w-2 h-2 rounded-full ${connectionIndicatorClass}`}

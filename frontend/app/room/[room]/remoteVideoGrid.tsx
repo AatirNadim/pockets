@@ -7,12 +7,11 @@ import { Users } from "lucide-react";
 import React from "react";
 
 const RemoteVideoGrid = () => {
-  
   const { mediaStreams, remoteTrackState } = useMediaStore();
 
   const { levels: voiceLevels } = useVoiceActivityStore();
 
-  const { remoteUsers } = useUserStore();
+  const { userType, remoteUsers } = useUserStore();
 
   const remoteStreamEntries = Object.entries(mediaStreams);
 
@@ -56,7 +55,9 @@ const RemoteVideoGrid = () => {
             </div>
             <div>
               <h2 className="text-xl font-semibold text-stone-700 dark:text-stone-300">
-                Waiting for others...
+                {userType === UserType.GUEST
+                  ? "Waiting to be admitted..."
+                  : "Waiting for others to join..."}
               </h2>
               <p className="text-sm text-stone-500 dark:text-stone-500 mt-1">
                 Share the room ID to invite participants

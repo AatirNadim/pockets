@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactStrictMode: false,
+  allowedDevOrigins: [
+    "lucious.local", // for testing on local network (set according to the caddyfile)
+    "https://lucious.local", // for testing on local network (set according to the caddyfile)
+    "http://lucious.local",
+    "http://localhost:3000",
+  ],
   experimental: {
     optimizePackageImports: [
       "lucide-react",
@@ -19,12 +25,6 @@ const nextConfig: NextConfig = {
             exclude: ["error", "warn"],
           }
         : false,
-  },
-
-  modularizeImports: {
-    "lucide-react": {
-      transform: "lucide-react/dist/esm/icons/{{kebabCase member}}",
-    },
   },
 };
 

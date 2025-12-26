@@ -59,6 +59,9 @@ export default function Room() {
   const roomId = params.room as string;
 
   const {
+    status,
+    isConnected,
+    isRoomFull,
     localVideoRef,
     connectToRoom,
     cleanUp,
@@ -161,7 +164,12 @@ export default function Room() {
       <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-amber-50/30 via-transparent to-rose-50/20 dark:from-amber-900/10 dark:via-transparent dark:to-rose-900/5" />
 
       {/* Header */}
-      <Header roomId={roomId} />
+      <Header
+        roomId={roomId}
+        status={status}
+        isConnected={isConnected}
+        isRoomFull={isRoomFull}
+      />
 
       {/* Main Content */}
       <div className="w-full flex flex-col sm:flex-row h-[calc(100vh-5rem)] ">
