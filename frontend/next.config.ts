@@ -5,8 +5,6 @@ const nextConfig: NextConfig = {
   reactStrictMode: false,
   allowedDevOrigins: [
     "lucious.local", // for testing on local network (set according to the caddyfile)
-    "https://lucious.local", // for testing on local network (set according to the caddyfile)
-    "http://lucious.local",
     "http://localhost:3000",
   ],
   experimental: {
