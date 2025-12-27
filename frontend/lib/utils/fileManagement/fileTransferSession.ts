@@ -14,14 +14,14 @@ import type {
 /** Timeout for sender to close channel if receiver hasn't closed it */
 const SENDER_CLEANUP_TIMEOUT_MS = 15000; // 15 seconds
 
-export type TransferSessionProgress = {
+type TransferSessionProgress = {
   sentBytes: number;
   totalBytes: number;
   /** Percentage 0-100 */
   percentage: number;
 };
 
-export type TransferSessionCallbacks = {
+type TransferSessionCallbacks = {
   onProgress?: (progress: TransferSessionProgress) => void;
   onStatusChange?: (status: TransferSessionStatus) => void;
   onComplete?: () => void;
