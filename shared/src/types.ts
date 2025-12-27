@@ -186,18 +186,58 @@ export type FileMetadataPayload = {
   size: number;
 };
 
-export type IncomingTransferState = {
-  metadata?: FileMetadataPayload;
+/**
+ * Sent once per channel/queue after all files have been transmitted.
+ * Signals the receiver to close the channel.
+ */
+export type ChannelTransferCompletePayload = {
+  sessionId: string;
+  channelLabel: string;
+  fileCount: number;
+  totalBytes: number;
+};
+
+/**
+ * Tracks state for a single file being received within a channel.
+ */
+export type IncomingFileState = {
+  metadata: FileMetadataPayload;
   chunks: ArrayBuffer[];
   receivedBytes: number;
+};
+
+/**
+ * Tracks state for an incoming transfer channel (may contain multiple files).
+ */
+export type IncomingTransferState = {
+  /** Current file being received */
+  currentFile?: IncomingFileState;
+  /** Completed files (finalized but channel still open for more) */
+  completedFiles: IncomingFileState[];
+  /** Total bytes received across all files on this channel */
+  totalReceivedBytes: number;
+  /** Expected total bytes for all files (updated from channel-transfer-complete) */
+  expectedTotalBytes?: number;
   remoteUserId?: string;
+  /** Whether we received the channel-transfer-complete signal */
+  completeSignalReceived?: boolean;
+  /** Timeout ID for fallback finalization */
+  timeoutId?: unknown;
 };
 
 export type DataChannelEnvelope =
   | { kind: "file-metadata"; payload: FileMetadataPayload }
+  | { kind: "channel-transfer-complete"; payload: ChannelTransferCompletePayload }
   | { kind: "control"; payload: Record<string, unknown> };
 
 export enum TrackType {
   AUDIO = "audio",
   VIDEO = "video",
 }
+
+export type TransferSessionStatus =
+  | "pending"
+  | "sending"
+  | "completed"
+  | "failed"
+  | "cancelled";

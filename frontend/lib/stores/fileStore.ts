@@ -21,22 +21,43 @@ export type DownloadProgressRecord = {
   startedAt: number;
 };
 
+/**
+ * Tracks an active upload session for UI display purposes.
+ */
+export type UploadSessionInfo = {
+  sessionId: string;
+  remoteUserId: string;
+  fileNames: string[];
+  sentBytes: number;
+  totalBytes: number;
+  percentage: number;
+  startedAt: number;
+};
+
 interface FileState {
   filesToBeSent: QueuedFile[];
   fileCatalog: Record<string, QueuedFile>;
   receivedFiles: Record<string, ReceivedFileRecord>;
   downloadProgress: Record<string, DownloadProgressRecord>;
+  /** @deprecated Use activeUploadSessions for per-session tracking */
   sendingFile: File | null;
+  /** @deprecated Use activeUploadSessions for per-session tracking */
   transferProgress: number;
+  /** @deprecated Use activeUploadSessions.size > 0 for checking if any upload is active */
   isSending: boolean;
+  /** Active upload sessions (keyed by sessionId) */
+  activeUploadSessions: Record<string, UploadSessionInfo>;
 }
 
 interface FileActions {
   addFiles: (files: File[]) => void;
   removeFile: (fileId: string) => void;
   clearFilesToBeSent: () => void;
+  /** @deprecated Use session-based tracking */
   setSendingFile: (file: File | null) => void;
+  /** @deprecated Use session-based tracking */
   setTransferProgress: (progress: number) => void;
+  /** @deprecated Use session-based tracking */
   setIsSending: (isSending: boolean) => void;
   registerReceivedFile: (file: ReceivedFileRecord) => void;
   getLocalFileEntry: (fileId: string) => QueuedFile | undefined;
@@ -48,6 +69,15 @@ interface FileActions {
   updateDownloadProgress: (fileId: string, receivedBytes: number) => void;
   clearDownloadProgress: (fileId: string) => void;
   resetFileStore: () => void;
+  // Session-based upload tracking
+  startUploadSession: (session: UploadSessionInfo) => void;
+  updateUploadSession: (
+    sessionId: string,
+    updates: Partial<Pick<UploadSessionInfo, "sentBytes" | "percentage">>
+  ) => void;
+  endUploadSession: (sessionId: string) => void;
+  getActiveUploadCount: () => number;
+  hasActiveUploads: () => boolean;
 }
 
 const revokeUrl = (url?: string | null) => {
@@ -67,6 +97,7 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
   sendingFile: null,
   transferProgress: 0,
   isSending: false,
+  activeUploadSessions: {},
   addFiles: (newFiles) =>
     set((state) => {
       if (!newFiles.length) {
@@ -242,6 +273,46 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
       sendingFile: null,
       transferProgress: 0,
       isSending: false,
+      activeUploadSessions: {},
     });
   },
+  // Session-based upload tracking
+  startUploadSession: (session) =>
+    set((state) => ({
+      ...state,
+      activeUploadSessions: {
+        ...state.activeUploadSessions,
+        [session.sessionId]: session,
+      },
+    })),
+  updateUploadSession: (sessionId, updates) =>
+    set((state) => {
+      const existing = state.activeUploadSessions[sessionId];
+      if (!existing) {
+        return state;
+      }
+      return {
+        ...state,
+        activeUploadSessions: {
+          ...state.activeUploadSessions,
+          [sessionId]: {
+            ...existing,
+            ...updates,
+          },
+        },
+      };
+    }),
+  endUploadSession: (sessionId) =>
+    set((state) => {
+      if (!state.activeUploadSessions[sessionId]) {
+        return state;
+      }
+      const { [sessionId]: _removed, ...rest } = state.activeUploadSessions;
+      return {
+        ...state,
+        activeUploadSessions: rest,
+      };
+    }),
+  getActiveUploadCount: () => Object.keys(get().activeUploadSessions).length,
+  hasActiveUploads: () => Object.keys(get().activeUploadSessions).length > 0,
 }));

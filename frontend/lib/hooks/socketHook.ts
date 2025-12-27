@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
 import { serverPath, STUN_SERVERS_LIST } from "@/lib/constants";
@@ -27,6 +27,7 @@ import {
 import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
+import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -951,6 +952,9 @@ export const useSocket = () => {
       remoteUserId
     );
     try {
+      // Cancel any active upload sessions for this peer
+      uploadSessionRegistry.cancelSessionsForPeer(remoteUserId);
+
       peerConnections.current[remoteUserId]?.close();
       delete peerConnections.current[remoteUserId];
       delete dataChannelMap.current[remoteUserId];
@@ -1028,6 +1032,7 @@ export const useSocket = () => {
       );
 
       // initiate file transfer
+      console.log("sending file to requester:", payload.requesterId);
       await sendFilesToUser(payload.requesterId, [payload.fileId]);
     } catch (error) {
       console.error("Failed to fulfill download request", error);
