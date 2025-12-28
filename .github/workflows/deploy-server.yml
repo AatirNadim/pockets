@@ -3,7 +3,7 @@ name: Deploy Server to Render
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "server/**"
       - "packages/shared/**"
