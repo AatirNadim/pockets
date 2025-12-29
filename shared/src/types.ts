@@ -157,13 +157,13 @@ export type ChatMessage = {
 };
 
 export type FileDownloadRequest = {
-  fileId: string;
+  fileIds: string[];
   ownerId: string;
   requesterId: string;
 };
 
 export type FileDownloadResponse = FileDownloadRequest & {
-  status: "accepted" | "rejected" | "unavailable";
+  status: "accepted(all)" | "accepted(partial)" | "rejected" | "unavailable";
   reason?: string;
 };
 
@@ -186,18 +186,66 @@ export type FileMetadataPayload = {
   size: number;
 };
 
-export type IncomingTransferState = {
-  metadata?: FileMetadataPayload;
+/**
+ * Sent at the start of a channel transfer to inform the receiver
+ * of the expected total bytes for this channel.
+ */
+export type ChannelSetupPayload = {
+  sessionId: string;
+  channelLabel: string;
+  fileCount: number;
+  totalBytes: number;
+};
+
+/**
+ * @deprecated Use ChannelSetupPayload instead.
+ * Kept for backward compatibility.
+ */
+export type ChannelTransferCompletePayload = ChannelSetupPayload;
+
+/**
+ * Tracks state for a single file being received within a channel.
+ */
+export type IncomingFileState = {
+  metadata: FileMetadataPayload;
   chunks: ArrayBuffer[];
   receivedBytes: number;
+};
+
+/**
+ * Tracks state for an incoming transfer channel (may contain multiple files).
+ */
+export type IncomingTransferState = {
+  /** Current file being received */
+  currentFile?: IncomingFileState;
+  /** Completed files (finalized but channel still open for more) */
+  completedFiles: IncomingFileState[];
+  /** Total bytes received across all files on this channel */
+  totalReceivedBytes: number;
+  /** Expected total bytes for all files (set from channel-setup) */
+  expectedTotalBytes?: number;
+  /** Expected file count for this channel */
+  expectedFileCount?: number;
   remoteUserId?: string;
+  /** Whether we received the channel-setup signal */
+  setupReceived?: boolean;
+  /** Timeout ID for fallback finalization */
+  timeoutId?: unknown;
 };
 
 export type DataChannelEnvelope =
   | { kind: "file-metadata"; payload: FileMetadataPayload }
+  | { kind: "channel-setup"; payload: ChannelSetupPayload }
   | { kind: "control"; payload: Record<string, unknown> };
 
 export enum TrackType {
   AUDIO = "audio",
   VIDEO = "video",
 }
+
+export type TransferSessionStatus =
+  | "pending"
+  | "sending"
+  | "completed"
+  | "failed"
+  | "cancelled";

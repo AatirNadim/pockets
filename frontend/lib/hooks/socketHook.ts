@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
 import { serverPath, STUN_SERVERS_LIST } from "@/lib/constants";
@@ -27,6 +27,7 @@ import {
 import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
+import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -951,6 +952,9 @@ export const useSocket = () => {
       remoteUserId
     );
     try {
+      // Cancel any active upload sessions for this peer
+      uploadSessionRegistry.cancelSessionsForPeer(remoteUserId);
+
       peerConnections.current[remoteUserId]?.close();
       delete peerConnections.current[remoteUserId];
       delete dataChannelMap.current[remoteUserId];
@@ -997,9 +1001,12 @@ export const useSocket = () => {
       console.log("received file download request:", payload);
 
       // check whether the file is still available locally
-      const entry = getLocalFileEntry(payload.fileId);
-      if (!entry) {
-        console.log("requested file is no longer available locally:", payload);
+      const entries = payload.fileIds.map(getLocalFileEntry).filter(Boolean);
+      if (entries.length === 0) {
+        console.log(
+          "requested files are no longer available locally:",
+          payload
+        );
         sendEnvelope(
           {
             kind: "file-download-response",
@@ -1015,20 +1022,24 @@ export const useSocket = () => {
       }
 
       // send acceptance response
-      console.log("fulfilling download request for file:", payload.fileId);
+      console.log("fulfilling download request for files:", payload.fileIds);
       sendEnvelope(
         {
           kind: "file-download-response",
           payload: {
             ...payload,
-            status: "accepted",
+            status:
+              payload.fileIds.length === entries.length
+                ? "accepted(all)"
+                : "accepted(partial)",
           },
         },
         payload.requesterId
       );
 
       // initiate file transfer
-      await sendFilesToUser(payload.requesterId, [payload.fileId]);
+      console.log("sending file to requester:", payload.requesterId);
+      await sendFilesToUser(payload.requesterId, payload.fileIds);
     } catch (error) {
       console.error("Failed to fulfill download request", error);
       sendEnvelope(
@@ -1050,14 +1061,21 @@ export const useSocket = () => {
       return;
     }
 
-    if (payload.status === "accepted") {
+    if (payload.status === "accepted(all)") {
       toast.info("Download approved", {
         description: "Peer accepted your request. Transfer will start shortly.",
       });
       return;
     }
+    if (payload.status === "accepted(partial)") {
+      toast.info("Partial Download approved", {
+        description:
+          "Peer accepted your request for some files. Transfer will start shortly.",
+      });
+      return;
+    }
 
-    clearDownloadProgress(payload.fileId);
+    clearDownloadProgress(payload.fileIds);
 
     const reason =
       payload.reason ||
@@ -1176,7 +1194,7 @@ export const useSocket = () => {
     return true;
   };
 
-  const requestFileDownload = (fileId: string, ownerId: string) => {
+  const requestFileDownload = (fileIds: string[], ownerId: string) => {
     if (!userId) {
       toast.error("Unable to request file", {
         description: "User identity missing. Please rejoin the room.",
@@ -1191,15 +1209,15 @@ export const useSocket = () => {
       return false;
     }
 
-    markDownloadRequested(fileId);
+    markDownloadRequested(fileIds);
 
-    console.log("sending file download request for file:", fileId);
+    console.log("sending file download request for file:", fileIds);
 
     const delivered = sendEnvelope(
       {
         kind: "file-download-request",
         payload: {
-          fileId,
+          fileIds,
           ownerId,
           requesterId: userId,
         },
@@ -1208,7 +1226,7 @@ export const useSocket = () => {
     );
 
     if (!delivered) {
-      clearDownloadProgress(fileId);
+      clearDownloadProgress(fileIds);
     }
 
     return delivered;

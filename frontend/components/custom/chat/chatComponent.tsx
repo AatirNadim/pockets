@@ -27,7 +27,7 @@ const MotionButton = motion(Button);
 
 type ChatComponentProps = {
   onSendMessage: (message: string) => boolean;
-  onRequestFile: (fileId: string, ownerId: string) => boolean;
+  onRequestFile: (fileIds: string[], ownerId: string) => boolean;
 };
 
 const ChatComponent = ({
