@@ -20,6 +20,68 @@ This README captures **what is being built**, **why specific subsystems exist**,
 - **Shared Contract** – `shared/` package keeps signaling envelopes, join-request payloads, and UserType enums in sync between client and server.
 - **Monorepo** – pnpm workspaces manage three packages (`frontend`, `server`, `shared`) with shared dependencies and coordinated builds.
 
+## Signaling & Message Flow
+
+The following sequence diagram illustrates how clients (Host and Guests) interact with the Signaling Server to establish P2P connections and manage room state.
+
+```mermaid
+sequenceDiagram
+    participant Host as Client A (Host)
+    participant Guest1 as Client B (Guest)
+    participant Guest2 as Client C (Guest)
+    participant Server as Signaling Server
+
+    Note over Host, Server: Room Initialization
+    Host->>Server: join-room (create)
+    Server-->>Host: Room Created (Host Registered)
+
+    Note over Guest1, Server: Guest 1 Entry (Request/Approve)
+    Guest1->>Server: join-room (request)
+    Server->>Host: join-request (Guest B)
+    Host->>Server: join-request-accepted (Guest B)
+    Server->>Guest1: join-request-accepted
+    Server->>Host: user-joined (Guest B)
+
+    Note over Host, Guest1: P2P Handshake (Signaling via Server)
+    Host->>Server: offer (to Guest B)
+    Server->>Guest1: offer (from Host)
+    Guest1->>Server: answer (to Host)
+    Server->>Host: answer (from Guest B)
+    par ICE Candidates
+        Host->>Server: ice-candidate (to Guest B)
+        Server->>Guest1: ice-candidate (from Host)
+        Guest1->>Server: ice-candidate (to Host)
+        Server->>Host: ice-candidate (from Guest B)
+    end
+    Note over Host, Guest1: Direct P2P Connection (Media/Data)
+
+    Note over Guest2, Server: Guest 2 Entry
+    Guest2->>Server: join-room (request)
+    Server->>Host: join-request (Guest C)
+    Host->>Server: join-request-accepted (Guest C)
+    Server->>Guest2: join-request-accepted
+    Server->>Host: user-joined (Guest C)
+    Server->>Guest1: user-joined (Guest C)
+    
+    Note over Host, Guest2: P2P Handshake (Host <-> Guest C)
+    Note over Host, Guest2: (Offer/Answer/ICE via Server) -> P2P Established
+    
+    Note over Guest1, Guest2: P2P Handshake (Guest B <-> Guest C)
+    Note over Guest1, Guest2: (Offer/Answer/ICE via Server) -> P2P Established
+
+    Note over Guest1, Server: State Updates (Broadcast)
+    Guest1->>Server: audio-mute
+    Server->>Host: audio-mute (from Guest B)
+    Server->>Guest2: audio-mute (from Guest B)
+
+    Note over Host, Server: Room Teardown
+    Host->>Server: leave-room
+    Server->>Guest1: host-closed-room
+    Server->>Guest2: host-closed-room
+    Guest1-->>Guest1: Auto-leave / Redirect
+    Guest2-->>Guest2: Auto-leave / Redirect
+```
+
 ## Core Collaboration Features
 
 ### Media Surfaces & Device Orchestration
@@ -44,7 +106,7 @@ This README captures **what is being built**, **why specific subsystems exist**,
 
 | Stage           | What happens                                                                                                                                                                                                                                                                 |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Queue sharding  | `useFile` slices up to `MAX_CHANNELS_FOR_DATA_TRANSMISSION` (5) queues and assigns files in a round-robin fashion. Each queue maps to its own RTCDataChannel (`transfer-queue-{i}`) for better throughput.                                                                   |
+| Queue sharding  | `useFile` slices up to `MAX_CHANNELS_FOR_DATA_TRANSMISSION` (5) queues and assigns files in a round-robin fashion. Each queue maps to its own RTCDataChannel (`transfer-{sessionId}-queue-{i}`) for better throughput.                                                                   |
 | Metadata primer | Before chunks fly, the sender emits a `file-metadata` envelope (id, ownerId, size, MIME). Receivers cache this alongside the channel label.                                                                                                                                  |
 | Chunk streaming | Files break into 64 KB slices (`CHUNK_SIZE`). The sender monitors `channel.bufferedAmount` to apply backpressure and avoid browser crashes.                                                                                                                                  |
 | Pull semantics  | Attachments render with contextual actions: `Open` (local), `Download` (already received), or `Request` (not yet downloaded). A request triggers `file-download-request`, the owner replies with `file-download-response`, and only the explicitly requested data transfers. |
@@ -72,7 +134,7 @@ This README captures **what is being built**, **why specific subsystems exist**,
 
 - **Next.js 15 / React 19** with App Router and server actions disabled (pure client-focused).
 - **TypeScript everywhere** – shared envelopes, stores, hooks, server.
-- **Tailwind + Shadcn + Framer Motion** for interactivity.
+- **Tailwind v4 + Shadcn + Framer Motion** for interactivity.
 - **Zustand** for persistent yet minimal state (user identity, media state, chat, files, join requests).
 - **Node.js WebSocket server** powered by `ws`, with graceful shutdown handlers.
 - **Redis** (optional) for room state persistence across server restarts.
@@ -89,7 +151,7 @@ pockets/
 │   ├── lib/
 │   │   ├── hooks/          # socketHook, fileHook, mediaHook
 │   │   ├── stores/         # Zustand stores for user/media/chat/file/join requests
-│   │   └── utils/          # Audio level management utilities
+│   │   └── utils/          # Audio analysis & file transfer logic
 │   └── public/             # Static assets
 ├── server/
 │   ├── src/
@@ -101,6 +163,7 @@ pockets/
 │   └── index.ts            # WebSocket bootstrap + lifecycle hooks
 ├── shared/                 # Cross-runtime TypeScript definitions for signaling
 ├── Caddyfile               # Local HTTPS reverse proxy config (optional)
+├── docker-compose.yml      # Full stack orchestration (frontend + server)
 ├── pnpm-workspace.yaml     # Monorepo workspace configuration
 └── LOCAL_DEVELOPMENT.md    # Full local setup guide
 ```
