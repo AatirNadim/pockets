@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import DownloadIndicator from "../downloadIndicator";
 
 type MessagesContainerProps = {
-  onRequestFile: (fileId: string, ownerId: string) => boolean;
+  onRequestFile: (fileIds: string[], ownerId: string) => boolean;
 };
 
 const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
@@ -61,41 +61,53 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
     [getReceivedFile, hasLocalFile, userId]
   );
 
-  const handleAttachmentAction = useCallback(
-    (attachment: FileAttachment) => {
-      const state = deriveAttachmentState(attachment);
-      const progressTracker = downloadProgress[attachment.id];
-
-      if (progressTracker && state === AttachmentState.REMOTE) {
-        return;
-      }
-
-      if (state === AttachmentState.LOCAL) {
-        const file = getLocalFile(attachment.id);
-        if (file) {
-          triggerLocalDownload(file, attachment.name);
+  const downloadAllLocalFiles = useCallback(
+    (attachments: FileAttachment[]) => {
+      attachments.forEach((attachment) => {
+        const state = deriveAttachmentState(attachment);
+        if (state === AttachmentState.LOCAL) {
+          const file = getLocalFile(attachment.id);
+          if (file) {
+            triggerLocalDownload(file, attachment.name);
+          }
+        } else if (state === AttachmentState.READY) {
+          const received = getReceivedFile(attachment.id);
+          if (received?.url) {
+            downloadBlob(received.url, attachment.name);
+          }
         }
-        return;
-      }
-
-      if (state === AttachmentState.READY) {
-        const received = getReceivedFile(attachment.id);
-        if (received?.url) {
-          downloadBlob(received.url, attachment.name);
-        }
-        return;
-      }
-
-      onRequestFile(attachment.id, attachment.ownerId);
+      });
     },
-    [
-      onRequestFile,
-      deriveAttachmentState,
-      downloadProgress,
-      getLocalFile,
-      getReceivedFile,
-      triggerLocalDownload,
-    ]
+    [deriveAttachmentState, getLocalFile, getReceivedFile, triggerLocalDownload]
+  );
+
+  const handleAttachmentAction = useCallback(
+    (attachments: FileAttachment[]) => {
+      const attachmentsToReceive = attachments.filter((attachment) => {
+        const state = deriveAttachmentState(attachment);
+        return state === AttachmentState.REMOTE;
+      });
+
+      const attachmentsToOpen = attachments.filter((attachment) => {
+        const state = deriveAttachmentState(attachment);
+        return state !== AttachmentState.REMOTE;
+      });
+
+      console.log("attachements total:", {
+        attachmentsToOpen,
+        attachmentsToReceive,
+      });
+
+      if (attachmentsToReceive.length === 0) {
+        downloadAllLocalFiles(attachmentsToOpen);
+      } else {
+        onRequestFile(
+          attachmentsToReceive.map((a) => a.id),
+          attachmentsToReceive[0].ownerId
+        );
+      }
+    },
+    [deriveAttachmentState, downloadAllLocalFiles, onRequestFile]
   );
 
   const renderDownloadIndicator = useCallback(
@@ -193,7 +205,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                         <button
                           key={attachment.id}
                           type="button"
-                          onClick={() => handleAttachmentAction(attachment)}
+                          onClick={() => handleAttachmentAction([attachment])}
                           disabled={
                             state === AttachmentState.REMOTE && isDownloading
                           }
@@ -228,6 +240,16 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                         </button>
                       );
                     })}
+                    {msg.attachments.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleAttachmentAction(msg.attachments!)}
+                        className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs font-medium backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                      >
+                        <Download className="h-3.5 w-3.5 opacity-80 transition-opacity group-hover:opacity-100" />
+                        <span>Download All</span>
+                      </button>
+                    )}
                   </div>
                 ) : null}
                 <div className="text-[10px] mt-1 opacity-80">

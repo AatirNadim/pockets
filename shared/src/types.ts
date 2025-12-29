@@ -157,13 +157,13 @@ export type ChatMessage = {
 };
 
 export type FileDownloadRequest = {
-  fileId: string;
+  fileIds: string[];
   ownerId: string;
   requesterId: string;
 };
 
 export type FileDownloadResponse = FileDownloadRequest & {
-  status: "accepted" | "rejected" | "unavailable";
+  status: "accepted(all)" | "accepted(partial)" | "rejected" | "unavailable";
   reason?: string;
 };
 
@@ -187,15 +187,21 @@ export type FileMetadataPayload = {
 };
 
 /**
- * Sent once per channel/queue after all files have been transmitted.
- * Signals the receiver to close the channel.
+ * Sent at the start of a channel transfer to inform the receiver
+ * of the expected total bytes for this channel.
  */
-export type ChannelTransferCompletePayload = {
+export type ChannelSetupPayload = {
   sessionId: string;
   channelLabel: string;
   fileCount: number;
   totalBytes: number;
 };
+
+/**
+ * @deprecated Use ChannelSetupPayload instead.
+ * Kept for backward compatibility.
+ */
+export type ChannelTransferCompletePayload = ChannelSetupPayload;
 
 /**
  * Tracks state for a single file being received within a channel.
@@ -216,18 +222,20 @@ export type IncomingTransferState = {
   completedFiles: IncomingFileState[];
   /** Total bytes received across all files on this channel */
   totalReceivedBytes: number;
-  /** Expected total bytes for all files (updated from channel-transfer-complete) */
+  /** Expected total bytes for all files (set from channel-setup) */
   expectedTotalBytes?: number;
+  /** Expected file count for this channel */
+  expectedFileCount?: number;
   remoteUserId?: string;
-  /** Whether we received the channel-transfer-complete signal */
-  completeSignalReceived?: boolean;
+  /** Whether we received the channel-setup signal */
+  setupReceived?: boolean;
   /** Timeout ID for fallback finalization */
   timeoutId?: unknown;
 };
 
 export type DataChannelEnvelope =
   | { kind: "file-metadata"; payload: FileMetadataPayload }
-  | { kind: "channel-transfer-complete"; payload: ChannelTransferCompletePayload }
+  | { kind: "channel-setup"; payload: ChannelSetupPayload }
   | { kind: "control"; payload: Record<string, unknown> };
 
 export enum TrackType {

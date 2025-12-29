@@ -7,12 +7,9 @@ import { FileTransferSession } from "../utils/fileManagement/fileTransferSession
 import type {
   IncomingTransferState,
   DataChannelEnvelope,
-  ChannelTransferCompletePayload,
+  ChannelSetupPayload,
 } from "@pockets/shared";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
-
-/** Timeout in ms to wait after receiving complete signal before forcing finalization */
-const TRANSFER_COMPLETE_TIMEOUT_MS = 10000; // 10 seconds
 
 /** Timeout for stale transfers that never receive a complete signal */
 const STALE_TRANSFER_TIMEOUT_MS = 60000; // 60 seconds
@@ -220,8 +217,9 @@ export const useFile = ({
       completedFiles: [],
       totalReceivedBytes: 0,
       expectedTotalBytes: undefined,
+      expectedFileCount: undefined,
       remoteUserId,
-      completeSignalReceived: false,
+      setupReceived: false,
       timeoutId: undefined,
     };
 
@@ -255,10 +253,39 @@ export const useFile = ({
       if (typeof event.data === "string") {
         try {
           const envelope = JSON.parse(event.data) as DataChannelEnvelope;
-          console.log(
-            `[${channel.label}] Received envelope:`,
-            envelope.kind
-          );
+          console.log(`[${channel.label}] Received envelope:`, envelope.kind);
+
+          if (envelope.kind === "channel-setup") {
+            const payload = envelope.payload as ChannelSetupPayload;
+            console.log(
+              `[${channel.label}] Received channel-setup: ${payload.fileCount} files, ${payload.totalBytes} bytes`
+            );
+
+            transfer.setupReceived = true;
+            transfer.expectedTotalBytes = payload.totalBytes;
+            transfer.expectedFileCount = payload.fileCount;
+
+            // Clear stale timeout and set a new one based on expected transfer
+            if (transfer.timeoutId) {
+              clearTimeout(transfer.timeoutId as number);
+            }
+            transfer.timeoutId = setTimeout(() => {
+              const currentTransfer =
+                incomingTransfersRef.current[channel.label];
+              if (!currentTransfer) return;
+
+              console.warn(
+                `[${channel.label}] Transfer timeout, forcing finalization`
+              );
+
+              if (currentTransfer.currentFile) {
+                finalizeCurrentFile(channel.label);
+              }
+              finalizeAllCompletedFiles(channel.label);
+              channel.close();
+            }, STALE_TRANSFER_TIMEOUT_MS);
+            return;
+          }
 
           if (envelope.kind === "file-metadata") {
             // If there's a current file in progress, finalize it first
@@ -275,57 +302,13 @@ export const useFile = ({
               chunks: [],
               receivedBytes: 0,
             };
-            beginDownload(envelope.payload.fileId, envelope.payload.size);
-            return;
-          }
-
-          if (envelope.kind === "channel-transfer-complete") {
-            const payload = envelope.payload as ChannelTransferCompletePayload;
             console.log(
-              `[${channel.label}] Received channel-transfer-complete: ${payload.fileCount} files, ${payload.totalBytes} bytes`
+              "received file metadata:",
+              envelope.payload,
+              "current file set to:",
+              transfer.currentFile
             );
-
-            transfer.completeSignalReceived = true;
-            transfer.expectedTotalBytes = payload.totalBytes;
-
-            // Clear stale timeout
-            if (transfer.timeoutId) {
-              clearTimeout(transfer.timeoutId as number);
-              transfer.timeoutId = undefined;
-            }
-
-            // Finalize current file if any
-            if (transfer.currentFile) {
-              finalizeCurrentFile(channel.label);
-            }
-
-            // Check if all bytes received
-            if (transfer.totalReceivedBytes >= payload.totalBytes) {
-              console.log(
-                `[${channel.label}] All bytes received, finalizing and closing channel`
-              );
-              finalizeAllCompletedFiles(channel.label);
-              channel.close();
-            } else {
-              // Set shorter timeout to wait for remaining chunks
-              console.log(
-                `[${channel.label}] Waiting for remaining chunks: ${transfer.totalReceivedBytes}/${payload.totalBytes}`
-              );
-              transfer.timeoutId = setTimeout(() => {
-                const currentTransfer = incomingTransfersRef.current[channel.label];
-                if (!currentTransfer) return;
-
-                console.warn(
-                  `[${channel.label}] Post-complete timeout, forcing finalization`
-                );
-
-                if (currentTransfer.currentFile) {
-                  finalizeCurrentFile(channel.label);
-                }
-                finalizeAllCompletedFiles(channel.label);
-                channel.close();
-              }, TRANSFER_COMPLETE_TIMEOUT_MS);
-            }
+            beginDownload(envelope.payload.fileId, envelope.payload.size);
             return;
           }
         } catch (error) {
@@ -345,6 +328,9 @@ export const useFile = ({
           ? event.data
           : await event.data.arrayBuffer();
 
+      console.log(
+        `[${channel.label}] Received chunk: ${chunkBuffer.byteLength} bytes`
+      );
       transfer.currentFile.chunks.push(chunkBuffer);
       transfer.currentFile.receivedBytes += chunkBuffer.byteLength;
       transfer.totalReceivedBytes += chunkBuffer.byteLength;
@@ -356,37 +342,40 @@ export const useFile = ({
       );
 
       // Check if current file is complete
-      if (transfer.currentFile.receivedBytes >= transfer.currentFile.metadata.size) {
+      if (
+        transfer.currentFile.receivedBytes >= transfer.currentFile.metadata.size
+      ) {
         console.log(
           `[${channel.label}] File ${transfer.currentFile.metadata.name} complete`
         );
 
-        // If we already received the channel complete signal, finalize everything
-        if (transfer.completeSignalReceived) {
-          finalizeCurrentFile(channel.label);
+        // Finalize the completed file
+        finalizeCurrentFile(channel.label);
 
-          // Check if this was the last file (all bytes received)
-          if (
-            transfer.expectedTotalBytes &&
-            transfer.totalReceivedBytes >= transfer.expectedTotalBytes
-          ) {
-            console.log(
-              `[${channel.label}] All bytes received after chunk, finalizing and closing`
-            );
-            if (transfer.timeoutId) {
-              clearTimeout(transfer.timeoutId as number);
-            }
-            finalizeAllCompletedFiles(channel.label);
-            channel.close();
+        // Check if all expected bytes have been received (transfer complete)
+        if (
+          transfer.expectedTotalBytes &&
+          transfer.totalReceivedBytes >= transfer.expectedTotalBytes
+        ) {
+          console.log(
+            `[${channel.label}] All bytes received (${transfer.totalReceivedBytes}/${transfer.expectedTotalBytes}), closing channel`
+          );
+          if (transfer.timeoutId) {
+            clearTimeout(transfer.timeoutId as number);
           }
+          finalizeAllCompletedFiles(channel.label);
+          channel.close();
         }
-        // Otherwise, wait for next file metadata or complete signal
+        // Otherwise, wait for next file metadata
       }
     };
 
     channel.onclose = () => {
       const transfer = incomingTransfersRef.current[channel.label];
       if (!transfer) return;
+      channel.close();
+
+      // Otherwise, wait for next file metadata
 
       // Clear any pending timeouts
       if (transfer.timeoutId) {
@@ -398,14 +387,17 @@ export const useFile = ({
       // Finalize any remaining files
       if (transfer.currentFile) {
         // Check if current file is complete
-        if (transfer.currentFile.receivedBytes >= transfer.currentFile.metadata.size) {
+        if (
+          transfer.currentFile.receivedBytes >=
+          transfer.currentFile.metadata.size
+        ) {
           finalizeCurrentFile(channel.label);
         } else {
           // Incomplete file
           console.warn(
             `[${channel.label}] Channel closed with incomplete file: ${transfer.currentFile.metadata.name}`
           );
-          clearDownloadProgress(transfer.currentFile.metadata.fileId);
+          clearDownloadProgress([transfer.currentFile.metadata.fileId]);
           toast.error("Download interrupted", {
             description: `${transfer.currentFile.metadata.name} did not finish transferring.`,
           });
@@ -433,7 +425,7 @@ export const useFile = ({
       console.warn(
         `[${channelLabel}] Finalizing incomplete file: ${metadata.name} (${receivedBytes}/${metadata.size})`
       );
-      clearDownloadProgress(metadata.fileId);
+      clearDownloadProgress([metadata.fileId]);
       toast.error("Download incomplete", {
         description: `${metadata.name} was only partially received.`,
       });
@@ -442,9 +434,7 @@ export const useFile = ({
     }
 
     try {
-      console.log(
-        `[${channelLabel}] Creating blob for file: ${metadata.name}`
-      );
+      console.log(`[${channelLabel}] Creating blob for file: ${metadata.name}`);
       const blob = new Blob(chunks, {
         type: metadata.type || "application/octet-stream",
       });
@@ -460,7 +450,7 @@ export const useFile = ({
         url,
         receivedAt: Date.now(),
       });
-      clearDownloadProgress(metadata.fileId);
+      clearDownloadProgress([metadata.fileId]);
       toast.success(`Received ${metadata.name}`);
 
       // Move to completed files list
@@ -468,7 +458,7 @@ export const useFile = ({
       transfer.currentFile = undefined;
     } catch (error) {
       console.error(`[${channelLabel}] Failed to finalize file`, error);
-      clearDownloadProgress(metadata.fileId);
+      clearDownloadProgress([metadata.fileId]);
       toast.error("Download failed", {
         description: `Could not process ${metadata.name}.`,
       });

@@ -1,4 +1,4 @@
-const CHUNK_SIZE = 64 * 1024; // 64 KB chunk size
+const CHUNK_SIZE = 30 * 1024; // 30 KB chunk size
 
 const MAX_CHANNELS_FOR_DATA_TRANSMISSION = 5;
 

@@ -7,7 +7,7 @@ import type { QueuedFile } from "../../stores/fileStore";
 import type {
   DataChannelEnvelope,
   FileMetadataPayload,
-  ChannelTransferCompletePayload,
+  ChannelSetupPayload,
   TransferSessionStatus,
 } from "@pockets/shared";
 
@@ -218,7 +218,29 @@ export class FileTransferSession {
         );
 
         try {
+          // Calculate total bytes for this queue
+          const queueTotalBytes = queue.reduce(
+            (sum, f) => sum + f.file.size,
+            0
+          );
+
+          // Send channel-setup envelope first to inform receiver of expected bytes
+          const setupEnvelope: DataChannelEnvelope = {
+            kind: "channel-setup",
+            payload: {
+              sessionId: this.sessionId,
+              channelLabel: channel.label,
+              fileCount: queue.length,
+              totalBytes: queueTotalBytes,
+            } as ChannelSetupPayload,
+          };
+          channel.send(JSON.stringify(setupEnvelope));
+          console.log(
+            `[Session ${this.sessionId}] Sent channel-setup: ${queue.length} files, ${queueTotalBytes} bytes`
+          );
+
           // Send all files in queue serially
+          console.log("sending files in queue:", queue);
           for (const entry of queue) {
             if (checkCancelled()) return;
 
@@ -232,24 +254,8 @@ export class FileTransferSession {
           }
 
           console.log(
-            `[Session ${this.sessionId}] All files in queue sent via ${channel.label}, sending channel-transfer-complete signal`
+            `[Session ${this.sessionId}] All files in queue sent via ${channel.label}`
           );
-
-          // Send single channel-transfer-complete signal for the entire queue
-          const queueTotalBytes = queue.reduce(
-            (sum, f) => sum + f.file.size,
-            0
-          );
-          const completeEnvelope: DataChannelEnvelope = {
-            kind: "channel-transfer-complete",
-            payload: {
-              sessionId: this.sessionId,
-              channelLabel: channel.label,
-              fileCount: queue.length,
-              totalBytes: queueTotalBytes,
-            } as ChannelTransferCompletePayload,
-          };
-          channel.send(JSON.stringify(completeEnvelope));
 
           // Wait for buffer to drain before setting cleanup timeout
           await this.waitForBufferDrain(channel);
@@ -396,6 +402,9 @@ export class FileTransferSession {
           const slice = file.slice(offset, offset + CHUNK_SIZE);
           fileReader.readAsArrayBuffer(slice);
         } else {
+          console.log(
+            `[Session ${this.sessionId}] Finished reading file ${file.name}`
+          );
           resolve();
         }
       };
@@ -437,6 +446,9 @@ export class FileTransferSession {
 
           try {
             // sending the file associated with this function call, as chunks
+            console.log(
+              `[Session ${this.sessionId}] Sending chunk of size ${chunkSize} bytes for file ${file.name}`
+            );
             channel.send(chunk);
             offset += chunkSize;
             this.addSentBytes(chunkSize);

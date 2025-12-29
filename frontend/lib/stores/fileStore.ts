@@ -64,10 +64,10 @@ interface FileActions {
   getLocalFile: (fileId: string) => File | undefined;
   hasLocalFile: (fileId: string) => boolean;
   getReceivedFile: (fileId: string) => ReceivedFileRecord | undefined;
-  markDownloadRequested: (fileId: string) => void;
+  markDownloadRequested: (fileIds: string[]) => void;
   beginDownload: (fileId: string, totalBytes: number) => void;
   updateDownloadProgress: (fileId: string, receivedBytes: number) => void;
-  clearDownloadProgress: (fileId: string) => void;
+  clearDownloadProgress: (fileIds: string[]) => void;
   resetFileStore: () => void;
   // Session-based upload tracking
   startUploadSession: (session: UploadSessionInfo) => void;
@@ -196,17 +196,23 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
         },
       };
     }),
-  markDownloadRequested: (fileId) =>
+  markDownloadRequested: (fileIds) =>
     set((state) => ({
       ...state,
       downloadProgress: {
         ...state.downloadProgress,
-        [fileId]: {
-          status: "requested",
-          receivedBytes: 0,
-          totalBytes: null,
-          startedAt: Date.now(),
-        },
+        ...fileIds.reduce((acc, fileId) => {
+          if (state.downloadProgress[fileId]) {
+            return acc;
+          }
+          acc[fileId] = {
+            status: "requested",
+            receivedBytes: 0,
+            totalBytes: null,
+            startedAt: Date.now(),
+          };
+          return acc;
+        }, {} as Record<string, DownloadProgressRecord>),
       },
     })),
   beginDownload: (fileId, totalBytes) =>
@@ -243,17 +249,17 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
         },
       };
     }),
-  clearDownloadProgress: (fileId) =>
+  clearDownloadProgress: (fileIds) =>
     set((state) => {
-      if (!state.downloadProgress[fileId]) {
-        return state;
-      }
-
-      const { [fileId]: _removed, ...rest } = state.downloadProgress;
-      return {
-        ...state,
-        downloadProgress: rest,
-      };
+      let newState = { ...state };
+      fileIds.forEach((fileId) => {
+        const { [fileId]: _removed, ...rest } = newState.downloadProgress;
+        newState = {
+          ...newState,
+          downloadProgress: rest,
+        };
+      });
+      return newState;
     }),
   getLocalFileEntry: (fileId) => get().fileCatalog[fileId],
   getLocalFile: (fileId) => get().fileCatalog[fileId]?.file,
