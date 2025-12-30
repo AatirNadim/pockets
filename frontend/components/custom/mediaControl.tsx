@@ -44,6 +44,7 @@ const DeviceDropdown = ({
     (device) => device.deviceId === selectedId
   )?.label;
   const isDisabled = devices.length === 0;
+  const buttonLabel = activeLabel || `Select ${label}`;
 
   const handleSelect = (deviceId: string) => {
     return Promise.resolve(onSelect(deviceId));
@@ -56,20 +57,22 @@ const DeviceDropdown = ({
           type="button"
           variant="ghost"
           size="lg"
+          aria-label={buttonLabel}
           className={cn(
-            "min-w-40 justify-between rounded-2xl px-4 text-sm font-medium",
+            "min-w-12 sm:min-w-40 justify-center sm:justify-between rounded-2xl px-3 sm:px-4 text-sm font-medium",
             isDisabled
               ? "cursor-not-allowed bg-stone-200 text-stone-500 opacity-50 dark:bg-stone-800 dark:text-stone-500"
               : "bg-stone-100 text-stone-700 hover:bg-stone-200 hover:text-stone-900 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-white"
           )}
           disabled={isDisabled}
         >
-          <span className="flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             {icon}
-            {activeLabel || `Select ${label}`}
+            <span className="sr-only">{buttonLabel}</span>
+            <span className="hidden truncate sm:inline">{buttonLabel}</span>
           </span>
           <svg
-            className="h-4 w-4"
+            className="hidden h-4 w-4 sm:inline"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -149,7 +152,7 @@ const MediaControl = ({
 
   return (
     <div className="w-full glass border-t border-stone-200/50 dark:border-stone-700/50">
-      <div className="flex flex-wrap items-center justify-center gap-4 p-6">
+      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto px-4 py-4 sm:flex-wrap sm:justify-center sm:gap-4 sm:p-6">
         <Button
           onClick={() => {
             onToggleMute(!isMicrophoneMuted).then(() => {

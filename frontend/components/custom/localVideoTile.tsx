@@ -1,5 +1,6 @@
 import { Crown, Maximize2, Minimize2, VideoOff } from "lucide-react";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import Draggable from "react-draggable";
 import { Button } from "../ui/button";
 import { useMediaStore } from "@/lib/stores/mediaStore";
 import { useUserStore } from "@/lib/stores/userStore";
@@ -11,6 +12,9 @@ type LocalVideoTileProps = {
 
 const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const tileRef = useRef<HTMLDivElement>(null);
 
   const { userName, userType } = useUserStore();
 
@@ -19,11 +23,70 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
 
   const { isVideoOff } = useMediaStore();
 
-  return (
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const onChange = () => setIsMobile(mediaQuery.matches);
+    onChange();
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }, []);
+
+  const clampPosition = useCallback((nextX: number, nextY: number) => {
+    const tile = tileRef.current;
+    const parent = tile?.parentElement as HTMLElement | null;
+    if (!tile || !parent) {
+      return { x: nextX, y: nextY };
+    }
+
+    const maxX = Math.max(0, parent.clientWidth - tile.offsetWidth);
+    const maxY = Math.max(0, parent.clientHeight - tile.offsetHeight);
+
+    return {
+      x: Math.min(Math.max(nextX, 0), maxX),
+      y: Math.min(Math.max(nextY, 0), maxY),
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setPosition({ x: 0, y: 0 });
+      return;
+    }
+
+    // Initialize a sane default that doesn't cover bottom controls.
+    // We compute from the parent bounds once the element is laid out.
+    const id = window.requestAnimationFrame(() => {
+      const tile = tileRef.current;
+      const parent = tile?.parentElement as HTMLElement | null;
+      if (!tile || !parent) return;
+
+      const padding = 16;
+      const topOffset = 96; // ~ top-24
+
+      const initial = clampPosition(
+        Math.max(padding, parent.clientWidth - tile.offsetWidth - padding),
+        Math.max(padding, topOffset)
+      );
+
+      setPosition(initial);
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, [clampPosition, isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    setPosition((prev) => clampPosition(prev.x, prev.y));
+  }, [clampPosition, isMinimized, isMobile]);
+
+  const tile = (
     <div
-      className={`absolute bottom-24 right-8 bg-white/80 dark:bg-stone-900/80 rounded-2xl overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm transition-all duration-300 ${
-        isMinimized ? "w-16 h-12" : "w-48 h-36"
-      }`}
+      ref={tileRef}
+      className={`absolute z-30 bg-white/80 dark:bg-stone-900/80 rounded-2xl overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm transition-all duration-300 ${
+        isMobile
+          ? "top-0 left-0 touch-none cursor-grab active:cursor-grabbing"
+          : "bottom-24 right-8"
+      } ${isMinimized ? "w-16 h-12" : "w-48 h-36"}`}
     >
       {isHost && !isMinimized && (
         <div className="absolute top-2 left-2 z-10 group">
@@ -57,41 +120,6 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         </div>
       )}
 
-      {/* <div className="absolute top-2 left-2 bg-white/80 text-slate-800 dark:bg-black/50 dark:text-white backdrop-blur-sm rounded px-2 py-1">
-        <div className="flex items-center gap-2">
-          <span
-                    className={`font-medium ${
-                      isMinimized ? "text-[10px]" : "text-xs"
-                    }`}
-                  >
-                    You
-                  </span>
-          <span
-                    className={`flex items-center gap-1 rounded-full px-2 py-[2px] text-[9px] font-semibold uppercase tracking-wide transition-all ${
-                      isSpeakingLocally
-                        ? "bg-emerald-400/90 text-emerald-950"
-                        : "bg-black/40 text-white/80"
-                    }`}
-                    style={{
-                      boxShadow: isSpeakingLocally
-                        ? `0 0 ${6 + localVoiceLevel * 10}px rgba(16,185,129,${
-                            0.45 + localVoiceLevel * 0.3
-                          })`
-                        : undefined,
-                    }}
-                  >
-                    <span
-                      className="inline-block h-[6px] w-[6px] rounded-full bg-current"
-                      style={{
-                        transform: `scale(${0.9 + localVoiceLevel * 0.5})`,
-                        transition: "transform 120ms ease-out",
-                      }}
-                    ></span>
-                    {isSpeakingLocally ? "Speaking" : "Live"}
-                  </span>
-        </div>
-      </div> */}
-
       <Button
         onClick={() => setIsMinimized(!isMinimized)}
         variant="ghost"
@@ -105,6 +133,27 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         )}
       </Button>
     </div>
+  );
+
+  return (
+    isMobile ? (
+      <Draggable
+        nodeRef={tileRef}
+        bounds="parent"
+        position={position}
+        onDrag={(_, data) => {
+          setPosition(clampPosition(data.x, data.y));
+        }}
+        onStop={(_, data) => {
+          setPosition(clampPosition(data.x, data.y));
+        }}
+        cancel="button"
+      >
+        {tile}
+      </Draggable>
+    ) : (
+      tile
+    )
   );
 };
 

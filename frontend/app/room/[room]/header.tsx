@@ -4,7 +4,7 @@ import { ThemeToggle } from "@/components/custom/themeToggle";
 import { Button } from "@/components/ui/button";
 import { useUserStore } from "@/lib/stores/userStore";
 import { Copy, Sparkles, Users } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 
 type HeaderProps = {
   roomId: string;
@@ -16,10 +16,6 @@ type HeaderProps = {
 const Header = ({ roomId, status, isConnected, isRoomFull }: HeaderProps) => {
   const [roomCopied, setRoomCopied] = useState(false);
   const { remoteUsers } = useUserStore();
-
-  useEffect(() => {
-    console.log("Header status changed:", status);
-  }, [status]);
 
   const copyRoomId = useCallback(async () => {
     try {
@@ -55,8 +51,8 @@ const Header = ({ roomId, status, isConnected, isRoomFull }: HeaderProps) => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 bg-stone-100/80 text-stone-700 rounded-xl px-3 py-1.5 border border-stone-200/50 shadow-sm dark:bg-stone-800/80 dark:border-stone-700/50 dark:text-stone-300">
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-2 bg-stone-100/80 text-stone-700 rounded-xl px-2 sm:px-3 py-1.5 border border-stone-200/50 shadow-sm dark:bg-stone-800/80 dark:border-stone-700/50 dark:text-stone-300">
             <Users className="w-4 h-4" />
             <span className="text-sm font-medium">
               {Object.keys(remoteUsers).length + 1}
@@ -69,10 +65,13 @@ const Header = ({ roomId, status, isConnected, isRoomFull }: HeaderProps) => {
             onClick={copyRoomId}
             variant="ghost"
             size="sm"
+            aria-label={roomCopied ? "Room ID copied" : "Copy room ID"}
             className="text-stone-700 hover:text-stone-900 hover:bg-stone-100 dark:text-stone-300 dark:hover:text-white dark:hover:bg-stone-800 transition-all duration-200 rounded-xl"
           >
-            <Copy className="w-4 h-4 mr-2" />
-            {roomCopied ? "Copied!" : "Copy ID"}
+            <Copy className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">
+              {roomCopied ? "Copied!" : "Copy ID"}
+            </span>
           </Button>
         </div>
       </div>

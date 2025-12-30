@@ -16,9 +16,9 @@ const RemoteVideoGrid = () => {
   const remoteStreamEntries = Object.entries(mediaStreams);
 
   return (
-    <div className="flex-1 relative bg-white/60 dark:bg-stone-900/60 rounded-3xl m-4 overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm">
+    <div className="flex-1 relative bg-white/60 dark:bg-stone-900/60 rounded-2xl sm:rounded-3xl m-2 sm:m-4 overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm">
       {remoteStreamEntries.length ? (
-        <div className="absolute inset-0 p-4 overflow-auto">
+        <div className="absolute inset-0 p-2 sm:p-4 overflow-auto">
           <div
             className={`grid h-full gap-4 ${
               remoteStreamEntries.length === 1
