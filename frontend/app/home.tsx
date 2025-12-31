@@ -13,6 +13,8 @@ import { ThemeToggle } from "@/components/custom/themeToggle";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import type { Variants } from "framer-motion";
 import AnimatedBackground from "@/components/custom/animatedBackground";
+import useMediaQuery from "@/lib/hooks/mediaQueryHook";
+import StaticBackground from "@/components/custom/staticBackground";
 
 // Magnetic button component for organic feel
 const MagneticButton = ({
@@ -160,6 +162,7 @@ export default function Home() {
   const [displayName, setDisplayName] = useState("");
   const [activeTab, setActiveTab] = useState<"create" | "join">("create");
   const [isScrolled, setIsScrolled] = useState(false);
+  const isSmallScreen = useMediaQuery("(max-width: 768px)");
 
   useEffect(() => {
     const handleScroll = () => {
@@ -241,7 +244,7 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen overflow-hidden">
-      <AnimatedBackground />
+      {isSmallScreen ? <StaticBackground /> : <AnimatedBackground />}
 
       {/* Header */}
       <motion.header
