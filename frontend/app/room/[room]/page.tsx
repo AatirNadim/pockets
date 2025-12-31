@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { useMediaStore } from "@/lib/stores/mediaStore";
-import { useVoiceActivityStore } from "@/lib/stores/voiceActivityStore";
 import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
@@ -52,7 +51,6 @@ export default function Room() {
     selectedMicrophoneId,
   } = useMediaStore();
   const { userType, userId } = useUserStore();
-  const { levels: voiceLevels } = useVoiceActivityStore();
 
   const router = useRouter();
   const params = useParams();
@@ -98,20 +96,23 @@ export default function Room() {
     connectToRoom();
   }, []);
 
-  const handlePopState = (event: PopStateEvent) => {
-    event.preventDefault();
-    const shouldLeave = window.confirm(
-      "Leaving the room will end your session. Do you want to proceed?"
-    );
+  const handlePopState = useCallback(
+    (event: PopStateEvent) => {
+      event.preventDefault();
+      const shouldLeave = window.confirm(
+        "Leaving the room will end your session. Do you want to proceed?"
+      );
 
-    if (shouldLeave) {
-      window.removeEventListener("popstate", handlePopState);
-      cleanUpRef.current();
-      router.back();
-    } else {
-      window.history.pushState(null, "", window.location.href);
-    }
-  };
+      if (shouldLeave) {
+        window.removeEventListener("popstate", handlePopState);
+        cleanUpRef.current();
+        router.back();
+      } else {
+        window.history.pushState(null, "", window.location.href);
+      }
+    },
+    [router]
+  );
 
   useEffect(() => {
     // prevent accidental back navigation without warning
@@ -159,7 +160,7 @@ export default function Room() {
   }, [router]);
 
   return (
-    <div className="relative flex h-screen max-h-screen w-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+    <div className="relative flex h-dvh sm:h-screen w-screen flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       {/* Subtle ambient gradient */}
       <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-amber-50/30 via-transparent to-rose-50/20 dark:from-amber-900/10 dark:via-transparent dark:to-rose-900/5" />
 
@@ -172,11 +173,11 @@ export default function Room() {
       />
 
       {/* Main Content */}
-      <div className="w-full flex flex-col sm:flex-row h-[calc(100vh-5rem)] ">
+      <div className="w-full flex-1 min-h-0 flex flex-col sm:flex-row">
         {/* Video Area */}
         <div
           className={cn(
-            "relative transition-all duration-300 w-full",
+            "relative transition-all duration-300 w-full min-h-0",
             "flex-1 flex flex-col-reverse"
             // "flex-1"
             // showChat ? "sm:mr-80" : ""
@@ -208,7 +209,7 @@ export default function Room() {
       {isHost && requests.length > 0 && (
         <div
           className={cn([
-            "fixed right-6 bottom-40 md:bottom-65 z-40 flex w-80 flex-col gap-3 overflow-auto max-h-[40vh] p-2 md:p-4",
+            "fixed left-4 right-4 sm:left-auto sm:right-6 bottom-28 sm:bottom-40 md:bottom-65 z-40 flex sm:w-80 flex-col gap-3 overflow-auto max-h-[40vh] p-2 md:p-4",
             "glass-strong rounded-3xl",
           ])}
         >

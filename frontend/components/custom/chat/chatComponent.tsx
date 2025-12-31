@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Paperclip, Send } from "lucide-react";
+import { MessageSquare, Paperclip, Send, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
@@ -28,11 +28,13 @@ const MotionButton = motion(Button);
 type ChatComponentProps = {
   onSendMessage: (message: string) => boolean;
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
+  onClose?: () => void;
 };
 
 const ChatComponent = ({
   onSendMessage,
   onRequestFile,
+  onClose,
 }: ChatComponentProps) => {
   const { receivedFiles, filesToBeSent, addFiles, removeFile } = useFileStore();
 
@@ -88,10 +90,25 @@ const ChatComponent = ({
   return (
     <div className="h-full flex flex-col text-stone-800 dark:text-stone-100">
       <div className="p-4 border-b border-stone-200/50 dark:border-stone-700/50">
-        <h3 className="font-semibold flex items-center text-stone-700 dark:text-stone-100">
-          <MessageSquare className="w-4 h-4 mr-2" />
-          Chat
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold flex items-center text-stone-700 dark:text-stone-100">
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Chat
+          </h3>
+
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="sm:hidden h-9 w-9 rounded-xl"
+              aria-label="Close chat"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <MessagesContainer onRequestFile={onRequestFile} />

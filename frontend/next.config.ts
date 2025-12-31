@@ -8,13 +8,13 @@ const nextConfig: NextConfig = {
     "http://localhost:3000",
   ],
   experimental: {
-    optimizePackageImports: [
-      "lucide-react",
-      "framer-motion",
-      "@radix-ui/react-dropdown-menu",
-      "@radix-ui/react-dialog",
-      "@radix-ui/react-scroll-area",
-    ],
+    // optimizePackageImports: [
+    //   "lucide-react",
+    //   "framer-motion",
+    //   "@radix-ui/react-dropdown-menu",
+    //   "@radix-ui/react-dialog",
+    //   "@radix-ui/react-scroll-area",
+    // ],
   },
   compiler: {
     removeConsole:
