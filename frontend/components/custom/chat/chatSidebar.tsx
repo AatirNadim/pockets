@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import React from "react";
+import { useEffect } from "react";
 import { useChatStore } from "@/lib/stores/chatStore";
 import dynamic from "next/dynamic";
 
@@ -23,13 +23,22 @@ const ChatSidebar = ({
 }: ChatSidebarProps) => {
   const { showChat, toggleShowChat } = useChatStore();
 
+  useEffect(() => {
+    if (!showChat) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") toggleShowChat();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showChat, toggleShowChat]);
+
   return (
     <div
       className={cn(
         !showChat && "hidden",
-        "fixed inset-0 z-50 h-dvh w-screen sm:static sm:z-auto sm:h-full sm:w-80",
-        "bg-white/90 dark:bg-stone-900/90 backdrop-blur-xl border border-stone-200/50 dark:border-stone-700/50 transition-all duration-300 sm:border-l sm:border-t-0 sm:border-b-0 sm:border-r-0",
-        "rounded-none sm:rounded-none shadow-xl sm:shadow-none sm:mt-0 overflow-hidden opacity-100 pointer-events-auto"
+        "fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 h-[min(68dvh,38rem)] w-full rounded-3xl lg:static lg:z-auto lg:h-full lg:w-[22rem] lg:shrink-0 lg:rounded-none",
+        "border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900 transition-transform duration-200 lg:border-y-0 lg:border-r-0 lg:shadow-none",
+        "shadow-2xl overflow-hidden opacity-100 pointer-events-auto"
       )}
     >
       <ChatComponent

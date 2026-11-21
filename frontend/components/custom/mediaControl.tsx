@@ -7,7 +7,6 @@ import {
   Mic,
   MicOff,
   PhoneOff,
-  Settings,
   Video,
   VideoOff,
   Volume2,
@@ -161,6 +160,8 @@ const MediaControl = ({
           }}
           variant="ghost"
           size="lg"
+          aria-label={isMicrophoneMuted ? "Turn microphone on" : "Turn microphone off"}
+          aria-pressed={!isMicrophoneMuted}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isMicrophoneMuted
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -182,6 +183,8 @@ const MediaControl = ({
           }}
           variant="ghost"
           size="lg"
+          aria-label={isVideoOff ? "Turn camera on" : "Turn camera off"}
+          aria-pressed={!isVideoOff}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isVideoOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -199,6 +202,8 @@ const MediaControl = ({
           onClick={toggleSpeakerOff}
           variant="ghost"
           size="lg"
+          aria-label={isSpeakerOff ? "Turn speaker on" : "Turn speaker off"}
+          aria-pressed={!isSpeakerOff}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isSpeakerOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -232,6 +237,8 @@ const MediaControl = ({
           onClick={toggleShowChat}
           variant="ghost"
           size="lg"
+          aria-label={showChat ? "Close chat and files" : "Open chat and files"}
+          aria-pressed={showChat}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             showChat
               ? "bg-amber-500 hover:bg-amber-600 text-white"
@@ -241,20 +248,13 @@ const MediaControl = ({
           <MessageSquare className="w-5 h-5" />
         </Button>
 
-        <Button
-          variant="ghost"
-          size="lg"
-          className="w-12 h-12 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 transition-all duration-200 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
-        >
-          <Settings className="w-5 h-5" />
-        </Button>
-
         <div className="w-px h-8 bg-stone-300 dark:bg-stone-600 mx-2"></div>
 
         <Button
           onClick={onLeave}
           variant="ghost"
           size="lg"
+          aria-label="Leave room"
           className="w-12 h-12 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white transition-all duration-200 transform hover:scale-105"
         >
           <PhoneOff className="w-5 h-5" />
