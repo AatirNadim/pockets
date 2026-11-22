@@ -16,7 +16,7 @@ This README captures **what is being built**, **why specific subsystems exist**,
 ## System Architecture
 
 - **Frontend** – Next.js 15 App Router, React 19, Tailwind, Radix UI, Zustand stores, and Framer Motion finishings. The entire RTC lifecycle (media capture, peer negotiation, chat/file data channels, join-request UX) happens here.
-- **Signaling Server** – Minimal Node.js WebSocket service (`server/`) that enforces host/guest invariants, room capacity, and relays SDP/ICE payloads. Optionally backed by **Redis** for room persistence across restarts.
+- **Signaling Server** – Node.js WebSocket service (`server/`) that binds identity to a live socket session, authorizes room membership and signaling targets, reserves capacity atomically, and relays SDP/ICE payloads. Redis can store ephemeral room metadata but cannot restore live sessions.
 - **Shared Contract** – `shared/` package keeps signaling envelopes, join-request payloads, and UserType enums in sync between client and server.
 - **Monorepo** – pnpm workspaces manage three packages (`frontend`, `server`, `shared`) with shared dependencies and coordinated builds.
 
@@ -98,7 +98,7 @@ sequenceDiagram
 
 ### Chat + File Management Micro-System
 
-- Chat flows over a dedicated `chat` RTCDataChannel and persists locally in `useChatStore`, supporting unread counts, collapsible panes, and attachment metadata.
+- Chat flows over a dedicated `chat` RTCDataChannel and remains in the current browser session in `useChatStore`; a reload clears chat history. The client deduplicates messages and keeps the latest 500 in timestamp order, with unread counts and attachment metadata.
 - Sending files queues up to 10 assets (`useFileStore`), dedupes by name+size, and tags each attachment with the owner’s ID.
 - Attachments are not auto-pushed. Instead, peers **request a download**, and the owner replays the relevant files through data channels (see below). This keeps bandwidth predictable and respects user intent.
 
@@ -108,14 +108,14 @@ sequenceDiagram
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Queue sharding  | `useFile` slices up to `MAX_CHANNELS_FOR_DATA_TRANSMISSION` (5) queues and assigns files in a round-robin fashion. Each queue maps to its own RTCDataChannel (`transfer-{sessionId}-queue-{i}`) for better throughput.                                                                   |
 | Metadata primer | Before chunks fly, the sender emits a `file-metadata` envelope (id, ownerId, size, MIME). Receivers cache this alongside the channel label.                                                                                                                                  |
-| Chunk streaming | Files break into 64 KB slices (`CHUNK_SIZE`). The sender monitors `channel.bufferedAmount` to apply backpressure and avoid browser crashes.                                                                                                                                  |
+| Chunk streaming | Files break into 30 KB slices (`CHUNK_SIZE`). The sender monitors `channel.bufferedAmount` to apply backpressure.                                                                                                                                  |
 | Pull semantics  | Attachments render with contextual actions: `Open` (local), `Download` (already received), or `Request` (not yet downloaded). A request triggers `file-download-request`, the owner replies with `file-download-response`, and only the explicitly requested data transfers. |
 | Persistence     | Completed transfers turn into object URLs and are cleaned up via `URL.revokeObjectURL` to prevent leaks.                                                                                                                                                                     |
 
 ## Host vs Guest Dynamics & Room Lifecycle
 
 1. **Host creates room** – `useUserStore.initializeUserAsHost` issues a UUID and registers the user with the signaling server, claiming `room.hostId`.
-2. **Guests request entry** – Guests can’t join unless a host exists. When they try, the server queues them in `pendingJoinRequests` and forwards the request to the active host socket only if the room has capacity.
+2. **Guests request entry** – Guests can’t join unless a host socket is active. The server atomically reserves a pending slot and forwards the request to that host.
 3. **Host decision** – Accepting moves the guest from the pending map into `room.users` and broadcasts `user-joined`. Rejecting simply removes the pending entry and notifies the guest with a reason.
 4. **In-room behavior** – Up to 6 concurrent users (including host) can share media. All chat/file traffic stays peer-to-peer; the server only sees signaling metadata.
 5. **Host exit** – When the host leaves, `notifyHostClosed` tears down the room, informs connected guests, and clears pending requests so nobody waits forever.
@@ -125,7 +125,7 @@ sequenceDiagram
 - **Single host per room** – Any second host attempting to reuse the ID receives `This room already has an active host` and is dropped.
 - **Guest before host** – Guests are politely told to wait because the signaling layer refuses to spin up host-less rooms.
 - **Capacity accounting** – Pending join requests count toward the 6-user limit to prevent over-admission once multiple requests are approved.
-- **Host disconnect** – Everyone (connected + pending) receives `host-closed-room` and auto-navigates away so they don’t get stuck in limbo.
+- **Socket disconnect** – Socket close, explicit leave, and heartbeat timeout use the same idempotent cleanup path. Host disconnect closes the room and informs active and pending guests.
 - **ICE/RTC cleanup** – When sockets close or remote users leave, the client tears down peer connections, revokes object URLs, and resets Zustand stores to maintain a clean slate.
 - **Device hot-swap** – The runtime listens to `navigator.mediaDevices.ondevicechange` events, auto-selects the next best device, and surfaces toasts if switching fails.
 - **Broken transfers** – Each channel is isolated; a failed queue only affects the subset of files assigned to it, making retries cheaper.
@@ -137,7 +137,7 @@ sequenceDiagram
 - **Tailwind v4 + Shadcn + Framer Motion** for interactivity.
 - **Zustand** for persistent yet minimal state (user identity, media state, chat, files, join requests).
 - **Node.js WebSocket server** powered by `ws`, with graceful shutdown handlers.
-- **Redis** (optional) for room state persistence across server restarts.
+- **Redis** (optional) for single-instance room metadata and atomic admission operations; rooms are discarded on server startup because live sockets cannot be resumed.
 - **esbuild** for fast production builds of server and shared packages.
 - **pnpm workspaces** for monorepo package management.
 
@@ -159,11 +159,12 @@ pockets/
 │   │   │   └── persistence/ # Redis and in-memory persistence layers
 │   │   └── services/       # Room, socket, user, and request queue services
 │   ├── util/               # Constants and types
-│   ├── docker-compose.yml  # Redis for local development
+│   ├── Dockerfile          # Production image, built from the workspace root
+│   ├── docker-compose.yml  # Optional Redis for local development
 │   └── index.ts            # WebSocket bootstrap + lifecycle hooks
 ├── shared/                 # Cross-runtime TypeScript definitions for signaling
 ├── Caddyfile               # Local HTTPS reverse proxy config (optional)
-├── docker-compose.yml      # Full stack orchestration (frontend + server)
+├── docker-compose.yml      # Production-like single-instance stack
 ├── pnpm-workspace.yaml     # Monorepo workspace configuration
 └── LOCAL_DEVELOPMENT.md    # Full local setup guide
 ```
@@ -174,7 +175,7 @@ pockets/
 
 - Node.js 20+
 - pnpm (`corepack enable pnpm`)
-- Docker (for Redis persistence)
+- Docker Compose (for the production-like full stack or optional Redis)
 - Camera + microphone on each test device
 - Machines on the same LAN if you want multi-device realism (see `LOCAL_DEVELOPMENT.md`)
 
@@ -195,7 +196,7 @@ cp frontend/.env.example frontend/.env.local
 ### Running
 
 ```bash
-# Optional: Start Redis for room persistence
+# Optional: Start Redis for room metadata (not live session recovery)
 cd server && docker compose up -d && cd ..
 
 # Terminal 1 – signaling server (from project root)
@@ -205,9 +206,20 @@ pnpm dev:server
 pnpm dev:frontend
 ```
 
-The frontend runs on `http://localhost:3000` and the server on `http://localhost:8080`.
+The frontend runs on `http://localhost:3000` and the signaling server on `http://localhost:8080`.
 
-Point every test device to `http://<host-ip>:3000` and make sure `NEXT_PUBLIC_SERVER_PATH` in `frontend/.env.local` resolves to that same IP. A deeper LAN checklist (firewalls, AP isolation, port exposure, Caddy HTTPS setup) lives in [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md).
+Point every test device to `http://<host-ip>:3000` and make sure `NEXT_PUBLIC_SERVER_PATH` in `frontend/.env.local` resolves to that same IP and port 8080. HTTPS clients use `wss://`. A deeper LAN/deployment checklist (TLS, firewall, Caddy, network limits) lives in [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md).
+
+## Support and deployment limits
+
+- Signaling is intended to run as one server instance. Redis does not route live WebSocket messages across replicas.
+- Room membership is ephemeral; Redis room/user metadata is cleared when the server starts and cannot restore disconnected sockets.
+- The room limit is six people including pending requests and the host. Current mesh topology needs browser/network measurements before increasing it.
+- The default ICE list uses public STUN only. Networks that block direct ICE paths may need an authenticated TURN service.
+- WebRTC transport is encrypted, but the product does not add identity verification or a separate application end-to-end security layer.
+- Use HTTPS for camera and microphone access outside localhost, and configure `NEXT_PUBLIC_SERVER_PATH` to a browser-reachable signaling host.
+
+Run the available quality checks from the repository root with `pnpm typecheck`, `pnpm lint`, `pnpm test`, and the build scripts.
 
 ## Testing Scenarios to Try
 

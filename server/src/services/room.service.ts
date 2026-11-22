@@ -15,12 +15,24 @@ class RoomService {
     return await this.persistenceClient.getRoomById(roomId);
   }
 
+  async touchRoom(roomId: string) {
+    await this.persistenceClient.touchRoom(roomId);
+  }
+
   async createRoom(roomId: string, hostId: string) {
     await this.persistenceClient.createRoom(roomId, hostId);
   }
 
   async createAndPopulateRoom(roomId: string, hostId: string) {
     return await this.persistenceClient.createRoom(roomId, hostId);
+  }
+
+  async requestGuestAdmission(roomId: string, guestId: string, maxCapacity: number) {
+    return this.persistenceClient.requestGuestAdmission(roomId, guestId, maxCapacity);
+  }
+
+  async admitPendingGuest(roomId: string, guestId: string, maxCapacity: number) {
+    return this.persistenceClient.admitPendingGuest(roomId, guestId, maxCapacity);
   }
 
   async deleteRoom(roomId: string) {

@@ -6,13 +6,19 @@ import { useUserStore } from "../stores/userStore";
 import { FileTransferSession } from "../utils/fileManagement/fileTransferSession";
 import type {
   IncomingTransferState,
-  DataChannelEnvelope,
   ChannelSetupPayload,
+  FileMetadataPayload,
 } from "@pockets/shared";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
+import { MAX_FILES_TO_SEND_TOGETHER } from "../constants";
+import { validateFileBatch } from "../utils/fileValidation";
+import { CHUNK_SIZE, MAX_CHANNELS_FOR_DATA_TRANSMISSION, MAX_FILE_SIZE_MB_MULTIPLE_SEND, MAX_FILE_SIZE_SINGLE_SEND } from "../constants";
 
 /** Timeout for stale transfers that never receive a complete signal */
 const STALE_TRANSFER_TIMEOUT_MS = 60000; // 60 seconds
+const MAX_INCOMING_TRANSFER_CHANNELS = MAX_CHANNELS_FOR_DATA_TRANSMISSION * 2;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 export const useFile = ({
   peerConnections,
@@ -125,10 +131,32 @@ export const useFile = ({
       return false;
     }
 
+    const MB = 1024 * 1024;
+    const batches: QueuedFile[][] = [];
+    let batch: QueuedFile[] = [];
+    for (const entry of fileEntries) {
+      if (entry.file.size > MAX_FILE_SIZE_MB_MULTIPLE_SEND * MB) {
+        if (batch.length) batches.push(batch);
+        batch = [];
+        batches.push([entry]);
+      } else {
+        batch.push(entry);
+        if (batch.length === MAX_FILES_TO_SEND_TOGETHER) {
+          batches.push(batch);
+          batch = [];
+        }
+      }
+    }
+    if (batch.length) batches.push(batch);
+
     console.log("initiating targeted file send to", remoteUserId, fileEntries);
 
     try {
-      await createAndStartSession(pc, remoteUserId, fileEntries, ownerId);
+      for (const currentBatch of batches) {
+        const validationError = validateFileBatch(currentBatch.map((entry) => entry.file));
+        if (validationError) throw new Error(validationError);
+        await createAndStartSession(pc, remoteUserId, currentBatch, ownerId);
+      }
       toast.success("File transfer started", {
         description: "Sending requested file to peer.",
       });
@@ -152,6 +180,8 @@ export const useFile = ({
     files: QueuedFile[],
     ownerIdValue: string
   ): Promise<void> => {
+    const validationError = validateFileBatch(files.map((entry) => entry.file));
+    if (validationError) throw new Error(validationError);
     console.log("starting file transfer session to", remoteUserId, files);
     const totalSize = files.reduce((acc, entry) => acc + entry.file.size, 0);
     const fileNames = files.map((f) => f.file.name);
@@ -211,11 +241,20 @@ export const useFile = ({
     channel: RTCDataChannel,
     remoteUserId?: string
   ) => {
+    if (Object.keys(incomingTransfersRef.current).length >= MAX_INCOMING_TRANSFER_CHANNELS || !/^transfer-[0-9a-f-]+-queue-[0-4]$/i.test(channel.label)) {
+      channel.close();
+      toast.error("Too many file transfers", { description: "Wait for an active transfer to finish, then try again." });
+      return;
+    }
+    channel.binaryType = "arraybuffer";
     // Initialize transfer state for this channel (may receive multiple files)
     incomingTransfersRef.current[channel.label] = {
       currentFile: undefined,
       completedFiles: [],
       totalReceivedBytes: 0,
+      declaredBytes: 0,
+      receivedFileIds: [],
+      receivedFileCount: 0,
       expectedTotalBytes: undefined,
       expectedFileCount: undefined,
       remoteUserId,
@@ -245,6 +284,18 @@ export const useFile = ({
 
     incomingTransfersRef.current[channel.label].timeoutId = staleTimeoutId;
 
+    const rejectTransfer = (message: string) => {
+      const current = incomingTransfersRef.current[channel.label];
+      if (current?.timeoutId) clearTimeout(current.timeoutId as number);
+      if (current?.currentFile) clearDownloadProgress([current.currentFile.metadata.fileId]);
+      if (current) {
+        current.currentFile = undefined;
+        current.failed = true;
+      }
+      toast.error("File transfer rejected", { description: message });
+      channel.close();
+    };
+
     channel.onmessage = async (event) => {
       const transfer = incomingTransfersRef.current[channel.label];
       if (!transfer) return;
@@ -252,14 +303,24 @@ export const useFile = ({
       // Handle JSON envelopes (metadata or complete signal)
       if (typeof event.data === "string") {
         try {
-          const envelope = JSON.parse(event.data) as DataChannelEnvelope;
-          console.log(`[${channel.label}] Received envelope:`, envelope.kind);
+          const envelope: unknown = JSON.parse(event.data);
+          if (!isRecord(envelope) || !isRecord(envelope.payload) || typeof envelope.kind !== "string") {
+            rejectTransfer("The sender sent malformed transfer metadata.");
+            return;
+          }
 
           if (envelope.kind === "channel-setup") {
-            const payload = envelope.payload as ChannelSetupPayload;
-            console.log(
-              `[${channel.label}] Received channel-setup: ${payload.fileCount} files, ${payload.totalBytes} bytes`
-            );
+            const payload = envelope.payload as Partial<ChannelSetupPayload>;
+            const match = /^transfer-([0-9a-f-]+)-queue-([0-4])$/i.exec(channel.label);
+            const maxBytes = MAX_FILE_SIZE_SINGLE_SEND * 1024 * 1024;
+            if (transfer.setupReceived || payload.protocolVersion !== 1 || !remoteUserId || !match || payload.sessionId !== match[1] || payload.channelLabel !== channel.label || !Number.isInteger(payload.fileCount) || Number(payload.fileCount) < 1 || Number(payload.fileCount) > 5 || !Number.isSafeInteger(payload.totalBytes) || Number(payload.totalBytes) < 0 || Number(payload.totalBytes) > maxBytes) {
+              rejectTransfer("The transfer setup did not match this connection or exceeded its limits.");
+              return;
+            }
+            if (Number(payload.fileCount) > 1 && Number(payload.totalBytes) > MAX_FILE_SIZE_MB_MULTIPLE_SEND * 1024 * 1024 * 5) {
+              rejectTransfer("The combined transfer is larger than the supported limit.");
+              return;
+            }
 
             transfer.setupReceived = true;
             transfer.expectedTotalBytes = payload.totalBytes;
@@ -288,49 +349,66 @@ export const useFile = ({
           }
 
           if (envelope.kind === "file-metadata") {
-            // If there's a current file in progress, finalize it first
-            if (transfer.currentFile) {
-              console.log(
-                `[${channel.label}] New file metadata received, finalizing previous file`
-              );
-              finalizeCurrentFile(channel.label);
+            const metadata = envelope.payload;
+            const maxBytes = MAX_FILE_SIZE_SINGLE_SEND * 1024 * 1024;
+            if (!transfer.setupReceived || transfer.currentFile || !remoteUserId || typeof metadata.fileId !== "string" || !UUID_PATTERN.test(metadata.fileId) || metadata.ownerId !== remoteUserId || typeof metadata.name !== "string" || !metadata.name.trim() || metadata.name.length > 255 || typeof metadata.type !== "string" || metadata.type.length > 255 || typeof metadata.size !== "number" || !Number.isSafeInteger(metadata.size) || metadata.size < 0 || metadata.size > maxBytes || transfer.receivedFileIds.includes(metadata.fileId) || transfer.receivedFileCount >= (transfer.expectedFileCount ?? 0)) {
+              rejectTransfer("The file details were invalid or did not match the connected sender.");
+              return;
             }
-
-            // Start tracking the new file
+            if ((transfer.expectedFileCount ?? 0) > 1 && metadata.size > MAX_FILE_SIZE_MB_MULTIPLE_SEND * 1024 * 1024) {
+              rejectTransfer("A file in a multi-file transfer exceeded the per-file limit.");
+              return;
+            }
+            if (transfer.declaredBytes + metadata.size > (transfer.expectedTotalBytes ?? -1)) {
+              rejectTransfer("The declared file sizes exceeded the transfer total.");
+              return;
+            }
+            transfer.declaredBytes += metadata.size;
+            transfer.receivedFileIds.push(metadata.fileId);
             transfer.currentFile = {
-              metadata: envelope.payload,
+              metadata: metadata as unknown as FileMetadataPayload,
               chunks: [],
               receivedBytes: 0,
             };
-            console.log(
-              "received file metadata:",
-              envelope.payload,
-              "current file set to:",
-              transfer.currentFile
-            );
-            beginDownload(envelope.payload.fileId, envelope.payload.size);
+            beginDownload(metadata.fileId, metadata.size);
+            if (metadata.size === 0) {
+              finalizeCurrentFile(channel.label);
+              if (transfer.receivedFileCount === transfer.expectedFileCount && transfer.totalReceivedBytes === transfer.expectedTotalBytes) {
+                if (transfer.timeoutId) clearTimeout(transfer.timeoutId as number);
+                channel.close();
+              }
+            }
             return;
           }
+
+          rejectTransfer("The sender used an unknown transfer message.");
+          return;
         } catch (error) {
           console.error("Failed to parse transfer envelope", error);
+          rejectTransfer("The transfer data could not be parsed.");
         }
         return;
       }
 
       // Handle binary chunks
-      if (!transfer.currentFile) {
-        console.warn(`[${channel.label}] Received chunk before file metadata`);
+      if (!transfer.currentFile || !transfer.setupReceived || !(event.data instanceof ArrayBuffer)) {
+        rejectTransfer("A file chunk arrived before valid file metadata.");
         return;
       }
 
-      const chunkBuffer =
-        event.data instanceof ArrayBuffer
-          ? event.data
-          : await event.data.arrayBuffer();
-
-      console.log(
-        `[${channel.label}] Received chunk: ${chunkBuffer.byteLength} bytes`
-      );
+      if (event.data.byteLength < 9) {
+        rejectTransfer("A file chunk was shorter than the transfer header.");
+        return;
+      }
+      const header = new DataView(event.data);
+      const offset = header.getUint32(0, true);
+      const payloadBytes = header.getUint32(4, true);
+      const chunkBytes = event.data.byteLength - 8;
+      if (payloadBytes !== chunkBytes || chunkBytes > CHUNK_SIZE || offset !== transfer.currentFile.receivedBytes || transfer.currentFile.receivedBytes + chunkBytes > transfer.currentFile.metadata.size || transfer.totalReceivedBytes + chunkBytes > (transfer.expectedTotalBytes ?? -1)) {
+        rejectTransfer("A file chunk was duplicated, out of order, or exceeded the declared file size.");
+        return;
+      }
+      const chunkBuffer = event.data.slice(8);
       transfer.currentFile.chunks.push(chunkBuffer);
       transfer.currentFile.receivedBytes += chunkBuffer.byteLength;
       transfer.totalReceivedBytes += chunkBuffer.byteLength;
@@ -354,8 +432,9 @@ export const useFile = ({
 
         // Check if all expected bytes have been received (transfer complete)
         if (
-          transfer.expectedTotalBytes &&
-          transfer.totalReceivedBytes >= transfer.expectedTotalBytes
+        transfer.expectedTotalBytes !== undefined &&
+          transfer.totalReceivedBytes === transfer.expectedTotalBytes &&
+          transfer.receivedFileCount === transfer.expectedFileCount
         ) {
           console.log(
             `[${channel.label}] All bytes received (${transfer.totalReceivedBytes}/${transfer.expectedTotalBytes}), closing channel`
@@ -366,6 +445,9 @@ export const useFile = ({
           finalizeAllCompletedFiles(channel.label);
           channel.close();
         }
+        if (transfer.receivedFileCount >= (transfer.expectedFileCount ?? 0) && (transfer.totalReceivedBytes !== transfer.expectedTotalBytes || transfer.declaredBytes !== transfer.expectedTotalBytes)) {
+          rejectTransfer("Received bytes did not match the declared transfer total.");
+        }
         // Otherwise, wait for next file metadata
       }
     };
@@ -373,9 +455,6 @@ export const useFile = ({
     channel.onclose = () => {
       const transfer = incomingTransfersRef.current[channel.label];
       if (!transfer) return;
-      channel.close();
-
-      // Otherwise, wait for next file metadata
 
       // Clear any pending timeouts
       if (transfer.timeoutId) {
@@ -394,18 +473,17 @@ export const useFile = ({
           finalizeCurrentFile(channel.label);
         } else {
           // Incomplete file
-          console.warn(
-            `[${channel.label}] Channel closed with incomplete file: ${transfer.currentFile.metadata.name}`
-          );
           clearDownloadProgress([transfer.currentFile.metadata.fileId]);
-          toast.error("Download interrupted", {
-            description: `${transfer.currentFile.metadata.name} did not finish transferring.`,
-          });
+          transfer.failed = true;
         }
       }
 
       // Finalize any completed but not yet persisted files
       finalizeAllCompletedFiles(channel.label);
+
+      if (!transfer.failed && transfer.expectedFileCount !== undefined && (transfer.receivedFileCount !== transfer.expectedFileCount || transfer.totalReceivedBytes !== transfer.expectedTotalBytes || transfer.declaredBytes !== transfer.expectedTotalBytes)) {
+        toast.error("Download interrupted", { description: "The sender closed before all declared files arrived." });
+      }
 
       delete incomingTransfersRef.current[channel.label];
     };
@@ -426,6 +504,7 @@ export const useFile = ({
         `[${channelLabel}] Finalizing incomplete file: ${metadata.name} (${receivedBytes}/${metadata.size})`
       );
       clearDownloadProgress([metadata.fileId]);
+      transfer.failed = true;
       toast.error("Download incomplete", {
         description: `${metadata.name} was only partially received.`,
       });
@@ -455,6 +534,7 @@ export const useFile = ({
 
       // Move to completed files list
       transfer.completedFiles.push(transfer.currentFile);
+      transfer.receivedFileCount += 1;
       transfer.currentFile = undefined;
     } catch (error) {
       console.error(`[${channelLabel}] Failed to finalize file`, error);

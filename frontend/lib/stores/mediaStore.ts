@@ -18,6 +18,7 @@ type MediaState = {
   availableMicrophones: MediaDeviceOption[];
   selectedCameraId: string | null;
   selectedMicrophoneId: string | null;
+  mediaError: string | null;
   remoteTrackState: Record<
     string,
     { videoEnabled: boolean; audioEnabled: boolean }
@@ -42,6 +43,7 @@ type MediaActions = {
   setAvailableMicrophones: (devices: MediaDeviceOption[]) => void;
   setSelectedCameraId: (deviceId: string | null) => void;
   setSelectedMicrophoneId: (deviceId: string | null) => void;
+  setMediaError: (message: string | null) => void;
   setRemoteTrackEnabled: (
     userId: string,
     kind: "video" | "audio",
@@ -71,6 +73,7 @@ export const useMediaStore = create<MediaState & MediaActions>()(
       availableMicrophones: [],
       selectedCameraId: null,
       selectedMicrophoneId: null,
+      mediaError: null,
       remoteTrackState: {},
       addMediaStream: (userId, track, trackType) =>
         set((state) => {
@@ -136,6 +139,7 @@ export const useMediaStore = create<MediaState & MediaActions>()(
       setSelectedCameraId: (deviceId) => set({ selectedCameraId: deviceId }),
       setSelectedMicrophoneId: (deviceId) =>
         set({ selectedMicrophoneId: deviceId }),
+      setMediaError: (message) => set({ mediaError: message }),
       setRemoteTrackEnabled: (userId, kind, enabled) =>
         set((state) => {
           const prev = state.remoteTrackState[userId] ?? {

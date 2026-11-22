@@ -1,241 +1,103 @@
-# Local Development Guide
+# Local Development and Deployment
 
-This guide covers setting up and running the Pockets application locally.
+Pockets is a pnpm workspace with a Next.js frontend, a Node WebSocket signaling service, and a shared protocol package. The server relays signaling; audio, video, chat, and file bytes travel over peer connections when the network permits. This is a small-room, single signaling-server prototype.
 
-## Project Structure
+## Requirements
 
-This is a **pnpm monorepo** with three packages:
+- Node.js 20 or later
+- Corepack and pnpm 9.15.0 (`corepack enable pnpm`)
+- Docker Compose for the container path or optional Redis
+- HTTPS for camera and microphone access outside localhost
 
-```
-pockets/
-├── frontend/          # Next.js 15 web application
-├── server/            # WebSocket signaling server
-├── shared/            # Shared types and constants
-├── Caddyfile          # Local HTTPS reverse proxy config
-├── pnpm-workspace.yaml
-└── package.json       # Root workspace scripts
-```
+## Run locally
 
-## Prerequisites
-
-- **Node.js** v20+
-- **pnpm** (install via `corepack enable pnpm`)
-- **Docker** (for Redis persistence)
-- **Caddy** (optional, for HTTPS with mDNS hostname)
-
-## Quick Start
-
-### 1. Install Dependencies
-
-From the project root:
+From the repository root:
 
 ```bash
-pnpm install
+corepack enable pnpm
+pnpm install --frozen-lockfile
+cp server/.env.example server/.env.local
+cp frontend/.env.example frontend/.env.local
 ```
 
-This installs dependencies for all packages (frontend, server, shared).
-
-### 2. Set Up Environment Files
-
-#### Server (`server/.env.local`)
+The default development setup uses in-memory room metadata. Leave `REDIS_URL` unset in `server/.env.local` unless you have started Redis. Start the server and frontend in separate terminals:
 
 ```bash
-SERVER_PORT=8080
-REDIS_URL=redis://localhost:6379
-ROOM_TTL_SECONDS=3600
-```
-
-#### Frontend (`frontend/.env.local`)
-
-```bash
-NEXT_PUBLIC_SERVER_PATH=localhost:8080
-```
-
-> **Note:** If using Caddy with mDNS (see below), update this to your mDNS hostname.
-
-### 3. Start Redis (Optional)
-
-The server supports Redis for room persistence across restarts. Without Redis, it falls back to in-memory storage.
-
-```bash
-cd server
-docker compose up -d
-```
-
-This starts Redis on port 6379 with data persistence via a Docker volume.
-
-### 4. Start Development Servers
-
-From the project root, run both frontend and server:
-
-```bash
-# Terminal 1 - Start the server (with hot reload)
 pnpm dev:server
-
-# Terminal 2 - Start the frontend
 pnpm dev:frontend
 ```
 
-Or run them individually:
+The frontend is at `http://localhost:3000`; signaling is at `ws://localhost:8080`. `NEXT_PUBLIC_SERVER_PATH` is the browser-reachable hostname and port, with no protocol prefix. HTTPS pages automatically use `wss://`.
+
+To run Redis locally, start `server/docker-compose.yml`, then set `REDIS_URL=redis://localhost:6379` in `server/.env.local`. Redis stores room metadata only. Live WebSocket sessions cannot resume after a server restart; the server clears old room/user metadata at startup. Redis availability is required when `REDIS_URL` is configured; the server does not silently fall back to memory.
+
+## Production-like Compose stack
+
+The supported container build uses the repository root as the build context so pnpm can install `shared` and each app. From the root:
 
 ```bash
-# Server only
-cd server && pnpm dev
-
-# Frontend only
-cd frontend && pnpm dev
+docker compose build
+docker compose up -d
 ```
 
-The frontend runs on `http://localhost:3000` and the server on `http://localhost:8080`.
+Open `http://localhost:3000`. The Compose stack starts Redis, one signaling server, and one production Next.js server. Redis uses a named volume for its own data, but Pockets clears ephemeral room membership whenever the signaling process starts. Do not scale the signaling service: live sockets are held by one process and are not routed between replicas.
 
----
+If the frontend is served through HTTPS or from another device, set the browser-visible WebSocket address before building:
 
-## Caddy Reverse Proxy (Optional)
+```bash
+NEXT_PUBLIC_SERVER_PATH=your-host.example:8443 docker compose build frontend
+docker compose up -d
+```
 
-For HTTPS access and testing with mDNS hostnames (useful for WebRTC and mobile testing on the same network):
+Route HTTPS traffic to the frontend and provide a WebSocket reverse proxy to the signaling service. For HTTPS, the frontend uses `wss://your-host.example:8443`. Never set the browser address to the internal Compose hostname `server`.
 
-### Caddyfile Configuration
+The root `.dockerignore` excludes local dependency directories, build output, Git metadata, and environment files. Images build with Node 20, pnpm 9.15.0, frozen lockfile installs, and production start commands.
 
-The included `Caddyfile` is configured for an mDNS hostname. You'll need to update it for your machine:
+## Local HTTPS with Caddy
+
+Media devices require HTTPS on other devices. Configure the hostname in `Caddyfile` and point the frontend to Caddy's WebSocket listener. Example:
 
 ```caddyfile
-{
-    auto_https disable_redirects
+your-host.local {
+  reverse_proxy localhost:3000
 }
 
-# Replace 'yourhostname.local' with your machine's mDNS name
-yourhostname.local {
-    reverse_proxy localhost:3000
-}
-
-yourhostname.local:8443 {
-    reverse_proxy localhost:8080
+your-host.local:8443 {
+  reverse_proxy localhost:8080
 }
 ```
 
-> **Finding your mDNS hostname:** On macOS/Linux, run `hostname` or check System Preferences. It's typically `yourmachinename.local`.
+Run Caddy with that file and set `NEXT_PUBLIC_SERVER_PATH=your-host.local:8443` in `frontend/.env.local` before `pnpm dev:frontend`. Confirm the hostname resolves on each device and that the firewall allows the selected ports.
 
-### Running Caddy
-
-```bash
-caddy run --config Caddyfile
-```
-
-Then update `frontend/.env.local`:
+## Checks and builds
 
 ```bash
-NEXT_PUBLIC_SERVER_PATH=yourhostname.local:8443
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build:server
+pnpm build:frontend
 ```
 
----
+`pnpm test` currently covers signaling authorization, admission capacity, and disconnect cleanup. Browser testing is still needed for camera/microphone permissions, mobile layout, peer-to-peer connectivity, and file-transfer interruption/retry cases.
 
-## Build Commands
+## Environment variables
 
-### Development
+| Variable | Used by | Meaning |
+| --- | --- | --- |
+| `PORT` | Server | HTTP and WebSocket listen port; defaults to `8080`. |
+| `REDIS_URL` | Server | Optional Redis URL for room metadata; connection failure stops startup. Unset uses in-memory metadata. |
+| `ROOM_TTL_SECONDS` | Server | Redis room metadata expiry; defaults to one hour and is refreshed while a room has live sessions. |
+| `NEXT_PUBLIC_SERVER_PATH` | Frontend | Browser-visible signaling hostname and port, without `ws://` or `wss://`; compiled into the frontend at build time. |
+| `TURN_CREDENTIALS_URL` | Frontend server | Optional private credential endpoint returning `{ "iceServers": [...] }` with short-lived TURN credentials. |
+| `TURN_CREDENTIALS_TOKEN` | Frontend server | Optional bearer token sent only from the Next.js server to the credential endpoint; do not use a `NEXT_PUBLIC_` name. |
 
-```bash
-pnpm dev:frontend    # Start Next.js dev server with Turbopack
-pnpm dev:server      # Start server with tsx watch (hot reload)
-```
+## Operating limits
 
-### Production Build
-
-The server and shared packages use **esbuild** for production builds:
-
-```bash
-# Build all packages
-pnpm build
-
-# Or build individually
-cd shared && pnpm build    # Builds to shared/dist/
-cd server && pnpm build    # Builds to server/dist/
-cd frontend && pnpm build  # Next.js production build
-```
-
-### Running Production Server
-
-```bash
-cd server
-node dist/index.js
-```
-
-> **Note:** In production, environment variables should be set directly (not via .env.local files).
-
----
-
-## Environment Variables Reference
-
-### Server
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SERVER_PORT` | Port for the WebSocket server | `8080` |
-| `REDIS_URL` | Redis connection URL for persistence | (optional, falls back to in-memory) |
-| `ROOM_TTL_SECONDS` | Time-to-live for rooms in seconds | `3600` |
-| `NODE_ENV` | Environment mode | `development` |
-
-### Frontend
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_SERVER_PATH` | Server hostname:port for WebSocket connection | `localhost:8080` |
-
----
-
-## Docker Services
-
-### Redis (`server/docker-compose.yml`)
-
-```yaml
-services:
-  redis:
-    image: redis:8.4.0-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-```
-
-**Commands:**
-
-```bash
-cd server
-docker compose up -d      # Start Redis in background
-docker compose down       # Stop Redis
-docker compose logs -f    # View Redis logs
-```
-
----
-
-## Troubleshooting
-
-### "Cannot find module" errors in server build
-
-The server uses esbuild to bundle all imports. If you see module resolution errors:
-
-1. Ensure you've built the shared package first: `cd shared && pnpm build`
-2. Rebuild the server: `cd server && pnpm build`
-
-### WebSocket connection fails
-
-1. Verify the server is running on the expected port
-2. Check `NEXT_PUBLIC_SERVER_PATH` matches your server address
-3. If using Caddy, ensure it's running and the hostname resolves
-
-### Redis connection errors
-
-The server gracefully falls back to in-memory storage if Redis is unavailable. To use Redis:
-
-1. Start Redis: `cd server && docker compose up -d`
-2. Verify it's running: `docker ps`
-3. Check the `REDIS_URL` in your `.env.local`
-
----
-
-## Architecture Notes
-
-- **Signaling Server:** The server handles WebRTC signaling via WebSocket connections. It doesn't process media—peers connect directly for video/audio.
-- **Persistence:** Room state can be persisted to Redis, allowing rooms to survive server restarts. Without Redis, rooms are stored in memory.
-- **Shared Package:** Contains TypeScript types and constants shared between frontend and server.
+- Rooms allow at most six active plus pending participants, including the host.
+- Media uses a full mesh of peer connections. Per-participant connection count grows with room size, so the limit should not be increased without measurement.
+- ICE configuration defaults to public STUN servers. Some NATs/firewalls require TURN; configure the server-only credential endpoint with short-lived credentials for those networks. The app exposes no provider or TURN service of its own.
+- Room membership, chat messages, and file catalogs are temporary client/server memory. Redis does not retain them across server restarts.
+- WebRTC encrypts transport between peers, but the app does not provide identity verification or a separate end-to-end security layer.
+- The signaling service is designed for one instance. Redis does not provide shared socket routing or multi-instance coordination.
+- Use HTTPS in deployed environments and configure a browser-reachable `wss://` signaling endpoint.

@@ -9,6 +9,8 @@ import { useFileStore } from "@/lib/stores/fileStore";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useUserStore } from "@/lib/stores/userStore";
 import dynamic from "next/dynamic";
+import { MAX_FILE_SIZE_MB_MULTIPLE_SEND, MAX_FILE_SIZE_SINGLE_SEND, MAX_QUEUED_FILES } from "@/lib/constants";
+import { toast } from "sonner";
 
 const MessagesContainer = dynamic(() => import("./messagesContainer"), { ssr: false });
 const AttachementsToSend = dynamic(() => import("./attachementsToSend"), { ssr: false });
@@ -32,10 +34,22 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentP
     if (chatMessage.trim() && onSendMessage(chatMessage)) setChatMessage("");
   }, [chatMessage, onSendMessage]);
   const handleFileSelection = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(event.target.files ?? []);
-    if (selected.length) addFiles(selected);
+    const selected = Array.from(event.target.files ?? []).filter((file) => !filesToBeSent.some((entry) => entry.file.name === file.name && entry.file.size === file.size));
+    const availableSlots = Math.max(0, MAX_QUEUED_FILES - filesToBeSent.length);
+    const accepted = selected.slice(0, availableSlots);
+    const candidate = [...filesToBeSent.map((entry) => entry.file), ...accepted];
+    const MB = 1024 * 1024;
+    const error = candidate.length === 1 && candidate[0].size > MAX_FILE_SIZE_SINGLE_SEND * MB
+      ? `A single file can be up to ${MAX_FILE_SIZE_SINGLE_SEND} MB.`
+      : candidate.length > 1 && candidate.some((file) => file.size > MAX_FILE_SIZE_MB_MULTIPLE_SEND * MB)
+      ? `When sharing multiple files, each file must be ${MAX_FILE_SIZE_MB_MULTIPLE_SEND} MB or smaller.`
+      : null;
+    if (error) toast.error("File cannot be queued", { description: error });
+    else if (accepted.length) addFiles(accepted);
+    if (selected.length > accepted.length && !error) toast.warning("Queue limit reached", { description: `The queue holds up to ${MAX_QUEUED_FILES} files. Added the available files.` });
+    if (!selected.length && (event.target.files?.length ?? 0) > 0) toast.info("Those files are already queued.");
     event.target.value = "";
-  }, [addFiles]);
+  }, [addFiles, filesToBeSent]);
   const handleFileAction = (id: string, ownerId: string, name: string) => {
     const url = receivedFiles[id]?.url;
     const file = getLocalFile(id);

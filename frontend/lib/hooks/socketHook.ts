@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
-import { serverPath, STUN_SERVERS_LIST } from "@/lib/constants";
+import {
+  MAX_CHAT_MESSAGE_LENGTH,
+  MAX_QUEUED_FILES,
+  serverPath,
+  STUN_SERVERS_LIST,
+} from "@/lib/constants";
 
 import { toast } from "sonner";
 import { useJoinRequestStore } from "../stores/joinRequestStore";
@@ -28,12 +33,18 @@ import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
+import { useConnectionStore } from "../stores/connectionStore";
 
 export const useSocket = () => {
   const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const dataChannelMap = useRef<Record<string, RTCDataChannel | null>>({});
+  const iceServers = useRef<RTCIceServer[]>([{ urls: STUN_SERVERS_LIST }]);
+  const iceRestartAttempts = useRef<Record<string, number>>({});
+  const setPeerStatus = useConnectionStore((state) => state.setPeerStatus);
+  const removePeerStatus = useConnectionStore((state) => state.removePeerStatus);
+  const clearPeerStatuses = useConnectionStore((state) => state.clearPeerStatuses);
 
   const [status, setStatus] = useState("Connecting to room...");
   const [isConnected, setIsConnected] = useState(false);
@@ -333,7 +344,7 @@ export const useSocket = () => {
       clearChatMessages();
       resetUnreadCount();
       console.log("connecting to room...");
-      await createMediaStreams();
+      await Promise.all([createMediaStreams(), loadIceServers()]);
       createWSConnection();
     } catch (error) {
       console.error("Error creating room:", error);
@@ -481,6 +492,42 @@ export const useSocket = () => {
     }
   };
 
+  const restartPeerIce = async (remoteUserId: string, pc: RTCPeerConnection) => {
+    if (!userId || !userName || !roomId || userId.localeCompare(remoteUserId) > 0) return;
+    if ((iceRestartAttempts.current[remoteUserId] ?? 0) >= 1 || pc.signalingState !== "stable") return;
+    iceRestartAttempts.current[remoteUserId] = (iceRestartAttempts.current[remoteUserId] ?? 0) + 1;
+    setStatus(`Reconnecting to ${remoteUserId.slice(0, 6)}…`);
+    try {
+      pc.restartIce();
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      if (!offer.sdp) throw new Error("Browser did not create an ICE restart offer");
+      sendWsMessage({
+        type: "offer",
+        roomId,
+        fromUserId: userId,
+        fromUserName: userName,
+        fromUserType: userType ?? UserType.GUEST,
+        toUserId: remoteUserId,
+        offer: { type: "offer", sdp: offer.sdp },
+      });
+    } catch (error) {
+      console.error("ICE restart failed", error instanceof Error ? error.message : "unknown error");
+    }
+  };
+
+  const loadIceServers = async () => {
+    try {
+      const response = await fetch("/api/ice", { cache: "no-store" });
+      if (!response.ok) throw new Error("TURN configuration is unavailable");
+      const result = (await response.json()) as { iceServers?: RTCIceServer[] };
+      if (Array.isArray(result.iceServers)) iceServers.current = [{ urls: STUN_SERVERS_LIST }, ...result.iceServers];
+    } catch (error) {
+      iceServers.current = [{ urls: STUN_SERVERS_LIST }];
+      console.warn("Using STUN-only ICE configuration", error instanceof Error ? error.message : "configuration unavailable");
+    }
+  };
+
   const handleRemoteUserMuted = (message: AudioMuteMessage) => {
     console.log("remote user muted, received signal for:", message.userId);
     setRemoteTrackEnabled(message.userId, TrackType.AUDIO, false);
@@ -520,6 +567,7 @@ export const useSocket = () => {
     remoteUserName: string,
     remoteUserType: UserType = UserType.GUEST
   ) => {
+    setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
         console.debug("Sending ICE candidate:", "to remote user:");
@@ -539,8 +587,10 @@ export const useSocket = () => {
     };
 
     pc.onconnectionstatechange = () => {
+      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
       switch (pc.connectionState) {
         case "connected":
+          delete iceRestartAttempts.current[remoteUserId];
           if (remoteUsers[remoteUserId]) return;
           console.debug(
             `Connection established with remote user ${remoteUserId}`
@@ -562,16 +612,17 @@ export const useSocket = () => {
             `Connection with remote user ${remoteUserId} disconnected. Reconnecting...`
           );
 
+          setStatus(`Reconnecting to ${remoteUserName}…`);
           break;
         case "failed":
           console.warn(
             `Connection with remote user ${remoteUserId} lost. Attempting to reconnect...`
           );
 
-          toast.error("Connection lost with User", {
-            description: `Connection with user ${remoteUserName} lost.`,
+          toast.error("Connection problem", {
+            description: `Trying to reconnect to ${remoteUserName}. If this keeps happening, check the network or TURN configuration.`,
           });
-          handleRemoteUserLeft(remoteUserId);
+          void restartPeerIce(remoteUserId, pc);
           break;
         case "closed":
           console.warn(`Connection with remote user ${remoteUserId} closed.`);
@@ -589,6 +640,7 @@ export const useSocket = () => {
     };
 
     pc.oniceconnectionstatechange = () => {
+      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
       console.debug(
         `ICE connection state with ${remoteUserId}: ${pc.iceConnectionState}`
       );
@@ -600,8 +652,8 @@ export const useSocket = () => {
           });
           break;
         case "failed":
-          console.error("ICE connection failed, attempting restart");
-          pc.restartIce();
+          console.warn("ICE connection failed, attempting one restart");
+          void restartPeerIce(remoteUserId, pc);
           break;
       }
     };
@@ -703,13 +755,10 @@ export const useSocket = () => {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [
-          {
-            urls: STUN_SERVERS_LIST,
-          },
-        ],
+        iceServers: iceServers.current,
         iceCandidatePoolSize: 10,
       });
+      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
 
       // registering peer connection event handlers
       console.log("running pc event handler registration...");
@@ -952,6 +1001,8 @@ export const useSocket = () => {
       remoteUserId
     );
     try {
+      delete iceRestartAttempts.current[remoteUserId];
+      removePeerStatus(remoteUserId);
       // Cancel any active upload sessions for this peer
       uploadSessionRegistry.cancelSessionsForPeer(remoteUserId);
 
@@ -981,7 +1032,37 @@ export const useSocket = () => {
     }
   };
 
-  const handleIncomingChatMessage = (incoming: ChatMessage) => {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+  const isValidChatMessage = (value: unknown, senderId: string): value is ChatMessage => {
+    if (!isRecord(value)) return false;
+    const { id, userId: messageUserId, userName: messageUserName, message, timestamp, attachments } = value;
+    if (
+      typeof id !== "string" || id.length > 128 ||
+      messageUserId !== senderId ||
+      typeof messageUserName !== "string" || messageUserName.length > 80 ||
+      typeof message !== "string" || message.length > MAX_CHAT_MESSAGE_LENGTH ||
+      typeof timestamp !== "number" || !Number.isFinite(timestamp)
+    ) return false;
+    if (attachments === undefined) return true;
+    return Array.isArray(attachments) && attachments.length <= MAX_QUEUED_FILES &&
+      attachments.every((item) => isRecord(item) &&
+        typeof item.id === "string" && item.id.length <= 128 &&
+        item.ownerId === senderId &&
+        typeof item.name === "string" && item.name.length > 0 && item.name.length <= 255 &&
+        typeof item.type === "string" && item.type.length <= 128 &&
+        typeof item.size === "number" && Number.isSafeInteger(item.size) && item.size >= 0 && item.size <= 50 * 1024 * 1024);
+  };
+
+  const isValidFileRequest = (value: unknown, senderId: string): value is FileDownloadRequest =>
+    isRecord(value) && value.requesterId === senderId &&
+    typeof value.ownerId === "string" && value.ownerId.length <= 128 &&
+    Array.isArray(value.fileIds) && value.fileIds.length > 0 && value.fileIds.length <= MAX_QUEUED_FILES &&
+    value.fileIds.every((id) => typeof id === "string" && id.length <= 128);
+
+  const handleIncomingChatMessage = (incoming: ChatMessage, senderId: string) => {
+    if (!isValidChatMessage(incoming, senderId)) return;
     addChatMessage(incoming);
 
     const isLocalMessage = incoming.userId === userId;
@@ -992,8 +1073,8 @@ export const useSocket = () => {
     }
   };
 
-  const handleDownloadRequest = async (payload: FileDownloadRequest) => {
-    if (!userId || payload.ownerId !== userId) {
+  const handleDownloadRequest = async (payload: FileDownloadRequest, senderId: string) => {
+    if (!userId || payload.ownerId !== userId || payload.requesterId !== senderId) {
       return;
     }
 
@@ -1016,7 +1097,7 @@ export const useSocket = () => {
               reason: "File is no longer available.",
             },
           },
-          payload.requesterId
+          senderId
         );
         return;
       }
@@ -1034,12 +1115,12 @@ export const useSocket = () => {
                 : "accepted(partial)",
           },
         },
-        payload.requesterId
+        senderId
       );
 
       // initiate file transfer
       console.log("sending file to requester:", payload.requesterId);
-      await sendFilesToUser(payload.requesterId, payload.fileIds);
+      await sendFilesToUser(senderId, payload.fileIds);
     } catch (error) {
       console.error("Failed to fulfill download request", error);
       sendEnvelope(
@@ -1051,13 +1132,14 @@ export const useSocket = () => {
             reason: "Failed to send the requested file.",
           },
         },
-        payload.requesterId
+        senderId
       );
     }
   };
 
-  const handleDownloadResponse = (payload: FileDownloadResponse) => {
-    if (!userId || payload.requesterId !== userId) {
+  const handleDownloadResponse = (payload: FileDownloadResponse, senderId: string) => {
+    if (!userId || payload.requesterId !== userId || payload.ownerId !== senderId ||
+      !Array.isArray(payload.fileIds) || payload.fileIds.length > MAX_QUEUED_FILES) {
       return;
     }
 
@@ -1115,22 +1197,30 @@ export const useSocket = () => {
       }
 
       try {
-        const parsed = JSON.parse(event.data) as ChatDataEnvelope | ChatMessage;
+        const parsed: unknown = JSON.parse(event.data);
 
         // check whether the parsed data is an envelope or a direct chat message
-        if ((parsed as ChatDataEnvelope)?.kind) {
-          const envelope = parsed as ChatDataEnvelope;
+        if (isRecord(parsed) && typeof parsed.kind === "string" && isRecord(parsed.payload)) {
+          const envelope = parsed as unknown as ChatDataEnvelope;
 
           // the parsed data is an envelope; handle based on its kind
           switch (envelope.kind) {
             case "chat-message":
-              handleIncomingChatMessage(envelope.payload);
+              handleIncomingChatMessage(envelope.payload, remoteUserId ?? "");
               break;
             case "file-download-request":
-              handleDownloadRequest(envelope.payload);
+              if (remoteUserId && isValidFileRequest(envelope.payload, remoteUserId)) {
+                handleDownloadRequest(envelope.payload, remoteUserId);
+              }
               break;
             case "file-download-response":
-              handleDownloadResponse(envelope.payload);
+              if (remoteUserId && isRecord(envelope.payload) &&
+                envelope.payload.ownerId === remoteUserId && envelope.payload.requesterId === userId &&
+                Array.isArray(envelope.payload.fileIds) && envelope.payload.fileIds.length <= MAX_QUEUED_FILES &&
+                envelope.payload.fileIds.every((id) => typeof id === "string" && id.length <= 128) &&
+                ["accepted(all)", "accepted(partial)", "rejected", "unavailable"].includes(String(envelope.payload.status))) {
+                handleDownloadResponse(envelope.payload, remoteUserId);
+              }
               break;
             case "system":
               // future system notices
@@ -1140,7 +1230,7 @@ export const useSocket = () => {
         }
 
         // the parsed data is a direct chat message
-        handleIncomingChatMessage(parsed as ChatMessage);
+        handleIncomingChatMessage(parsed as ChatMessage, remoteUserId ?? "");
       } catch (error) {
         console.error("Error parsing chat payload:", error);
       }
@@ -1155,6 +1245,12 @@ export const useSocket = () => {
     const trimmedMessage = chatText.trim();
 
     if (!trimmedMessage) {
+      return false;
+    }
+    if (trimmedMessage.length > MAX_CHAT_MESSAGE_LENGTH) {
+      toast.error("Message is too long", {
+        description: `Keep messages under ${MAX_CHAT_MESSAGE_LENGTH} characters.`,
+      });
       return false;
     }
 
@@ -1183,9 +1279,8 @@ export const useSocket = () => {
       attachments: attachments.length ? attachments : undefined,
     };
 
+    if (!sendEnvelope({ kind: "chat-message", payload: localMessage })) return false;
     addChatMessage(localMessage);
-
-    sendEnvelope({ kind: "chat-message", payload: localMessage });
 
     if (attachments.length) {
       clearFilesToBeSent();
@@ -1208,6 +1303,9 @@ export const useSocket = () => {
       });
       return false;
     }
+
+    if (!fileIds.length || fileIds.length > MAX_QUEUED_FILES ||
+      fileIds.some((id) => typeof id !== "string" || id.length > 128)) return false;
 
     markDownloadRequested(fileIds);
 
@@ -1255,6 +1353,7 @@ export const useSocket = () => {
       leaveRoom();
       clearMediaStreams();
       clearJoinRequests();
+      clearPeerStatuses();
     } catch (error) {
       console.error("Error cleaning up WebSocket connection:", error);
     }

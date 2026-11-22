@@ -162,6 +162,7 @@ const MediaControl = ({
           size="lg"
           aria-label={isMicrophoneMuted ? "Turn microphone on" : "Turn microphone off"}
           aria-pressed={!isMicrophoneMuted}
+          disabled={!microphones.length}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isMicrophoneMuted
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -185,6 +186,7 @@ const MediaControl = ({
           size="lg"
           aria-label={isVideoOff ? "Turn camera on" : "Turn camera off"}
           aria-pressed={!isVideoOff}
+          disabled={!cameras.length}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isVideoOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"

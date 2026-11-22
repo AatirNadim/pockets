@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import type { ChatMessage } from "@pockets/shared";
+import { MAX_CHAT_HISTORY } from "@/lib/constants";
 
 interface ChatState {
   chatMessages: ChatMessage[];
@@ -31,9 +32,15 @@ export const useChatStore = create<ChatState & ChatActions>()((set) => ({
       };
     }),
   addChatMessage: (message) =>
-    set((state) => ({
-      chatMessages: [...state.chatMessages, message],
-    })),
+    set((state) => {
+      if (state.chatMessages.some((existing) => existing.id === message.id)) {
+        return state;
+      }
+      const chatMessages = [...state.chatMessages, message]
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(-MAX_CHAT_HISTORY);
+      return { chatMessages };
+    }),
   clearChatMessages: () => set({ chatMessages: [] }),
   incrementUnreadCount: () =>
     set((state) => ({ unreadCount: state.unreadCount + 1 })),

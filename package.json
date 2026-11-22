@@ -2,6 +2,7 @@
   "name": "pockets-monorepo",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev:frontend": "pnpm --filter pockets-ui dev",
     "dev:server": "pnpm --filter pockets-signaling-server dev",
@@ -11,6 +12,9 @@
     "start:server": "pnpm --filter pockets-signaling-server start",
     "start:frontend": "pnpm --filter pockets-ui start",
     "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm --filter pockets-ui lint",
+    "test": "pnpm --filter pockets-signaling-server test",
+    "build": "pnpm build:shared && pnpm build:server && pnpm build:frontend",
     "clean": "pnpm -r clean"
   },
   "devDependencies": {

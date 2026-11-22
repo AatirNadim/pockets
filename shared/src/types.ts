@@ -191,6 +191,7 @@ export type FileMetadataPayload = {
  * of the expected total bytes for this channel.
  */
 export type ChannelSetupPayload = {
+  protocolVersion: 1;
   sessionId: string;
   channelLabel: string;
   fileCount: number;
@@ -222,6 +223,13 @@ export type IncomingTransferState = {
   completedFiles: IncomingFileState[];
   /** Total bytes received across all files on this channel */
   totalReceivedBytes: number;
+  /** Sum of the file sizes declared so far in metadata envelopes. */
+  declaredBytes: number;
+  /** File IDs already seen on this channel, used to reject duplicates. */
+  receivedFileIds: string[];
+  /** Number of complete files validated on this channel. */
+  receivedFileCount: number;
+  failed?: boolean;
   /** Expected total bytes for all files (set from channel-setup) */
   expectedTotalBytes?: number;
   /** Expected file count for this channel */

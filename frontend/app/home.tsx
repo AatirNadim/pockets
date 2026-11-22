@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { v4 as uuidV4 } from "uuid";
 import { ArrowRight, Check, Link2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
@@ -46,10 +47,10 @@ export default function Home() {
     <main className="relative min-h-dvh overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       <StaticBackground />
       <header className="relative z-10 flex h-20 items-center justify-between px-5 sm:px-10">
-        <a href="/" className="flex items-center gap-3 font-semibold tracking-tight" aria-label="Pockets home">
+        <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight" aria-label="Pockets home">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-600 text-white"><Video size={19} /></span>
           <span className="text-xl">Pockets</span>
-        </a>
+        </Link>
         <ThemeToggle />
       </header>
 

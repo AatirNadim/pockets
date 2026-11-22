@@ -53,8 +53,22 @@ export class RedisPersistenceClient implements PersistenceClient {
 
   async getRoomById(roomId: string): Promise<Room | null> {
     const raw = await this.client.get(this.roomKey(roomId));
-    if (!raw) return null;
-    return JSON.parse(raw) as Room;
+    if (!raw) {
+      await this.client.sRem(this.roomsIndexKey(), roomId);
+      return null;
+    }
+    const room = JSON.parse(raw) as Partial<Room>;
+    // Redis Lua cjson encodes empty tables as `{}`. Normalize list fields at
+    // the adapter boundary so callers always receive the Room contract shape.
+    return {
+      ...room,
+      guestIds: Array.isArray(room.guestIds) ? room.guestIds : [],
+      pendingGuestIds: Array.isArray(room.pendingGuestIds) ? room.pendingGuestIds : [],
+    } as Room;
+  }
+
+  async touchRoom(roomId: string): Promise<void> {
+    await this.touchRoomKeys(roomId);
   }
 
   async createRoom(roomId: string, hostId: string): Promise<Room> {
@@ -64,10 +78,53 @@ export class RedisPersistenceClient implements PersistenceClient {
       guestIds: [] as string[],
       pendingGuestIds: [] as string[],
     } as Room;
-    await this.client.set(this.roomKey(roomId), JSON.stringify(room));
+    const created = await this.client.set(this.roomKey(roomId), JSON.stringify(room), { NX: true });
+    if (created !== "OK") throw new Error(`Room ${roomId} already exists`);
     await this.client.sAdd(this.roomsIndexKey(), roomId);
     await this.touchRoomKeys(roomId);
     return room;
+  }
+
+  async requestGuestAdmission(roomId: string, guestId: string, maxCapacity: number): Promise<"queued" | "full" | "missing" | "duplicate"> {
+    const script = `
+      local raw = redis.call('GET', KEYS[1])
+      if not raw then return 'missing' end
+      local room = cjson.decode(raw)
+      if room.hostId == ARGV[1] then return 'duplicate' end
+      for _, id in ipairs(room.guestIds or {}) do if id == ARGV[1] then return 'duplicate' end end
+      for _, id in ipairs(room.pendingGuestIds or {}) do if id == ARGV[1] then return 'duplicate' end end
+      local count = 1 + #(room.guestIds or {}) + #(room.pendingGuestIds or {})
+      if count >= tonumber(ARGV[2]) then return 'full' end
+      room.pendingGuestIds = room.pendingGuestIds or {}
+      table.insert(room.pendingGuestIds, ARGV[1])
+      redis.call('SET', KEYS[1], cjson.encode(room))
+      if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) end
+      return 'queued'
+    `;
+    return await this.client.eval(script, { keys: [this.roomKey(roomId)], arguments: [guestId, String(maxCapacity), String(this.roomTtlSeconds ?? 0)] }) as "queued" | "full" | "missing" | "duplicate";
+  }
+
+  async admitPendingGuest(roomId: string, guestId: string, maxCapacity: number): Promise<"accepted" | "full" | "not-pending"> {
+    const script = `
+      local raw = redis.call('GET', KEYS[1])
+      if not raw then return 'not-pending' end
+      local room = cjson.decode(raw)
+      local pending = room.pendingGuestIds or {}
+      local found = false
+      for i, id in ipairs(pending) do
+        if id == ARGV[1] then table.remove(pending, i); found = true; break end
+      end
+      if not found then return 'not-pending' end
+      local guests = room.guestIds or {}
+      if 1 + #guests >= tonumber(ARGV[2]) then return 'full' end
+      table.insert(guests, ARGV[1])
+      room.pendingGuestIds = pending
+      room.guestIds = guests
+      redis.call('SET', KEYS[1], cjson.encode(room))
+      if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) end
+      return 'accepted'
+    `;
+    return await this.client.eval(script, { keys: [this.roomKey(roomId)], arguments: [guestId, String(maxCapacity), String(this.roomTtlSeconds ?? 0)] }) as "accepted" | "full" | "not-pending";
   }
 
   async updateRoom(room: Room): Promise<void> {
@@ -81,8 +138,20 @@ export class RedisPersistenceClient implements PersistenceClient {
     await this.client.sRem(this.roomsIndexKey(), roomId);
   }
 
+  async resetEphemeralState(): Promise<void> {
+    const roomIds = await this.client.sMembers(this.roomsIndexKey());
+    const userIds = await this.client.sMembers(this.userIndexKey());
+    const keys = [...roomIds.map((id) => this.roomKey(id)), ...userIds.map((id) => this.userKey(id)), this.roomsIndexKey(), this.userIndexKey()];
+    if (keys.length) await this.client.del(keys);
+  }
+
   async getAllRoomIds(): Promise<string[]> {
-    return await this.client.sMembers(this.roomsIndexKey());
+    const ids = await this.client.sMembers(this.roomsIndexKey());
+    const exists = await Promise.all(ids.map((id) => this.client.exists(this.roomKey(id))));
+    const liveIds = ids.filter((_, index) => exists[index] === 1);
+    const staleIds = ids.filter((_, index) => exists[index] !== 1);
+    if (staleIds.length) await this.client.sRem(this.roomsIndexKey(), staleIds);
+    return liveIds;
   }
 
   async getUserById(userId: string): Promise<User | null> {
@@ -117,10 +186,18 @@ export class RedisPersistenceClient implements PersistenceClient {
   }
 
   async removeGuestFromRoom(roomId: string, guestId: string): Promise<void> {
-    const room = await this.getRoomById(roomId);
-    if (!room) return;
-    room.guestIds = room.guestIds.filter((id) => id !== guestId);
-    await this.updateRoom(room);
+    const script = `
+      local raw = redis.call('GET', KEYS[1])
+      if not raw then return 0 end
+      local room = cjson.decode(raw)
+      local guests = room.guestIds or {}
+      for i = #guests, 1, -1 do if guests[i] == ARGV[1] then table.remove(guests, i) end end
+      room.guestIds = guests
+      redis.call('SET', KEYS[1], cjson.encode(room))
+      if tonumber(ARGV[2]) > 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
+      return 1
+    `;
+    await this.client.eval(script, { keys: [this.roomKey(roomId)], arguments: [guestId, String(this.roomTtlSeconds ?? 0)] });
   }
 
   async getUserIdsForRoom(roomId: string): Promise<string[]> {
@@ -213,17 +290,22 @@ export class RedisPersistenceClient implements PersistenceClient {
   }
 
   async removePending(roomId: string, guestId: string): Promise<User | null> {
-    const room = await this.getRoomById(roomId);
-    if (!room || !room.pendingGuestIds) {
-      return null;
-    }
-    const index = room.pendingGuestIds.indexOf(guestId);
-    if (index === -1) {
-      return null;
-    }
-    room.pendingGuestIds.splice(index, 1);
-    await this.updateRoom(room);
-    return await this.getUserById(guestId);
+    const script = `
+      local raw = redis.call('GET', KEYS[1])
+      if not raw then return 0 end
+      local room = cjson.decode(raw)
+      local pending = room.pendingGuestIds or {}
+      local removed = false
+      for i = #pending, 1, -1 do if pending[i] == ARGV[1] then table.remove(pending, i); removed = true end end
+      if removed then
+        room.pendingGuestIds = pending
+        redis.call('SET', KEYS[1], cjson.encode(room))
+        if tonumber(ARGV[2]) > 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
+      end
+      return removed and 1 or 0
+    `;
+    const removed = await this.client.eval(script, { keys: [this.roomKey(roomId)], arguments: [guestId, String(this.roomTtlSeconds ?? 0)] });
+    return Number(removed) === 1 ? this.getUserById(guestId) : null;
   }
 
   async clearPending(roomId: string): Promise<void> {

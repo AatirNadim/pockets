@@ -3,7 +3,6 @@ import { WebSocketServer, WebSocket } from "ws";
 
 import { SocketService } from "./src/services/socket.service";
 import { createPersistenceClient } from "./src/repo/persistence/create-persistence";
-import { WebSocketMessage } from "@pockets/shared";
 import dotenv from "dotenv";
 
 dotenv.config(
@@ -15,18 +14,18 @@ const socketService = new SocketService(persistence);
 
 const registerSocketEventListeners = (ws: WebSocket) => {
   ws.onmessage = async (event) => {
-    console.debug("Received message");
     try {
       const message = JSON.parse(event.data.toString());
-      console.info("Parsed message:", message);
-      await socketService.handleMessage(ws, message as WebSocketMessage);
-    } catch (error) {
-      console.error("Error parsing message:", error);
+      await socketService.handleMessage(ws, message as unknown);
+    } catch {
+      ws.close(1007, "Invalid JSON");
     }
   };
 
   ws.onclose = () => {
-    console.debug("Client disconnected");
+    void socketService.disconnect(ws).catch((error) => {
+      console.error("Session cleanup failed:", error instanceof Error ? error.message : "unknown error");
+    });
   };
 
   ws.onerror = (error) => {
@@ -45,11 +44,30 @@ const httpServer = createServer((req, res) => {
   res.end(JSON.stringify({ error: "Not Found" }));
 });
 
-const wss = new WebSocketServer({ server: httpServer });
+const wss = new WebSocketServer({ server: httpServer, maxPayload: 64 * 1024, perMessageDeflate: false });
 
 wss.on("connection", (ws: WebSocket) => {
-  console.debug("New client connected");
   registerSocketEventListeners(ws);
+});
+
+const heartbeat = setInterval(() => {
+  void socketService.touchActiveRooms().catch((error) => {
+    console.error("Room heartbeat failed:", error instanceof Error ? error.message : "unknown error");
+  });
+  for (const client of wss.clients) {
+    const liveClient = client as WebSocket & { isAlive?: boolean };
+    if (liveClient.isAlive === false) {
+      liveClient.terminate();
+      continue;
+    }
+    liveClient.isAlive = false;
+    liveClient.ping();
+  }
+}, 30_000);
+wss.on("connection", (socket) => {
+  const liveSocket = socket as WebSocket & { isAlive?: boolean };
+  liveSocket.isAlive = true;
+  liveSocket.on("pong", () => { liveSocket.isAlive = true; });
 });
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
@@ -59,22 +77,18 @@ httpServer.listen(PORT, () => {
   console.log(`   • Health check: http://localhost:${PORT}/health`);
 });
 
+let shuttingDown = false;
 const gracefulShutdown = () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log("Server shutting down gracefully...");
-
-  // Close all WebSocket connections
-  wss.clients.forEach((ws) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.close(1001, "Server restarting");
-    }
-  });
-
-  // Close the WebSocket server
-  wss.close(() => {
-    console.log("WebSocket server closed");
-    httpServer.close(() => {
-      console.log("HTTP server closed");
-      process.exit(0);
+  clearInterval(heartbeat);
+  void socketService.shutdown().finally(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) ws.close(1001, "Server restarting");
+    });
+    wss.close(() => {
+      httpServer.close(() => process.exit(0));
     });
   });
 };

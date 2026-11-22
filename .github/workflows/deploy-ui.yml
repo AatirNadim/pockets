@@ -6,7 +6,9 @@ on:
       - main
     paths:
       - "frontend/**"
-      - "packages/shared/**"
+      - "shared/**"
+      - "pnpm-lock.yaml"
+      - "frontend/Dockerfile"
       - ".github/workflows/deploy-ui.yml"
 
   # Allow manual trigger

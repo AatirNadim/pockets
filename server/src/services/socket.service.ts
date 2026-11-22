@@ -1,827 +1,338 @@
 import { WebSocket } from "ws";
-
-import { RoomService } from "./room.service";
-import { UserService } from "./user.service";
 import {
-  AnswerMessage,
   MAX_USERS_PER_ROOM,
   UserType,
-  ErrorMessage,
-  HostClosedRoomMessage,
-  IceCandidateMessage,
-  JoinRequestDecisionMessage,
-  JoinRequestMessage,
-  JoinRoomMessage,
-  LeaveRoomMessage,
-  OfferMessage,
-  RoomFullMessage,
-  User,
-  UserJoinedMessage,
-  UserLeftMessage,
-  WebSocketMessage,
+  type AnswerMessage,
+  type AudioMuteMessage,
+  type AudioUnmuteMessage,
+  type ErrorMessage,
+  type HostClosedRoomMessage,
+  type IceCandidateMessage,
+  type JoinRequestDecisionMessage,
+  type JoinRequestMessage,
+  type JoinRoomMessage,
+  type LeaveRoomMessage,
+  type OfferMessage,
+  type RoomFullMessage,
+  type User,
+  type UserJoinedMessage,
+  type UserLeftMessage,
+  type WebSocketMessage,
 } from "@pockets/shared";
-import { PersistenceClient } from "../repo/persistence/persistence-client";
-import { UserSocketRepo } from "../repo/user-socket.repo";
+import type { PersistenceClient } from "../repo/persistence/persistence-client";
+import { RoomService } from "./room.service";
+import { UserService } from "./user.service";
+
+type Session = {
+  socket: WebSocket;
+  userId: string;
+  roomId: string;
+  userName: string;
+  userType: UserType;
+  state: "pending" | "active";
+  generation: number;
+  closing: boolean;
+};
+type ClientMessage = JoinRoomMessage | LeaveRoomMessage | OfferMessage | AnswerMessage | IceCandidateMessage | JoinRequestDecisionMessage | AudioMuteMessage | AudioUnmuteMessage;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const boundedString = (value: unknown, max: number) => typeof value === "string" && value.length > 0 && value.length <= max;
+const isUserType = (value: unknown): value is UserType => value === UserType.HOST || value === UserType.GUEST;
+
+function validateClientMessage(input: unknown): ClientMessage {
+  if (!isRecord(input) || !boundedString(input.type, 40)) throw new Error("Malformed message");
+  const room = () => typeof input.roomId === "string" && UUID.test(input.roomId);
+  const identity = () => typeof input.userId === "string" && UUID.test(input.userId);
+  switch (input.type) {
+    case "join-room":
+      if (!room() || !identity() || !boundedString(input.userName, 80) || !isUserType(input.userType)) throw new Error("Invalid join request");
+      return input as unknown as JoinRoomMessage;
+    case "leave-room":
+    case "audio-mute":
+    case "audio-unmute":
+      if (!room() || !identity()) throw new Error("Invalid room message");
+      return input as unknown as LeaveRoomMessage | AudioMuteMessage | AudioUnmuteMessage;
+    case "join-request-accepted":
+    case "join-request-rejected":
+      if (!room() || typeof input.hostUserId !== "string" || !UUID.test(input.hostUserId) || typeof input.guestUserId !== "string" || !UUID.test(input.guestUserId)) throw new Error("Invalid admission decision");
+      return input as unknown as JoinRequestDecisionMessage;
+    case "offer":
+    case "answer": {
+      const description = input.type === "offer" ? input.offer : input.answer;
+      if (!room() || typeof input.fromUserId !== "string" || !UUID.test(input.fromUserId) || typeof input.toUserId !== "string" || !UUID.test(input.toUserId) || !boundedString(input.fromUserName, 80) || !isUserType(input.fromUserType) || !isRecord(description) || !["offer", "answer"].includes(String(description.type)) || !boundedString(description.sdp, 50000)) throw new Error("Invalid session description");
+      if ((input.type === "offer" && description.type !== "offer") || (input.type === "answer" && description.type !== "answer")) throw new Error("Invalid session description type");
+      return input as unknown as OfferMessage | AnswerMessage;
+    }
+    case "ice-candidate":
+      if (!room() || typeof input.fromUserId !== "string" || !UUID.test(input.fromUserId) || typeof input.toUserId !== "string" || !UUID.test(input.toUserId) || !isRecord(input.candidate) || typeof input.candidate.candidate !== "string" || input.candidate.candidate.length > 8192 || (input.candidate.sdpMid !== undefined && input.candidate.sdpMid !== null && !boundedString(input.candidate.sdpMid, 128)) || (input.candidate.sdpMLineIndex !== undefined && input.candidate.sdpMLineIndex !== null && (typeof input.candidate.sdpMLineIndex !== "number" || !Number.isInteger(input.candidate.sdpMLineIndex) || input.candidate.sdpMLineIndex < 0))) throw new Error("Invalid ICE candidate");
+      return input as unknown as IceCandidateMessage;
+    default:
+      throw new Error("Unknown message type");
+  }
+}
 
 export class SocketService {
-  private roomService: RoomService;
-  private userService: UserService;
-  private userSocketRepo: UserSocketRepo;
+  private readonly roomService: RoomService;
+  private readonly userService: UserService;
+  private readonly sessions = new WeakMap<WebSocket, Session>();
+  private readonly sessionByUser = new Map<string, Session>();
+  private readonly joiningUserIds = new Set<string>();
+  private readonly rate = new WeakMap<WebSocket, { startedAt: number; count: number }>();
+  private generation = 0;
 
-  constructor(private persistenceClient: PersistenceClient) {
-    this.roomService = new RoomService(persistenceClient);
-    this.userService = new UserService(persistenceClient);
-    this.userSocketRepo = new UserSocketRepo();
+  constructor(private readonly persistence: PersistenceClient) {
+    this.roomService = new RoomService(persistence);
+    this.userService = new UserService(persistence);
   }
 
-  private notifyUser = (userId: string, msg: string) => {
-    const socket = this.userSocketRepo.getSocketForUser(userId);
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(msg);
+  private send(socket: WebSocket, message: WebSocketMessage | Record<string, unknown>) {
+    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  }
+
+  private sendError(socket: WebSocket, message: string) {
+    this.send(socket, { type: "error", message } satisfies ErrorMessage);
+  }
+
+  async handleMessage(socket: WebSocket, rawMessage: unknown) {
+    const now = Date.now();
+    const currentRate = this.rate.get(socket);
+    if (!currentRate || now - currentRate.startedAt >= 10_000) this.rate.set(socket, { startedAt: now, count: 1 });
+    else if (++currentRate.count > 120) {
+      this.sendError(socket, "Too many messages. Reconnect and try again.");
+      socket.close(1013, "Rate limit exceeded");
+      return;
     }
-  };
-
-  private async notifyHostClosed(roomId: string) {
-    const hostClosedMessage: HostClosedRoomMessage = {
-      type: "host-closed-room",
-      roomId,
-    };
-
-    const guests = await this.roomService.getAllGuestsForRoom(roomId);
-    guests.forEach((user) => {
-      this.notifyUser(user.id, JSON.stringify(hostClosedMessage));
-    });
-
-    const pendingGuests = await this.roomService.getAllPendingGuestsForRoom(
-      roomId
-    );
-    if (pendingGuests) {
-      pendingGuests.forEach((guest) => {
-        this.notifyUser(guest.id, JSON.stringify(hostClosedMessage));
-      });
-    }
-  }
-
-  private sendErrorMessage(userId: string, ws: WebSocket, message: string) {
-    const errorMessage: ErrorMessage = {
-      type: "error",
-      message,
-    };
-    const localMap = new Map<string, WebSocket>();
-    localMap.set(userId, ws);
-    this.sendSocketMessageUtil(localMap, errorMessage);
-  }
-
-  async handleMessage(ws: WebSocket, message: WebSocketMessage) {
+    let message: ClientMessage;
     try {
+      message = validateClientMessage(rawMessage);
+    } catch {
+      this.sendError(socket, "Invalid signaling message.");
+      socket.close(1008, "Invalid message");
+      return;
+    }
+
+    try {
+      if (message.type === "join-room") {
+        await this.join(socket, message);
+        return;
+      }
+      const session = this.sessions.get(socket);
+      if (!session || this.sessionByUser.get(session.userId) !== session || session.socket !== socket) {
+        this.sendError(socket, "Join a room before sending room messages.");
+        socket.close(1008, "Join required");
+        return;
+      }
+      if (message.roomId !== session.roomId || ("userId" in message && message.userId !== session.userId) || ("fromUserId" in message && message.fromUserId !== session.userId) || ("hostUserId" in message && message.hostUserId !== session.userId)) {
+        this.sendError(socket, "Message identity does not match this connection.");
+        socket.close(1008, "Identity mismatch");
+        return;
+      }
+      if (message.type === "leave-room") {
+        await this.leave(session);
+        return;
+      }
+      if (session.state !== "active") {
+        this.sendError(socket, "Wait for the host to admit you before sending room messages.");
+        return;
+      }
       switch (message.type) {
-        case "join-room":
-          console.log("received message to join the room --> ", message);
-          await this.joinRoom(ws, message);
-          break;
-        case "leave-room":
-          console.log(
-            "received message to leave the room with id:",
-            message.roomId,
-            "by the user id: ",
-            message.userId
-          );
-          await this.handleLeaveRoom(ws, message);
-          break;
         case "offer":
-          this.handleOffer(message);
-          break;
         case "answer":
-          this.handleAnswer(message);
-          break;
         case "ice-candidate":
-          this.handleIceCandidate(message);
+          this.forwardSignal(session, message);
           break;
         case "join-request-accepted":
-          await this.handleJoinRequestAccepted(message);
-          break;
         case "join-request-rejected":
-          await this.handleJoinRequestRejected(message);
+          await this.decideAdmission(session, message);
           break;
         case "audio-mute":
-          await this.broadCastToRoomFromSource(
-            message.roomId,
-            message.userId,
-            message
-          );
-          break;
         case "audio-unmute":
-          await this.broadCastToRoomFromSource(
-            message.roomId,
-            message.userId,
-            message
-          );
+          await this.broadcast(session.roomId, { type: message.type, roomId: session.roomId, userId: session.userId });
           break;
         default:
-          console.warn("Unknown message type:", message.type);
-          throw new Error(`Unknown message type: ${message.type}`);
+          this.sendError(socket, "Unsupported message for this room session.");
       }
     } catch (error) {
-      console.error("Error handling message:", error);
-      const errorMessage: ErrorMessage = {
-        type: "error",
-        message: "An error occurred while processing your request.",
-      };
-      ws.send(JSON.stringify(errorMessage));
+      console.error("Signaling operation failed:", error instanceof Error ? error.message : "unknown error");
+      this.sendError(socket, "The room operation could not be completed. Please retry.");
     }
   }
 
-  private async joinRoomAsHost(msg: JoinRoomMessage, ws: WebSocket) {
-    const { roomId, userId, userName, userType } = msg;
-
-    let room = await this.roomService.getRoomDetails(roomId);
-    if (room) {
-      console.error(
-        `Room with id ${roomId} already exists, cannot join as host again.`
-      );
-      this.sendErrorMessage(
-        userId,
-        ws,
-        "This room already has an active host."
-      );
+  private async join(socket: WebSocket, message: JoinRoomMessage) {
+    if (this.sessions.has(socket)) {
+      this.sendError(socket, "This connection has already joined a room.");
+      socket.close(1008, "Already joined");
       return;
     }
-
-    const hostUser = await this.userService.createUser({
-      id: userId,
-      name: userName,
-      type: userType,
-    });
-
-    this.userSocketRepo.addUserSocket(userId, ws);
-
-    room = await this.roomService.createAndPopulateRoom(roomId, userId);
-
-    console.log(`Host ${userId} created and joined room ${roomId}`);
-  }
-
-  private async joinRoomAsGuest(msg: JoinRoomMessage, ws: WebSocket) {
-    const { roomId, userId, userName, userType } = msg;
-
-    const room = await this.roomService.getRoomDetails(roomId);
-    if (!room) {
-      console.error(
-        `Guest ${userId} attempted to join room ${roomId} before host.`
-      );
-      this.sendErrorMessage(
-        userId,
-        ws,
-        "Host is not available in this room yet. Please try again later."
-      );
+    if (this.sessionByUser.has(message.userId) || this.joiningUserIds.has(message.userId) || await this.userService.getUserDetails(message.userId)) {
+      this.sendError(socket, "This participant ID is already in use. Reopen the room to reconnect.");
       return;
     }
-
-    if (!room.hostId) {
-      console.error(
-        `Room ${roomId} has no registered host. Cannot process guest ${userId}.`
-      );
-      this.sendErrorMessage(
-        userId,
-        ws,
-        "Host disconnected. Please wait for the host to return before joining."
-      );
-      return;
-    }
-
-    const userCount = await this.roomService.getUserCountForRoom(roomId);
-    const pendingCount = await this.roomService.getPendingCountForRoom(roomId);
-    if (userCount + pendingCount >= MAX_USERS_PER_ROOM) {
-      console.log(
-        `Room ${roomId} is full (pending included). Rejecting ${userId}`
-      );
-      const roomFullMessage: RoomFullMessage = {
-        type: "room-full",
-        roomId,
-      };
-      ws.send(JSON.stringify(roomFullMessage));
-      return;
-    }
-
-    const hostSocket = this.userSocketRepo.getSocketForUser(room.hostId);
-
-    if (!hostSocket || hostSocket.readyState !== WebSocket.OPEN) {
-      console.error(
-        `Unable to reach host ${room.hostId} for join request from ${userId}.`
-      );
-      this.sendErrorMessage(
-        userId,
-        ws,
-        "Unable to contact the host right now. Please try again shortly."
-      );
-      return;
-    }
-
-    const newUser: User = {
-      id: userId,
-      name: userName,
-      type: userType,
-    };
-
-    await this.userService.createUser(newUser);
-
-    this.userSocketRepo.addUserSocket(userId, ws);
-
-    await this.roomService.queuePendingGuest(roomId, userId);
-
-    const joinRequest: JoinRequestMessage = {
-      type: "join-request",
-      roomId,
-      guest: newUser,
-    };
-
-    hostSocket.send(JSON.stringify(joinRequest));
-    console.log(
-      `Forwarded join request for user ${userId} to host ${room.hostId} in room ${roomId}`
-    );
-  }
-
-  private async joinRoom(ws: WebSocket, message: JoinRoomMessage) {
+    this.joiningUserIds.add(message.userId);
     try {
-      const { roomId, userId, userName, userType } = message;
-
-      if (userType === UserType.HOST) {
-        await this.joinRoomAsHost(message, ws);
-      } else {
-        await this.joinRoomAsGuest(message, ws);
+    if (message.userType === UserType.HOST) {
+      const user: User = { id: message.userId, name: message.userName.trim(), type: UserType.HOST };
+      await this.userService.createUser(user);
+      try {
+        await this.roomService.createAndPopulateRoom(message.roomId, message.userId);
+      } catch (error) {
+        await this.userService.deleteUser(user.id);
+        throw error;
       }
-    } catch (err) {
-      console.error("Error in joinRoom handler:", err);
-      this.sendErrorMessage(
-        message.userId,
-        ws,
-        "An error occurred while trying to join the room."
-      );
+      this.attachSession(socket, user, message.roomId, "active");
+      return;
+    }
+
+    const room = await this.roomService.getRoomDetails(message.roomId);
+    const host = room?.hostId ? this.sessionByUser.get(room.hostId) : undefined;
+    if (!room || !host || host.state !== "active" || host.socket.readyState !== WebSocket.OPEN) {
+      this.sendError(socket, "The host is not available in this room right now.");
+      return;
+    }
+    const user: User = { id: message.userId, name: message.userName.trim(), type: UserType.GUEST };
+    await this.userService.createUser(user);
+    const admission = await this.roomService.requestGuestAdmission(message.roomId, user.id, MAX_USERS_PER_ROOM);
+    if (admission !== "queued") {
+      await this.userService.deleteUser(user.id);
+      if (admission === "full") this.send(socket, { type: "room-full", roomId: message.roomId } satisfies RoomFullMessage);
+      else this.sendError(socket, admission === "duplicate" ? "This participant is already in the room." : "This room is no longer available.");
+      return;
+    }
+    this.attachSession(socket, user, message.roomId, "pending");
+    const request: JoinRequestMessage = { type: "join-request", roomId: message.roomId, guest: user };
+    this.send(host.socket, request);
+    } finally {
+      this.joiningUserIds.delete(message.userId);
     }
   }
 
-  // private async joinRoom(ws: WebSocket, message: JoinRoomMessage) {
-  //   console.log(
-  //     "joining room handler --> websocket details --> ",
-  //     ws,
-  //     " message --> ",
-  //     message
-  //   );
+  private attachSession(socket: WebSocket, user: User, roomId: string, state: Session["state"]) {
+    const session: Session = { socket, userId: user.id, roomId, userName: user.name, userType: user.type, state, generation: ++this.generation, closing: false };
+    this.sessions.set(socket, session);
+    this.sessionByUser.set(user.id, session);
+  }
 
-  //   const { roomId, userId, userName, userType } = message;
+  private async decideAdmission(host: Session, message: JoinRequestDecisionMessage) {
+    if (host.userType !== UserType.HOST) {
+      this.sendError(host.socket, "Only the room host can admit guests.");
+      return;
+    }
+    const room = await this.roomService.getRoomDetails(host.roomId);
+    if (!room || room.hostId !== host.userId) {
+      this.sendError(host.socket, "This connection is not the active host.");
+      return;
+    }
+    const guest = this.sessionByUser.get(message.guestUserId);
+    if (!guest || guest.roomId !== host.roomId || guest.state !== "pending" || guest.closing) {
+      this.sendError(host.socket, "That guest request is no longer pending.");
+      return;
+    }
+    if (message.type === "join-request-rejected") {
+      await this.roomService.removePendingGuestForRoom(host.roomId, guest.userId);
+      this.sendError(guest.socket, "Your request to join the room was declined by the host.");
+      await this.removeSession(guest, true);
+      return;
+    }
+    const result = await this.roomService.admitPendingGuest(host.roomId, guest.userId, MAX_USERS_PER_ROOM);
+    if (result === "full") {
+      this.send(guest.socket, { type: "room-full", roomId: host.roomId } satisfies RoomFullMessage);
+      return;
+    }
+    if (result !== "accepted") {
+      this.sendError(host.socket, "That guest request is no longer pending.");
+      return;
+    }
+    if (this.sessionByUser.get(guest.userId) !== guest || guest.closing) {
+      await this.roomService.removeUserFromRoom(host.roomId, guest.userId);
+      return;
+    }
+    guest.state = "active";
+    this.send(guest.socket, { type: "join-request-accepted", roomId: host.roomId, hostUserId: host.userId, guestUserId: guest.userId, hostName: host.userName, guestName: guest.userName } satisfies JoinRequestDecisionMessage);
+    const joined: UserJoinedMessage = { type: "user-joined", roomId: host.roomId, userId: guest.userId, userName: guest.userName, userType: guest.userType };
+    await this.broadcast(host.roomId, joined, guest.userId);
+  }
 
-  //   let room = await this.roomService.getRoomDetails(roomId);
-  //   if (!room) {
-  //     if (userType !== UserType.HOST) {
-  //       console.warn(
-  //         `Guest ${userId} attempted to join room ${roomId} before host.`
-  //       );
-  //       this.sendErrorMessage(
-  //         userId,
-  //         ws,
-  //         "Host is not available in this room yet. Please try again later."
-  //       );
-  //       return;
-  //     }
+  private forwardSignal(session: Session, message: OfferMessage | AnswerMessage | IceCandidateMessage) {
+    const target = this.sessionByUser.get(message.toUserId);
+    if (!target || target.roomId !== session.roomId || target.state !== "active" || target.closing || target.socket.readyState !== WebSocket.OPEN) {
+      this.sendError(session.socket, "That participant is not available in this room.");
+      return;
+    }
+    if (message.type === "offer") this.send(target.socket, { ...message, roomId: session.roomId, fromUserId: session.userId, fromUserName: session.userName, fromUserType: session.userType });
+    else if (message.type === "answer") this.send(target.socket, { ...message, roomId: session.roomId, fromUserId: session.userId, fromUserName: session.userName, fromUserType: session.userType });
+    else this.send(target.socket, { ...message, roomId: session.roomId, fromUserId: session.userId });
+  }
 
-  //     console.log(
-  //       "No existing room with the id:",
-  //       roomId,
-  //       "creating a new room"
-  //     );
+  private async broadcast(roomId: string, message: WebSocketMessage, exceptUserId?: string) {
+    const roomUserIds = new Set([...(await this.roomService.getUserIdsForRoom(roomId)), ...(await this.roomService.getAllPendingGuestIdsForRoom(roomId))]);
+    for (const id of roomUserIds) {
+      if (id === exceptUserId) continue;
+      const session = this.sessionByUser.get(id);
+      if (session?.roomId === roomId && session.state === "active") this.send(session.socket, message);
+    }
+  }
 
-  //     const newUser: User = {
-  //       id: userId,
-  //       name: userName,
-  //       type: userType,
-  //     };
+  private async leave(session: Session) {
+    await this.removeSession(session, true);
+  }
 
-  //     // persist the user details
-  //     await this.userService.createUser(newUser);
-
-  //     // persist the socket details in-memory
-  //     this.userSocketRepo.addUserSocket(userId, ws);
-
-  //     room = await this.roomService.createAndPopulateRoom(roomId, userId);
-  //   }
-
-  //   if (userType === UserType.HOST) {
-  //     if (room.hostId && room.hostId !== userId) {
-  //       console.warn(`Room ${roomId} already has a host: ${room.hostId}`);
-  //       this.sendErrorMessage(
-  //         userId,
-  //         ws,
-  //         "This room already has an active host."
-  //       );
-  //       return;
-  //     }
-
-  //     if ((await this.roomService.getUserIdsForRoom(roomId)).includes(userId)) {
-  //       console.log("Host already present in room:", userId);
-  //       return;
-  //     }
-
-  //     room.hostId = userId;
-  //     await this.roomService.addUserToRoom(roomId, userId);
-  //   } else {
-  //     if (!room.hostId) {
-  //       console.warn(
-  //         `Room ${roomId} has no registered host. Cannot process guest ${userId}.`
-  //       );
-  //       this.sendErrorMessage(
-  //         userId,
-  //         ws,
-  //         "Host disconnected. Please wait for the host to return before joining."
-  //       );
-  //       return;
-  //     }
-
-  //     console.log("processing join request for guest, websocket still working");
-
-  //     const userCount = await this.roomService.getUserCountForRoom(roomId);
-
-  //     const pendingCount = await this.roomService.getPendingCountForRoom(
-  //       roomId
-  //     );
-  //     if (userCount + pendingCount >= MAX_USERS_PER_ROOM) {
-  //       console.log(
-  //         `Room ${roomId} is full (pending included). Rejecting ${userId}`
-  //       );
-  //       const roomFullMessage: RoomFullMessage = {
-  //         type: "room-full",
-  //         roomId,
-  //       };
-  //       ws.send(JSON.stringify(roomFullMessage));
-  //       return;
-  //     }
-
-  //     const hostSocket = this.userSocketRepo.getSocketForUser(
-  //       (await this.roomService.getHostIdForRoom(roomId)) ?? ""
-  //     );
-
-  //     console.log("host socket fetched for guest join request:", hostSocket);
-  //     if (!hostSocket || hostSocket.readyState !== WebSocket.OPEN) {
-  //       console.warn(
-  //         `Unable to reach host ${room.hostId} for join request from ${userId}.`
-  //       );
-  //       this.sendErrorMessage(
-  //         userId,
-  //         ws,
-  //         "Unable to contact the host right now. Please try again shortly."
-  //       );
-  //       return;
-  //     }
-
-  //     this.roomService.queuePendingGuest(roomId, userId);
-
-  //     console.log(
-  //       "queued pending guest, forwarding join request to host socket:",
-  //       hostSocket
-  //     );
-
-  //     const joinRequest: JoinRequestMessage = {
-  //       type: "join-request",
-  //       roomId,
-  //       guest: newUser,
-  //     };
-
-  //     console.log("forwarding join request to host socket:", hostSocket);
-
-  //     hostSocket.send(JSON.stringify(joinRequest));
-  //     console.log(
-  //       `Forwarded join request for user ${userId} to host ${room.hostId} in room ${roomId}`
-  //     );
-  //     return;
-  //   }
-
-  //   console.log(`User ${userId} joined room ${roomId}`);
-
-  //   await this.broadcastToRoom(roomId, {
-  //     roomId,
-  //     type: "user-joined",
-  //     userId,
-  //     userName,
-  //     userType,
-  //   } as UserJoinedMessage);
-  // }
-
-  private async broadCastToRoomFromSource(
-    roomId: string,
-    sourceUserId: string,
-    message: WebSocketMessage
-  ) {
-    try {
-      const room = await this.roomService.getRoomDetails(roomId);
-
-      if (!room) {
-        throw new Error(`Room with ID ${roomId} does not exist.`);
+  private async removeSession(session: Session, closeSocket: boolean) {
+    if (this.sessionByUser.get(session.userId) !== session || session.closing) return;
+    session.closing = true;
+    const room = await this.roomService.getRoomDetails(session.roomId);
+    if (session.userType === UserType.HOST && room?.hostId === session.userId) {
+      const userIds = new Set([...(await this.roomService.getUserIdsForRoom(session.roomId)), ...(await this.roomService.getAllPendingGuestIdsForRoom(session.roomId))]);
+      const closed: HostClosedRoomMessage = { type: "host-closed-room", roomId: session.roomId };
+      for (const id of userIds) {
+        const other = this.sessionByUser.get(id);
+        if (other && other !== session) {
+          this.send(other.socket, closed);
+          this.sessionByUser.delete(id);
+          if (other.socket.readyState === WebSocket.OPEN) other.socket.close(1001, "Room closed");
+          await this.userService.deleteUser(id);
+        }
       }
-
-      const userIdsForRoom = (
-        await this.roomService.getUserIdsForRoom(roomId)
-      ).filter((userId) => userId !== sourceUserId);
-      const userSockets =
-        this.userSocketRepo.getUserSocketMapForRoom(userIdsForRoom);
-
-      if (!userSockets) {
-        throw new Error(`No user sockets found for room with ID ${roomId}.`);
-      }
-
-      // all the sockets to send the message to except the source socket
-      this.sendSocketMessageUtil(userSockets, message);
-    } catch (error) {
-      console.error("Error broadcasting message from source:", error);
-    }
-  }
-
-  private sendSocketMessageUtil(
-    userSockets: Map<string, WebSocket>,
-    message: WebSocketMessage
-  ) {
-    userSockets.forEach((userSocket, userId) => {
-      if (userSocket && userSocket.readyState === WebSocket.OPEN) {
-        userSocket.send(JSON.stringify(message));
-      } else {
-        console.warn(
-          `Socket for user ${userId} is not available or not ready.`
-        );
-        // throw new Error(
-        //   `Socket for user ${userId} is not available or not ready.`
-        // );
-      }
-    });
-  }
-
-  private async broadcastToRoom(roomId: string, message: WebSocketMessage) {
-    try {
-      const room = await this.roomService.getRoomDetails(roomId);
-
-      if (!room) {
-        throw new Error(`Room with ID ${roomId} does not exist.`);
-      }
-      // for now, send user-join notification to all users in the room
-
-      switch (message.type) {
-        case "user-joined":
-          console.log(`Broadcasting user-joined message to room ${roomId}`);
-          await this.broadCastToRoomFromSource(roomId, message.userId, message);
-          break;
-        case "user-left":
-          console.log(`Broadcasting user-left message to room ${roomId}`);
-          await this.broadCastToRoomFromSource(roomId, message.userId, message);
-          break;
-        case "offer":
-          console.log(`Broadcasting offer message to room ${roomId}`);
-          await this.broadCastToRoomFromSource(
-            roomId,
-            message.fromUserId,
-            message
-          );
-          break;
-        case "answer":
-          console.log(`Broadcasting answer message to room ${roomId}`);
-          await this.broadCastToRoomFromSource(
-            roomId,
-            message.fromUserId,
-            message
-          );
-          break;
-        case "ice-candidate":
-          console.log(`Broadcasting ice-candidate message to room ${roomId}`);
-          await this.broadCastToRoomFromSource(
-            roomId,
-            message.fromUserId,
-            message
-          );
-          break;
-        default:
-          console.warn(
-            `Broadcasting unknown message type ${message.type} to room ${roomId}`
-          );
-          throw new Error(
-            `Unknown message type: ${message.type} for room ${roomId}`
-          );
-      }
-    } catch (error) {
-      console.error("Error broadcasting message:", error);
-      throw error;
-    }
-  }
-
-  // const leaveRoom = (ws: ExtendedWebSocket, message: LeaveRoomMessage) => {
-  //   const { roomId, userId } = message;
-  // };
-
-  private handleOffer(message: OfferMessage) {
-    const { toUserId } = message;
-    const targetSocket = this.userSocketRepo.getSocketForUser(toUserId);
-
-    if (!targetSocket) {
-      console.error(`No socket found for user ${toUserId} to send offer.`);
+      await this.roomService.deleteRoom(session.roomId);
+      await this.userService.deleteUser(session.userId);
+      this.sessionByUser.delete(session.userId);
+      if (closeSocket && session.socket.readyState === WebSocket.OPEN) session.socket.close(1001, "Room closed");
       return;
     }
 
-    console.debug("Sending offer to user:", toUserId, "message:", message);
-    targetSocket.send(JSON.stringify(message));
+    const wasActive = session.state === "active";
+    if (wasActive) await this.roomService.removeUserFromRoom(session.roomId, session.userId);
+    else {
+      await this.roomService.removePendingGuestForRoom(session.roomId, session.userId);
+      // Admission and disconnect can race; clear either representation idempotently.
+      await this.roomService.removeUserFromRoom(session.roomId, session.userId);
+    }
+    await this.userService.deleteUser(session.userId);
+    this.sessionByUser.delete(session.userId);
+    if (wasActive && room) {
+      const left: UserLeftMessage = { type: "user-left", roomId: session.roomId, userId: session.userId };
+      await this.broadcast(session.roomId, left, session.userId);
+    }
+    const active = await this.roomService.getUserCountForRoom(session.roomId);
+    const pending = await this.roomService.getPendingCountForRoom(session.roomId);
+    if (!active && !pending) await this.roomService.deleteRoom(session.roomId);
+    if (closeSocket && session.socket.readyState === WebSocket.OPEN) session.socket.close(1000, "Session ended");
   }
 
-  private handleAnswer(message: AnswerMessage) {
-    const { toUserId } = message;
-    const targetSocket = this.userSocketRepo.getSocketForUser(toUserId);
-
-    if (!targetSocket) {
-      console.error(`No socket found for user ${toUserId} to send answer.`);
-      return;
-    }
-
-    console.debug("Sending answer to user:", toUserId, "message:", message);
-    targetSocket.send(JSON.stringify(message));
+  async disconnect(socket: WebSocket) {
+    const session = this.sessions.get(socket);
+    if (!session) return;
+    await this.removeSession(session, false);
   }
 
-  private handleIceCandidate(message: IceCandidateMessage) {
-    const { toUserId } = message;
-    const targetSocket = this.userSocketRepo.getSocketForUser(toUserId);
-
-    if (!targetSocket) {
-      console.error(
-        `No socket found for user ${toUserId} to send ice-candidate.`
-      );
-      return;
-    }
-
-    targetSocket.send(JSON.stringify(message));
+  async touchActiveRooms() {
+    const roomIds = new Set(Array.from(this.sessionByUser.values()).filter((session) => !session.closing).map((session) => session.roomId));
+    await Promise.all(Array.from(roomIds, (roomId) => this.roomService.touchRoom(roomId)));
   }
 
-  private async handleJoinRequestAccepted(msg: JoinRequestDecisionMessage) {
-    const { guestUserId, hostUserId, roomId } = msg;
-    const room = await this.roomService.getRoomDetails(roomId);
-    if (
-      !(await this.roomService.isSpaceAvailableInRoom(
-        roomId,
-        MAX_USERS_PER_ROOM
-      ))
-    ) {
-      console.warn(
-        `Host ${hostUserId} attempted to accept guest ${guestUserId}, but room ${roomId} is full.`
-      );
-      const hostSocket = this.userSocketRepo.getSocketForUser(hostUserId);
-      hostSocket?.send(
-        JSON.stringify({
-          type: "error",
-          message: "Room is full. Remove a guest before accepting new ones.",
-        } as ErrorMessage)
-      );
-      const guestSocket = this.userSocketRepo.getSocketForUser(guestUserId);
-      guestSocket?.send(
-        JSON.stringify({
-          type: "room-full",
-          roomId,
-        } as RoomFullMessage)
-      );
-      return;
-    }
-    await this.roomService.removePendingGuestForRoom(roomId, guestUserId);
-    await this.roomService.addGuestToRoom(roomId, guestUserId);
-
-    const user = await this.userService.getUserDetails(guestUserId);
-
-    await this.broadcastToRoom(roomId, {
-      roomId,
-      type: "user-joined",
-      userId: user?.id,
-      userName: user?.name || "Guest",
-      userType: UserType.GUEST,
-    } as UserJoinedMessage);
+  async shutdown() {
+    const sessions = Array.from(this.sessionByUser.values());
+    for (const session of sessions) await this.removeSession(session, false);
+    await this.persistence.close();
   }
-
-  private async handleJoinRequestRejected(msg: JoinRequestDecisionMessage) {
-    const { guestUserId, roomId } = msg;
-    await this.roomService.removePendingGuestForRoom(roomId, guestUserId);
-
-    this.sendErrorMessage(
-      guestUserId,
-      this.userSocketRepo.getSocketForUser(guestUserId)!,
-      "Your request to join the room was rejected by the host."
-    );
-
-    this.userSocketRepo.removeUserSocket(guestUserId);
-    await this.userService.deleteUser(guestUserId);
-  }
-
-  // private async handleJoinRequestDecision(message: JoinRequestDecisionMessage) {
-  //   console.log("Handling join request decision:", message);
-  //   const { roomId, hostUserId, guestUserId } = message;
-
-  //   const room = await this.roomService.getRoomDetails(roomId);
-  //   if (!room) {
-  //     console.warn(
-  //       `Received join request decision for non-existent room ${roomId}`
-  //     );
-  //     return;
-  //   }
-
-  //   if (room.hostId !== hostUserId) {
-  //     console.warn(
-  //       `Invalid host decision from ${hostUserId} for room ${roomId}`
-  //     );
-  //     return;
-  //   }
-
-  //   const pendingGuest = await this.roomService.peekPendingGuest(
-  //     roomId,
-  //     guestUserId
-  //   );
-  //   if (!pendingGuest) {
-  //     console.warn(
-  //       `No pending guest ${guestUserId} for room ${roomId} to process decision.`
-  //     );
-  //     return;
-  //   }
-
-  //   const hostSocket = this.userSocketRepo.getSocketForUser(hostUserId);
-  //   const hostUser = await this.userService.getUserDetails(hostUserId);
-  //   const hostName = hostUser?.name ?? "Host";
-  //   const guestSocket = this.userSocketRepo.getSocketForUser(guestUserId);
-  //   const userCountForRoom = await this.roomService.getUserCountForRoom(roomId);
-
-  //   if (message.type === "join-request-accepted") {
-  //     if (userCountForRoom >= MAX_USERS_PER_ROOM) {
-  //       console.warn(
-  //         `Host ${hostUserId} attempted to accept guest ${guestUserId}, but room ${roomId} is full.`
-  //       );
-  //       hostSocket?.send(
-  //         JSON.stringify({
-  //           type: "error",
-  //           message: "Room is full. Remove a guest before accepting new ones.",
-  //         } as ErrorMessage)
-  //       );
-  //       guestSocket?.send(
-  //         JSON.stringify({
-  //           type: "room-full",
-  //           roomId,
-  //         } as RoomFullMessage)
-  //       );
-  //       return;
-  //     }
-
-  //     await this.roomService.removePendingGuestForRoom(roomId, guestUserId);
-  //     await this.roomService.addGuestToRoom(roomId, guestUserId);
-  //     await this.roomService.updateRoom(room);
-
-  //     guestSocket?.send(
-  //       JSON.stringify({
-  //         ...message,
-  //         hostName,
-  //         guestName: pendingGuest.name,
-  //       })
-  //     );
-
-  //     await this.broadcastToRoom(roomId, {
-  //       roomId,
-  //       type: "user-joined",
-  //       userId: pendingGuest.id,
-  //       userName: pendingGuest.name,
-  //       userType: pendingGuest.type,
-  //     } as UserJoinedMessage);
-  //     return;
-  //   }
-
-  //   this.roomService.removePendingGuestForRoom(roomId, guestUserId);
-  //   guestSocket?.send(
-  //     JSON.stringify({
-  //       ...message,
-  //       hostName,
-  //       guestName: pendingGuest.name,
-  //     })
-  //   );
-  // }
-
-  private async leaveUserAsHost(msg: LeaveRoomMessage, user: User) {
-    const { roomId, userId } = msg;
-
-    const room = await this.roomService.getRoomDetails(roomId);
-    if (!room) {
-      console.warn(`Room with id ${roomId} does not exist`);
-      return;
-    }
-
-    if (room.hostId !== userId) {
-      console.warn(`User ${userId} is not the host of room ${roomId}`);
-      return;
-    }
-
-    await this.notifyHostClosed(roomId);
-    const allUserIdsForRoom = await this.roomService.getUserIdsForRoom(roomId);
-    this.userSocketRepo.removeMultipleUserSockets(allUserIdsForRoom);
-    await this.userService.deleteMultipleUsers(allUserIdsForRoom);
-    await this.roomService.removeAllUsersFromRoom(roomId);
-  }
-
-  private async leaveUserAsGuest(msg: LeaveRoomMessage, user: User) {
-    const { roomId, userId } = msg;
-
-    const room = await this.roomService.getRoomDetails(roomId);
-    if (!room) {
-      console.warn(`Room with id ${roomId} does not exist`);
-      return;
-    }
-
-    await this.roomService.removeUserFromRoom(roomId, userId);
-    await this.roomService.removePendingGuestForRoom(roomId, userId);
-    await this.broadCastToRoomFromSource(roomId, userId, {
-      type: "user-left",
-      roomId,
-      userId,
-    } as UserLeftMessage);
-
-    this.userSocketRepo.removeUserSocket(userId);
-    await this.userService.deleteUser(userId);
-  }
-
-  private async handleLeaveRoom(ws: WebSocket, msg: LeaveRoomMessage) {
-    const { roomId, userId } = msg;
-    const user = await this.userService.getUserDetails(userId);
-    if (!user) {
-      console.warn(`User with id ${userId} does not exist`);
-      return;
-    }
-    if (user.type === UserType.HOST) {
-      await this.leaveUserAsHost(msg, user);
-    } else {
-      await this.leaveUserAsGuest(msg, user);
-    }
-
-    const userCount = await this.roomService.getUserCountForRoom(roomId);
-    const pendingCount = await this.roomService.getPendingCountForRoom(roomId);
-    console.log(
-      `After user ${userId} left room ${roomId}, user count: ${userCount}, pending count: ${pendingCount}`
-    );
-
-    if (userCount + pendingCount === 0) {
-      await this.roomService.deleteRoom(roomId);
-      console.log(`Room ${roomId} deleted as it became empty.`);
-    }
-  }
-
-  // private async handleLeaveRoom(ws: WebSocket, message: LeaveRoomMessage) {
-  //   const { roomId, userId } = message;
-
-  //   const pendingGuest = await this.roomService.removePendingGuestForRoom(
-  //     roomId,
-  //     userId
-  //   );
-  //   if (pendingGuest) {
-  //     console.log(
-  //       `Pending guest ${userId} cancelled their join request for room ${roomId}`
-  //     );
-  //     this.userSocketRepo.removeUserSocket(userId);
-  //     return;
-  //   }
-
-  //   const room = await this.roomService.getRoomDetails(roomId);
-  //   if (!room) {
-  //     console.warn(`Room with ID ${roomId} does not exist.`);
-  //     return;
-  //   }
-
-  //   const leavingUser = await this.userService.getUserDetails(userId);
-  //   if (!leavingUser) {
-  //     console.warn(
-  //       `User ${userId} attempted to leave room ${roomId} but was not a member.`
-  //     );
-  //     this.userSocketRepo.removeUserSocket(userId);
-  //     return;
-  //   }
-
-  //   await this.roomService.removeUserFromRoom(roomId, userId);
-  //   const isHostLeaving = leavingUser.type === UserType.HOST;
-
-  //   if (isHostLeaving) {
-  //     this.notifyHostClosed(roomId);
-  //     const allUserIdsForRoom = await this.roomService.getUserIdsForRoom(
-  //       roomId
-  //     );
-  //     this.userSocketRepo.removeMultipleUserSockets(allUserIdsForRoom);
-  //     this.roomService.deleteRoom(roomId);
-  //     console.log(`Host ${userId} closed room ${roomId}`);
-  //   }
-
-  //   // Remove empty rooms
-  //   if ((await this.roomService.getUserCountForRoom(roomId)) === 0) {
-  //     this.roomService.deleteRoom(roomId);
-  //     this.roomService.removeAllPendingGuestsForRoom(roomId);
-  //   } else {
-  //     this.roomService.updateRoom(room);
-
-  //     // Notify remaining users
-  //     const userLeftMessage: UserLeftMessage = {
-  //       type: "user-left",
-  //       roomId,
-  //       userId,
-  //     };
-  //     await this.broadcastToRoom(roomId, userLeftMessage);
-  //   }
-
-  //   this.userSocketRepo.removeUserSocket(userId);
-  //   console.log(`User ${userId} left room ${roomId}`);
-  // }
 }

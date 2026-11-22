@@ -11,15 +11,41 @@ export class InMemoryPersistenceClient implements PersistenceClient {
     return this.rooms.get(roomId) ?? null;
   }
 
+  async touchRoom(_roomId: string): Promise<void> {
+    // In-memory rooms have no expiry.
+  }
+
   async createRoom(roomId: string, hostId: string): Promise<Room> {
+    if (this.rooms.has(roomId)) {
+      throw new Error(`Room ${roomId} already exists`);
+    }
     this.rooms.set(roomId, {
       id: roomId,
       hostId,
       guestIds: [] as string[],
       pendingGuestIds: [] as string[],
     } as Room);
-    console.log("current rooms:\n\n", this.rooms, "\n\n");
     return this.rooms.get(roomId)!;
+  }
+
+  async requestGuestAdmission(roomId: string, guestId: string, maxCapacity: number): Promise<"queued" | "full" | "missing" | "duplicate"> {
+    const room = this.rooms.get(roomId);
+    if (!room) return "missing";
+    if (room.hostId === guestId || room.guestIds.includes(guestId) || room.pendingGuestIds.includes(guestId)) return "duplicate";
+    if (room.guestIds.length + room.pendingGuestIds.length + 1 >= maxCapacity) return "full";
+    room.pendingGuestIds.push(guestId);
+    return "queued";
+  }
+
+  async admitPendingGuest(roomId: string, guestId: string, maxCapacity: number): Promise<"accepted" | "full" | "not-pending"> {
+    const room = this.rooms.get(roomId);
+    if (!room) return "not-pending";
+    const pendingIndex = room.pendingGuestIds.indexOf(guestId);
+    if (pendingIndex < 0) return "not-pending";
+    if (room.guestIds.length + 1 >= maxCapacity) return "full";
+    room.pendingGuestIds.splice(pendingIndex, 1);
+    room.guestIds.push(guestId);
+    return "accepted";
   }
 
   async updateRoom(room: Room): Promise<void> {
@@ -30,13 +56,17 @@ export class InMemoryPersistenceClient implements PersistenceClient {
     this.rooms.delete(roomId);
   }
 
+  async resetEphemeralState(): Promise<void> {
+    this.rooms.clear();
+    this.users.clear();
+  }
+
   async getUserById(userId: string): Promise<User | null> {
     return this.users.get(userId) ?? null;
   }
 
   async createUser(user: User): Promise<User> {
     this.users.set(user.id, user);
-    console.log("\n\ncurrent users:", this.users, "\n\n");
     return user;
   }
 
