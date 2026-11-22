@@ -38,13 +38,107 @@ import { useConnectionStore } from "../stores/connectionStore";
 export const useSocket = () => {
   const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
+  const intentionalSocketClose = useRef(false);
+  const signalingFailureReported = useRef(false);
+  const admissionRosterTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasReceivedRoomRoster = useRef(false);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const dataChannelMap = useRef<Record<string, RTCDataChannel | null>>({});
   const iceServers = useRef<RTCIceServer[]>([{ urls: STUN_SERVERS_LIST }]);
   const iceRestartAttempts = useRef<Record<string, number>>({});
+  const peerTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
   const setPeerStatus = useConnectionStore((state) => state.setPeerStatus);
   const removePeerStatus = useConnectionStore((state) => state.removePeerStatus);
   const clearPeerStatuses = useConnectionStore((state) => state.clearPeerStatuses);
+
+  const clearPeerTimeout = (remoteUserId: string) => {
+    const timeout = peerTimeouts.current[remoteUserId];
+    if (timeout) clearTimeout(timeout);
+    delete peerTimeouts.current[remoteUserId];
+  };
+
+  const markPeerFailed = (
+    remoteUserId: string,
+    userName: string,
+    userType: UserType,
+    issue: string,
+    notify = true
+  ) => {
+    clearPeerTimeout(remoteUserId);
+    const pc = peerConnections.current[remoteUserId];
+    const previous = useConnectionStore.getState().peers[remoteUserId];
+    setPeerStatus(remoteUserId, {
+      userName,
+      userType,
+      state: pc?.connectionState ?? "failed",
+      iceState: pc?.iceConnectionState ?? "failed",
+      phase: "failed",
+      issue,
+    });
+    if (notify && previous?.phase !== "failed") {
+      toast.error(`Could not connect to ${userName}`, {
+        id: `peer-connection-${remoteUserId}`,
+        description: issue,
+        duration: 8000,
+      });
+    }
+  };
+
+  const watchPeerConnection = (
+    remoteUserId: string,
+    userName: string,
+    userType: UserType,
+    timeoutMs = 25000,
+    issue = `No connection was established with ${userName}. They may be offline or their network may block the call.`
+  ) => {
+    clearPeerTimeout(remoteUserId);
+    peerTimeouts.current[remoteUserId] = setTimeout(() => {
+      const pc = peerConnections.current[remoteUserId];
+      if (pc?.connectionState === "connected" &&
+        (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed")) return;
+      markPeerFailed(remoteUserId, userName, userType, issue);
+    }, timeoutMs);
+  };
+
+  const flushPendingIceCandidates = async (
+    remoteUserId: string,
+    pc: RTCPeerConnection
+  ) => {
+    const pending = pendingIceCandidates.current[remoteUserId] ?? [];
+    delete pendingIceCandidates.current[remoteUserId];
+    for (const candidate of pending) {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+  };
+
+  const reportSignalingUnavailable = () => {
+    if (intentionalSocketClose.current || signalingFailureReported.current) return;
+    signalingFailureReported.current = true;
+    if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+    admissionRosterTimeout.current = null;
+    const peers = useConnectionStore.getState().peers;
+    let connectedPeers = 0;
+    for (const [remoteUserId, peer] of Object.entries(peers)) {
+      const pc = peerConnections.current[remoteUserId];
+      if (pc?.connectionState === "connected") {
+        connectedPeers += 1;
+        continue;
+      }
+      markPeerFailed(remoteUserId, peer.userName, peer.userType,
+        "The signaling server disconnected before this call was established. Rejoin the room to try again.", false);
+    }
+    setIsConnected(connectedPeers > 0);
+    setStatus(connectedPeers
+      ? "Signaling server disconnected. Existing calls may continue; rejoin to restore room features."
+      : "Signaling server disconnected. Rejoin the room to continue.");
+    toast.error("Signaling connection lost", {
+      description: connectedPeers
+        ? "Existing media calls may continue, but new calls and room updates are unavailable. Rejoin to restore them."
+        : "Peer calls could not be established. Rejoin the room when your network is available.",
+      duration: 10000,
+    });
+  };
 
   const [status, setStatus] = useState("Connecting to room...");
   const [isConnected, setIsConnected] = useState(false);
@@ -271,35 +365,20 @@ export const useSocket = () => {
       };
 
       socket.onmessage = (event) => {
-        handleSignalingMessage(JSON.parse(event.data));
+        try {
+          handleSignalingMessage(JSON.parse(event.data));
+        } catch (error) {
+          console.error("Invalid message from signaling server", error);
+          setStatus("Received an invalid room update. Rejoin the room if the call does not recover.");
+        }
       };
 
       socket.onclose = () => {
-        setStatus("Disconnected from server");
-        setIsConnected(false);
-        toast.info("Disconnected", {
-          description:
-            "Disconnected from signaling server. Returning to home page.",
-        });
-        leaveRoom();
-        clearChatMessages();
-        resetUnreadCount();
-        resetFileStore();
-        clearMediaStreams();
-        clearJoinRequests();
+        reportSignalingUnavailable();
       };
 
       socket.onerror = () => {
-        toast.error("Connection Error", {
-          description: "Failed to connect to signaling server",
-        });
-        setStatus("Connection failed");
-        leaveRoom();
-        clearChatMessages();
-        resetUnreadCount();
-        resetFileStore();
-        clearMediaStreams();
-        clearJoinRequests();
+        reportSignalingUnavailable();
       };
     } catch (error) {
       console.error("Error registering WebSocket listeners:", error);
@@ -326,6 +405,9 @@ export const useSocket = () => {
 
       const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
       const socket = new WebSocket(`${wsProtocol}://${serverPath}`);
+      intentionalSocketClose.current = false;
+      signalingFailureReported.current = false;
+      hasReceivedRoomRoster.current = false;
       socketRef.current = socket;
 
       registerListenersForSocket(socket);
@@ -356,10 +438,31 @@ export const useSocket = () => {
   const handleSignalingMessage = async (message: WebSocketMessage) => {
     console.debug("Received signaling message: ", message);
     switch (message.type) {
+      case "room-roster":
+        hasReceivedRoomRoster.current = true;
+        if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+        admissionRosterTimeout.current = null;
+        setStatus("Participant list received. Connecting to the room…");
+        for (const user of message.users) {
+          if (!user?.id || user.id === userId || !user.name) continue;
+          addRemoteUser(user.id, user.name, user.type);
+          setPeerStatus(user.id, {
+            userName: user.name,
+            userType: user.type,
+            state: "new",
+            iceState: "new",
+            phase: "waiting",
+            issue: `Waiting for ${user.name} to start the call.`,
+          });
+          createPeerConnection(user.id, user.name, user.type);
+        }
+        break;
+
       case "user-joined":
         console.log(
           "a new user has joined the room, creating a peer connection..."
         );
+        addRemoteUser(message.userId, message.userName, message.userType);
         createPeerConnection(
           message.userId,
           message.userName,
@@ -431,6 +534,16 @@ export const useSocket = () => {
 
       case "join-request-accepted":
         if (message.guestUserId === userId) {
+          hasReceivedRoomRoster.current = false;
+          if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+          admissionRosterTimeout.current = setTimeout(() => {
+            if (hasReceivedRoomRoster.current) return;
+            setStatus("You were admitted, but the room roster did not arrive. Rejoin to restore peer connections.");
+            toast.error("Room setup did not finish", {
+              description: "The host approved you, but participant details did not arrive. Rejoin the room to try again.",
+              duration: 10000,
+            });
+          }, 10000);
           setStatus("Host accepted your request. Connecting...");
           toast.success("Request Accepted", {
             description: `${
@@ -480,16 +593,18 @@ export const useSocket = () => {
     }
   };
 
-  const sendWsMessage = (message: WebSocketMessage) => {
+  const sendWsMessage = (message: WebSocketMessage): boolean => {
     try {
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.send(JSON.stringify(message));
+        return true;
       } else {
         console.error("WebSocket is not open. Cannot send message.");
       }
     } catch (error) {
       console.error("Error sending WebSocket message:", error);
     }
+    return false;
   };
 
   const restartPeerIce = async (remoteUserId: string, pc: RTCPeerConnection) => {
@@ -497,12 +612,23 @@ export const useSocket = () => {
     if ((iceRestartAttempts.current[remoteUserId] ?? 0) >= 1 || pc.signalingState !== "stable") return;
     iceRestartAttempts.current[remoteUserId] = (iceRestartAttempts.current[remoteUserId] ?? 0) + 1;
     setStatus(`Reconnecting to ${remoteUserId.slice(0, 6)}…`);
+    const peer = useConnectionStore.getState().peers[remoteUserId];
+    if (peer) {
+      setPeerStatus(remoteUserId, {
+        userName: peer.userName,
+        userType: peer.userType,
+        phase: "reconnecting",
+        issue: "The network path failed. Trying to reconnect…",
+      });
+      watchPeerConnection(remoteUserId, peer.userName, peer.userType, 20000,
+        `Could not restore the connection with ${peer.userName}. Check the network or TURN availability.`);
+    }
     try {
       pc.restartIce();
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
       if (!offer.sdp) throw new Error("Browser did not create an ICE restart offer");
-      sendWsMessage({
+      if (!sendWsMessage({
         type: "offer",
         roomId,
         fromUserId: userId,
@@ -510,9 +636,12 @@ export const useSocket = () => {
         fromUserType: userType ?? UserType.GUEST,
         toUserId: remoteUserId,
         offer: { type: "offer", sdp: offer.sdp },
-      });
+      })) throw new Error("The signaling server is unavailable.");
     } catch (error) {
       console.error("ICE restart failed", error instanceof Error ? error.message : "unknown error");
+      const currentPeer = useConnectionStore.getState().peers[remoteUserId];
+      if (currentPeer) markPeerFailed(remoteUserId, currentPeer.userName, currentPeer.userType,
+        "The connection could not be restarted because signaling is unavailable.");
     }
   };
 
@@ -557,7 +686,12 @@ export const useSocket = () => {
       guestUserId: guestId,
     };
 
-    sendWsMessage(payload);
+    if (!sendWsMessage(payload)) {
+      toast.error("Could not send the host decision", {
+        description: "The signaling server is unavailable. The guest request is still pending.",
+      });
+      return;
+    }
     removeJoinRequestFromStore(guestId);
   };
 
@@ -567,7 +701,7 @@ export const useSocket = () => {
     remoteUserName: string,
     remoteUserType: UserType = UserType.GUEST
   ) => {
-    setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
+    setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState, phase: "waiting" });
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
         console.debug("Sending ICE candidate:", "to remote user:");
@@ -576,21 +710,38 @@ export const useSocket = () => {
           throw new Error("Room ID or User ID is not set");
         }
 
-        sendWsMessage({
+        if (!sendWsMessage({
           type: "ice-candidate",
           roomId,
           fromUserId: userId,
           toUserId: remoteUserId,
           candidate: event.candidate,
-        });
+        })) {
+          markPeerFailed(remoteUserId, remoteUserName, remoteUserType,
+            "The signaling server disconnected while sending network connection details.");
+        }
       }
     };
 
     pc.onconnectionstatechange = () => {
-      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
+      const phase = pc.connectionState === "connected"
+        ? "connected"
+        : pc.connectionState === "failed" || pc.connectionState === "disconnected"
+          ? "reconnecting"
+          : "connecting";
+      const issue = pc.connectionState === "disconnected"
+        ? "Connection interrupted. Trying to restore the network path…"
+        : pc.connectionState === "failed"
+          ? "The network path failed. Trying one recovery attempt…"
+          : undefined;
+      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState, phase, issue });
       switch (pc.connectionState) {
         case "connected":
+          clearPeerTimeout(remoteUserId);
           delete iceRestartAttempts.current[remoteUserId];
+          addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
+          setIsConnected(true);
+          setStatus("Connected to peer(s)...");
           if (remoteUsers[remoteUserId]) return;
           console.debug(
             `Connection established with remote user ${remoteUserId}`
@@ -600,9 +751,6 @@ export const useSocket = () => {
             remoteUserId,
             remoteUserName
           );
-          addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
-          setIsConnected(true);
-          setStatus("Connected to peer(s)...");
           toast.success("New User Joined", {
             description: `A new user, ${remoteUserName}, with ID ${remoteUserId} joined the room.`,
           });
@@ -613,15 +761,16 @@ export const useSocket = () => {
           );
 
           setStatus(`Reconnecting to ${remoteUserName}…`);
+          watchPeerConnection(remoteUserId, remoteUserName, remoteUserType, 15000,
+            `The connection to ${remoteUserName} stayed interrupted. Check whether they are still online.`);
           break;
         case "failed":
           console.warn(
             `Connection with remote user ${remoteUserId} lost. Attempting to reconnect...`
           );
 
-          toast.error("Connection problem", {
-            description: `Trying to reconnect to ${remoteUserName}. If this keeps happening, check the network or TURN configuration.`,
-          });
+          watchPeerConnection(remoteUserId, remoteUserName, remoteUserType, 20000,
+            `Could not restore the connection to ${remoteUserName}. Check the network or TURN availability.`);
           void restartPeerIce(remoteUserId, pc);
           break;
         case "closed":
@@ -640,16 +789,28 @@ export const useSocket = () => {
     };
 
     pc.oniceconnectionstatechange = () => {
-      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
+      const prior = useConnectionStore.getState().peers[remoteUserId];
+      const iceInterrupted = pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed";
+      setPeerStatus(remoteUserId, {
+        userName: remoteUserName,
+        userType: remoteUserType,
+        state: pc.connectionState,
+        iceState: pc.iceConnectionState,
+        phase: iceInterrupted
+          ? "reconnecting"
+          : pc.connectionState === "connected" ? "connected" : prior?.phase ?? "connecting",
+        issue: iceInterrupted
+          ? `The network path to ${remoteUserName} was interrupted. Trying to restore it…`
+          : pc.connectionState === "connected" ? undefined : prior?.issue,
+      });
       console.debug(
         `ICE connection state with ${remoteUserId}: ${pc.iceConnectionState}`
       );
 
       switch (pc.iceConnectionState) {
         case "disconnected":
-          toast.warning("ICE Disconnected", {
-            description: `ICE connection with user ${remoteUserName} disconnected.`,
-          });
+          watchPeerConnection(remoteUserId, remoteUserName, remoteUserType, 15000,
+            `The network path to ${remoteUserName} stayed interrupted.`);
           break;
         case "failed":
           console.warn("ICE connection failed, attempting one restart");
@@ -742,8 +903,11 @@ export const useSocket = () => {
     remoteUserId: string,
     remoteUserName: string,
     remoteUserType: UserType = UserType.GUEST
-  ) => {
+  ): RTCPeerConnection | undefined => {
     try {
+      const existing = peerConnections.current[remoteUserId];
+      if (existing) return existing;
+
       console.debug(
         "Creating new RTCPeerConnection with remote user ID:",
         remoteUserId,
@@ -758,7 +922,15 @@ export const useSocket = () => {
         iceServers: iceServers.current,
         iceCandidatePoolSize: 10,
       });
-      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState });
+      addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
+      setPeerStatus(remoteUserId, {
+        userName: remoteUserName,
+        userType: remoteUserType,
+        state: pc.connectionState,
+        iceState: pc.iceConnectionState,
+        phase: "waiting",
+        issue: `Waiting for ${remoteUserName} to respond.`,
+      });
 
       // registering peer connection event handlers
       console.log("running pc event handler registration...");
@@ -766,6 +938,7 @@ export const useSocket = () => {
       registerPCEventHandlers(pc, remoteUserId, remoteUserName, remoteUserType);
 
       peerConnections.current[remoteUserId] = pc;
+      watchPeerConnection(remoteUserId, remoteUserName, remoteUserType);
 
       console.log(
         "adding local tracks to peer connection... with local stream:",
@@ -809,11 +982,12 @@ export const useSocket = () => {
         "new peer connection created and added to records for user:",
         remoteUserId
       );
+      return pc;
     } catch (error) {
       console.error("Error creating peer connection:", error);
-      toast.error("Peer Connection Failed", {
-        description: "Failed to create WebRTC peer connection.",
-      });
+      markPeerFailed(remoteUserId, remoteUserName, remoteUserType,
+        "This browser could not create a peer connection.");
+      return undefined;
     }
   };
 
@@ -834,6 +1008,17 @@ export const useSocket = () => {
       }
 
       const pc = peerConnections.current[remoteUserId];
+      const peer = useConnectionStore.getState().peers[remoteUserId];
+      if (peer) {
+        setPeerStatus(remoteUserId, {
+          userName: peer.userName,
+          userType: peer.userType,
+          phase: "signaling",
+          issue: `Sending a connection offer to ${peer.userName}…`,
+        });
+        watchPeerConnection(remoteUserId, peer.userName, peer.userType, 25000,
+          `No response from ${peer.userName}. They may be offline or their network may block the call.`);
+      }
 
       // create data channel for file transfer, so that it is ready when offer is created
       // this ensures that the data channel is negotiated along with the offer/answer exchange
@@ -864,7 +1049,7 @@ export const useSocket = () => {
 
       await pc.setLocalDescription(offer);
 
-      sendWsMessage({
+      if (!sendWsMessage({
         type: "offer",
         fromUserId: userId,
         fromUserName: userName,
@@ -873,13 +1058,15 @@ export const useSocket = () => {
         // @ts-expect-error TS2322
         offer,
         roomId,
-      });
+      })) throw new Error("Signaling server is unavailable");
       console.debug("Offer sent to remote user:", remoteUserId);
     } catch (error) {
       console.error("Error creating offer:", error);
-      toast.error("Offer Creation Failed", {
-        description: "Failed to create WebRTC offer.",
-      });
+      const peer = useConnectionStore.getState().peers[remoteUserId];
+      if (peer) markPeerFailed(remoteUserId, peer.userName, peer.userType,
+        error instanceof Error && error.message.includes("Signaling")
+          ? "The signaling server could not deliver the connection offer. Rejoin the room and try again."
+          : "This browser could not create a connection offer.");
     }
   };
 
@@ -912,6 +1099,18 @@ export const useSocket = () => {
       console.log("Received offer:", offer);
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const peer = useConnectionStore.getState().peers[fromUserId];
+      if (peer) {
+        setPeerStatus(fromUserId, {
+          userName: peer.userName,
+          userType: peer.userType,
+          phase: "connecting",
+          issue: "Offer received. Negotiating the media connection…",
+        });
+        watchPeerConnection(fromUserId, peer.userName, peer.userType, 25000,
+          `The call setup with ${peer.userName} timed out. Check the network or TURN availability.`);
+      }
+      await flushPendingIceCandidates(fromUserId, pc);
 
       console.log("Remote description set with offer:", offer);
 
@@ -924,7 +1123,7 @@ export const useSocket = () => {
       await pc.setLocalDescription(answer);
       console.log("Created answer:", answer);
 
-      sendWsMessage({
+      if (!sendWsMessage({
         type: "answer",
         roomId,
         fromUserId: userId,
@@ -933,12 +1132,12 @@ export const useSocket = () => {
         toUserId: fromUserId,
         // @ts-expect-error TS2322
         answer,
-      });
+      })) throw new Error("Signaling server is unavailable");
     } catch (error) {
       console.error("Error handling offer:", error);
-      toast.error("Offer Handling Failed", {
-        description: "Failed to handle WebRTC offer.",
-      });
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) markPeerFailed(msg.fromUserId, peer.userName, peer.userType,
+        "This browser could not complete the connection offer. Rejoin the room to try again.");
     }
   };
 
@@ -957,30 +1156,38 @@ export const useSocket = () => {
       console.debug("Received answer:", msg.answer);
 
       await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) {
+        setPeerStatus(msg.fromUserId, {
+          userName: peer.userName,
+          userType: peer.userType,
+          phase: "connecting",
+          issue: "Answer received. Checking available network routes…",
+        });
+        watchPeerConnection(msg.fromUserId, peer.userName, peer.userType, 25000,
+          `The network could not establish a media path to ${peer.userName}. Check the network or TURN availability.`);
+      }
+      await flushPendingIceCandidates(msg.fromUserId, pc);
 
       console.debug("Remote description set with answer:", msg.answer);
     } catch (error) {
       console.error("Error handling answer:", error);
-      toast.error("Answer Handling Failed", {
-        description: "Failed to handle WebRTC answer.",
-      });
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) markPeerFailed(msg.fromUserId, peer.userName, peer.userType,
+        "The connection answer could not be applied. Rejoin the room to try again.");
     }
   };
 
   const handleIceCandidate = async (msg: IceCandidateMessage) => {
     try {
-      if (!peerConnections.current[msg.fromUserId]) {
-        throw new Error(
-          `Peer connection not found for user: ${msg.fromUserId}`
-        );
-      }
-
       const pc = peerConnections.current[msg.fromUserId];
-
-      if (!pc.remoteDescription) {
-        console.warn(
-          "Remote description not set yet, waiting for offer/answer"
-        );
+      if (!pc || !pc.remoteDescription) {
+        const queued = pendingIceCandidates.current[msg.fromUserId] ?? [];
+        if (queued.length >= 128) {
+          throw new Error("Too many ICE candidates arrived before negotiation");
+        }
+        queued.push(msg.candidate);
+        pendingIceCandidates.current[msg.fromUserId] = queued;
         return;
       }
 
@@ -989,9 +1196,9 @@ export const useSocket = () => {
       console.debug("ICE candidate added to peer connection");
     } catch (error) {
       console.error("Error handling ICE candidate:", error);
-      toast.error("ICE Candidate Handling Failed", {
-        description: "Failed to handle WebRTC ICE candidate.",
-      });
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) markPeerFailed(msg.fromUserId, peer.userName, peer.userType,
+        "A network route from this participant could not be applied. Rejoin the room to retry.");
     }
   };
 
@@ -1001,6 +1208,8 @@ export const useSocket = () => {
       remoteUserId
     );
     try {
+      clearPeerTimeout(remoteUserId);
+      delete pendingIceCandidates.current[remoteUserId];
       delete iceRestartAttempts.current[remoteUserId];
       removePeerStatus(remoteUserId);
       // Cancel any active upload sessions for this peer
@@ -1012,10 +1221,12 @@ export const useSocket = () => {
       delete audioSendersRef.current[remoteUserId];
       delete videoSendersRef.current[remoteUserId];
 
-      if (Object.keys(peerConnections.current).length === 0) {
+      const anotherPeerConnected = Object.values(peerConnections.current).some(
+        (connection) => connection.connectionState === "connected"
+      );
+      setIsConnected(anotherPeerConnected);
+      if (!anotherPeerConnected && Object.keys(peerConnections.current).length === 0) {
         setStatus("Waiting for other users...");
-      } else if (Object.keys(peerConnections.current).length === 1) {
-        setIsConnected(false);
       }
 
       removeRemoteUser(remoteUserId);
@@ -1332,6 +1543,11 @@ export const useSocket = () => {
 
   const cleanUp = () => {
     try {
+      intentionalSocketClose.current = true;
+      if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+      admissionRosterTimeout.current = null;
+      Object.keys(peerTimeouts.current).forEach(clearPeerTimeout);
+      pendingIceCandidates.current = {};
       Object.values(peerConnections.current).forEach((pc) => pc.close());
 
       console.log("leaving room:", roomId);

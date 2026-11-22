@@ -6,6 +6,8 @@ export type PeerConnectionStatus = {
   userType: UserType;
   state: RTCPeerConnectionState;
   iceState: RTCIceConnectionState;
+  phase: "waiting" | "signaling" | "connecting" | "connected" | "reconnecting" | "failed";
+  issue?: string;
   updatedAt: number;
 };
 
@@ -22,16 +24,20 @@ export const useConnectionStore = create<ConnectionState>()((set) => ({
     peers: {
       ...state.peers,
       [userId]: {
+        ...state.peers[userId],
         userName: update.userName,
         userType: update.userType,
         state: update.state ?? state.peers[userId]?.state ?? "new",
         iceState: update.iceState ?? state.peers[userId]?.iceState ?? "new",
+        phase: update.phase ?? state.peers[userId]?.phase ?? "waiting",
+        issue: update.issue ?? (update.phase === "connected" ? undefined : state.peers[userId]?.issue),
         updatedAt: Date.now(),
       },
     },
   })),
   removePeerStatus: (userId) => set((state) => {
-    const { [userId]: _removed, ...peers } = state.peers;
+    const peers = { ...state.peers };
+    delete peers[userId];
     return { peers };
   }),
   clearPeerStatuses: () => set({ peers: {} }),

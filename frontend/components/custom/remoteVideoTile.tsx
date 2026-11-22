@@ -1,5 +1,6 @@
 import { Crown, MicOff, VideoOff, Waves } from "lucide-react";
 import { useEffect, useRef } from "react";
+import type { PeerConnectionStatus } from "@/lib/stores/connectionStore";
 
 type RemoteVideoTileProps = {
   stream: MediaStream;
@@ -9,6 +10,8 @@ type RemoteVideoTileProps = {
   audioEnabled: boolean;
   voiceLevel?: number;
   isHost?: boolean;
+  connectionPhase?: PeerConnectionStatus["phase"];
+  connectionIssue?: string;
 };
 
 const RemoteVideoTile = ({
@@ -19,12 +22,15 @@ const RemoteVideoTile = ({
   audioEnabled,
   voiceLevel = 0,
   isHost = false,
+  connectionPhase,
+  connectionIssue,
 }: RemoteVideoTileProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const normalizedLevel = Math.min(Math.max(voiceLevel, 0), 1);
   const isSpeaking = audioEnabled && normalizedLevel > 0.18;
   const displayName = userName || `Participant ${userId.slice(0, 4)}`;
+  const connectionInterrupted = connectionPhase === "failed" || connectionPhase === "reconnecting";
 
   useEffect(() => {
     if (!videoRef.current) {
@@ -81,7 +87,7 @@ const RemoteVideoTile = ({
         autoPlay
         playsInline
         className={`w-full h-full object-cover ${
-          videoEnabled ? "opacity-100" : "opacity-0"
+          videoEnabled && !connectionInterrupted ? "opacity-100" : "opacity-0"
         }`}
       />
       <audio ref={audioRef} autoPlay className="hidden" />
@@ -120,7 +126,9 @@ const RemoteVideoTile = ({
             style={{ opacity: 0.6 + normalizedLevel * 0.4 }}
           />
         </span>
-        {isSpeaking ? "Speaking" : "Live"}
+        {connectionPhase === "connected" || connectionPhase === undefined
+          ? isSpeaking ? "Speaking" : "Live"
+          : connectionPhase === "failed" ? "Unavailable" : "Connecting"}
       </div>
       {!videoEnabled && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-800/80 text-white">
@@ -131,6 +139,15 @@ const RemoteVideoTile = ({
       {!audioEnabled && (
         <div className="absolute top-3 right-3 rounded-full bg-stone-900/80 p-2 text-white">
           <MicOff className="w-4 h-4" />
+        </div>
+      )}
+      {connectionInterrupted && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-stone-950/90 p-6 text-center text-white" role="status" aria-live="polite">
+          <div className={`mb-3 grid h-12 w-12 place-items-center rounded-full ${connectionPhase === "failed" ? "bg-rose-500/20 text-rose-200" : "bg-amber-400/20 text-amber-100"}`}>
+            {connectionPhase === "failed" ? <VideoOff aria-hidden="true" className="h-6 w-6" /> : <Waves aria-hidden="true" className="h-6 w-6 animate-pulse motion-reduce:animate-none" />}
+          </div>
+          <p className="font-semibold">{connectionPhase === "failed" ? "Call unavailable" : "Reconnecting"}</p>
+          <p className="mt-1 max-w-sm text-sm text-stone-200">{connectionIssue ?? (connectionPhase === "failed" ? "This participant is still in the room, but the media connection failed." : "The network connection was interrupted. Trying to restore it…")}</p>
         </div>
       )}
     </div>

@@ -33,6 +33,7 @@ export type WebSocketMessage =
   | IceCandidateMessage
   | JoinRequestMessage
   | JoinRequestDecisionMessage
+  | RoomRosterMessage
   | UserJoinedMessage
   | UserLeftMessage
   | ErrorMessage
@@ -104,6 +105,13 @@ export type UserJoinedMessage = {
   userId: string;
   userName: string;
   userType: UserType;
+};
+
+/** Current active peers sent only to a guest after host approval. */
+export type RoomRosterMessage = {
+  type: "room-roster";
+  roomId: string;
+  users: User[];
 };
 
 export type UserLeftMessage = {

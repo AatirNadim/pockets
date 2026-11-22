@@ -249,6 +249,10 @@ export class SocketService {
     }
     guest.state = "active";
     this.send(guest.socket, { type: "join-request-accepted", roomId: host.roomId, hostUserId: host.userId, guestUserId: guest.userId, hostName: host.userName, guestName: guest.userName } satisfies JoinRequestDecisionMessage);
+    const roster = [...this.sessionByUser.values()]
+      .filter((session) => session.roomId === host.roomId && session.state === "active" && session !== guest)
+      .map((session) => ({ id: session.userId, name: session.userName, type: session.userType }));
+    this.send(guest.socket, { type: "room-roster", roomId: host.roomId, users: roster });
     const joined: UserJoinedMessage = { type: "user-joined", roomId: host.roomId, userId: guest.userId, userName: guest.userName, userType: guest.userType };
     await this.broadcast(host.roomId, joined, guest.userId);
   }

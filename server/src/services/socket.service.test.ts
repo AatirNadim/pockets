@@ -44,6 +44,8 @@ test("binds each socket identity and rejects forged signaling before delivery", 
   await service.handleMessage(cleanGuest as unknown as WebSocket, join(roomId, id(5), UserType.GUEST));
   await service.handleMessage(host as unknown as WebSocket, { type: "join-request-accepted", roomId, hostUserId: id(2), guestUserId: id(5) });
   assert.equal(cleanGuest.take("join-request-accepted").length, 1);
+  const roster = cleanGuest.take("room-roster")[0] as { users: Array<{ id: string }> };
+  assert.deepEqual(roster.users.map((user) => user.id), [id(2)]);
   await service.handleMessage(host as unknown as WebSocket, {
     type: "offer", roomId, fromUserId: id(2), fromUserName: "forged", fromUserType: UserType.GUEST,
     toUserId: id(5), offer: { type: "offer", sdp: "v=0" },
