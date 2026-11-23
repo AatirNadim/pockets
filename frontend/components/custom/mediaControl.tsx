@@ -150,8 +150,8 @@ const MediaControl = ({
   const { showChat, toggleShowChat } = useChatStore();
 
   return (
-    <div className="w-full glass border-t border-stone-200/50 dark:border-stone-700/50">
-      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto px-4 py-4 sm:flex-wrap sm:justify-center sm:gap-4 sm:p-6">
+    <div className="w-full shrink-0 border-t border-stone-200/70 bg-white/80 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-stone-700/50 dark:bg-stone-900/85">
+      <div aria-label="Call controls" className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain px-3 py-3 [scrollbar-width:thin] sm:flex-wrap sm:justify-center sm:gap-4 sm:px-6 sm:py-5">
         <Button
           onClick={() => {
             onToggleMute(!isMicrophoneMuted).then(() => {

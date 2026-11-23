@@ -44,7 +44,7 @@ In another terminal, from the repository root:
 pnpm dev:frontend
 ```
 
-Open `http://localhost:3000`. The frontend defaults to signaling at `localhost:8080`. For LAN testing or deployment, set the browser reachable `NEXT_PUBLIC_SERVER_PATH` and use HTTPS so camera and microphone access is available. Follow [Local development and deployment](LOCAL_DEVELOPMENT.md) for details.
+Open `http://localhost:3000`. The frontend defaults to signaling at `localhost:8080`. For peer testing, the [local development guide](LOCAL_DEVELOPMENT.md) explains how to connect over a LAN IP, use an mDNS `.local` name with an optional Caddy HTTPS proxy, or use a development tunnel when LAN access is unavailable.
 
 ## Workspace commands
 

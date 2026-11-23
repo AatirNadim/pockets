@@ -8,7 +8,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-montserrat), system-ui, sans-serif;
   --font-heading: var(--font-quicksand), system-ui, sans-serif;
-  --font-inter: var(--font-inter);
+  --font-ui: var(--font-montserrat), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -88,8 +88,8 @@
   --card-foreground: oklch(0.935 0.008 75);
   --popover: oklch(0.185 0.012 75);
   --popover-foreground: oklch(0.935 0.008 75);
-  --primary: oklch(0.935 0.008 75);
-  --primary-foreground: oklch(0.185 0.012 75);
+  --primary: oklch(0.72 0.15 55);
+  --primary-foreground: oklch(0.18 0.015 55);
   --secondary: oklch(0.245 0.012 75);
   --secondary-foreground: oklch(0.935 0.008 75);
   --muted: oklch(0.275 0.012 75);
@@ -121,14 +121,29 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-montserrat), system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     text-rendering: optimizeLegibility;
+    min-width: 320px;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-quicksand), var(--font-montserrat), system-ui, sans-serif;
+    text-wrap: pretty;
+  }
+
+  button, input, textarea, select { font: inherit; }
+  button:not(:disabled) { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  img, video { max-width: 100%; }
 
   /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
+    color-scheme: light;
   }
+
+  html.dark { color-scheme: dark; }
 
   /* Better focus styles */
   :focus-visible {
@@ -174,9 +189,9 @@
   @apply bg-clip-text text-transparent bg-linear-to-r from-amber-600 via-orange-600 to-rose-600 dark:from-amber-400 dark:via-orange-400 dark:to-rose-400;
 }
 
-/* Smooth transitions for theme changes */
-* {
-  transition-property: background-color, border-color, color, fill, stroke;
+/* Keep theme changes smooth without forcing transitions on layout or media. */
+body, header, main, section, aside, button, input, textarea, [data-slot="button"] {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
@@ -189,4 +204,14 @@
 /* Legacy gradient (keeping for compatibility) */
 .bg-stripe-gradient {
   background: linear-gradient(108deg, #635bff 0%, #635bff 30%, #00d4ff 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -11,18 +11,18 @@ import { ThemeToggle } from "@/components/custom/themeToggle";
 const NotFound = () => {
   return (
     <motion.main
-      className="relative min-h-screen overflow-hidden font-sans text-stone-900 dark:text-stone-100"
+      className="relative min-h-dvh overflow-hidden bg-stone-50 font-sans text-stone-900 dark:bg-stone-950 dark:text-stone-100"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
     >
       <AnimatedBackground />
-      <div className="absolute top-6 right-6 z-20">
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
         <ThemeToggle />
       </div>
-      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 py-12">
+      <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-4 py-20 sm:px-6 sm:py-12">
         <motion.div
-          className="w-full max-w-md rounded-3xl glass-strong p-10 text-center"
+          className="w-full max-w-md rounded-3xl glass-strong p-6 text-center sm:p-10"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, type: "spring", stiffness: 120 }}
@@ -33,7 +33,7 @@ const NotFound = () => {
           <p className="text-sm font-semibold tracking-[0.4em] text-amber-600/70 dark:text-amber-400/70">
             ERROR 404
           </p>
-          <h1 className="mt-3 text-4xl font-bold text-stone-800 dark:text-stone-100">Nothing here ..!</h1>
+          <h1 className="mt-3 text-3xl font-bold text-stone-800 dark:text-stone-100 sm:text-4xl">Nothing here!</h1>
           <p className="mt-4 text-base text-stone-600 dark:text-stone-300">
             The page you&apos;re looking for doesn&apos;t exist. Let&apos;s
             guide you back to the lobby so you can spin up a new room or rejoin

@@ -40,7 +40,7 @@ const ChatSidebar = ({
     <div
       className={cn(
         !showChat && "hidden",
-        "fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 h-[min(68dvh,38rem)] w-full rounded-3xl lg:static lg:z-auto lg:h-full lg:w-[22rem] lg:shrink-0 lg:rounded-none",
+        "fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 h-[min(68dvh,38rem)] max-h-[calc(100dvh-8rem-env(safe-area-inset-top))] w-full rounded-3xl lg:static lg:z-auto lg:h-full lg:max-h-none lg:w-[22rem] lg:shrink-0 lg:rounded-none",
         "border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900 transition-transform duration-200 lg:border-y-0 lg:border-r-0 lg:shadow-none",
         "shadow-2xl overflow-hidden opacity-100 pointer-events-auto"
       )}

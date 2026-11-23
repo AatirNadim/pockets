@@ -10,8 +10,11 @@ export function ThemeToggle() {
 
   return (
     <motion.button
+      type="button"
+      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
+      title={`Switch to ${isDark ? "light" : "dark"} theme`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="relative w-10 h-10 rounded-xl bg-stone-100/80 dark:bg-stone-800/80 backdrop-blur-xl border border-stone-200/50 dark:border-stone-700/50 flex items-center justify-center text-stone-600 dark:text-stone-300 hover:bg-stone-200/80 dark:hover:bg-stone-700/80 transition-colors duration-300 overflow-hidden"
+      className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-stone-200 bg-white/80 text-stone-600 backdrop-blur-xl transition-colors hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:border-stone-700 dark:bg-stone-800/80 dark:text-stone-300 dark:hover:bg-stone-700"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
