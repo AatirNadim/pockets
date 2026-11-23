@@ -61,6 +61,7 @@ export const pickFolderDestinations = async (files: Array<{ id: string; name: st
 
 export const setDownloadDestination = (fileId: string, handle: SaveFileHandle) => destinations.set(fileId, handle);
 export const clearDownloadDestination = (fileId: string) => destinations.delete(fileId);
+export const clearAllDownloadDestinations = () => destinations.clear();
 export const takeDownloadDestination = (fileId: string) => {
   const handle = destinations.get(fileId);
   destinations.delete(fileId);

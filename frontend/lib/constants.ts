@@ -24,7 +24,6 @@ const serverPath =
 
 enum AttachmentState {
   LOCAL = "local",
-  READY = "ready",
   REMOTE = "remote",
 }
 

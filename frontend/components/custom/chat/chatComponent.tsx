@@ -28,14 +28,27 @@ type ChatComponentProps = {
 };
 
 const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRequestReupload, onClose }: ChatComponentProps) => {
-  const { receivedFiles, filesToBeSent, downloadProgress, addFiles, removeFile, getLocalFile } = useFileStore();
+  const { filesToBeSent, downloadProgress, addFiles, removeFile, getLocalFile } = useFileStore();
   const { chatMessages } = useChatStore();
   const { userId } = useUserStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileActionBusyRef = useRef(false);
   const [chatMessage, setChatMessage] = useState("");
   const [activeTab, setActiveTab] = useState<"chat" | "files">("chat");
   const [reuploadPrompt, setReuploadPrompt] = useState<{ files: Array<{ id: string; name: string }>; onFinish: (request: boolean) => void } | null>(null);
   const sharedFiles = Array.from(new Map(chatMessages.flatMap((message) => (message.attachments ?? []).map((file) => [file.id, { file, sender: message.userName }] as const))).values());
+  const promptForReupload = useCallback((files: Array<{ id: string; name: string }>, onFinish: (request: boolean) => void) => {
+    setReuploadPrompt((current) => {
+      if (!current) return { files, onFinish };
+      const currentIds = new Set(current.files.map((file) => file.id));
+      const additions = files.filter((file) => !currentIds.has(file.id));
+      if (!additions.length) return current;
+      return {
+        files: [...current.files, ...additions],
+        onFinish: (request) => { current.onFinish(request); onFinish(request); },
+      };
+    });
+  }, []);
 
   useEffect(() => {
     const handleUnavailable = (event: Event) => {
@@ -45,15 +58,18 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       const files = useChatStore.getState().chatMessages.flatMap((message) => message.attachments ?? [])
         .filter((file) => unavailable.includes(file.id))
         .map((file) => ({ id: file.id, name: file.name }));
-      if (!files.length) return;
-      setReuploadPrompt({ files, onFinish: (request) => {
+      if (!files.length) {
+        if (detail.availableFileIds?.length) onRequestFile(detail.availableFileIds, detail.ownerId);
+        return;
+      }
+      promptForReupload(files, (request) => {
         if (request) onRequestReupload(files.map((file) => file.id), detail.ownerId, files.map((file) => file.name));
         if (detail.availableFileIds.length) onRequestFile(detail.availableFileIds, detail.ownerId);
-      } });
+      });
     };
     window.addEventListener("file-download-unavailable", handleUnavailable);
     return () => window.removeEventListener("file-download-unavailable", handleUnavailable);
-  }, [onRequestFile, onRequestReupload]);
+  }, [onRequestFile, onRequestReupload, promptForReupload]);
 
   const handleSend = useCallback(() => {
     if (chatMessage.trim() && onSendMessage(chatMessage)) setChatMessage("");
@@ -76,16 +92,22 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
     event.target.value = "";
   }, [addFiles, filesToBeSent]);
   const handleFileAction = async (id: string, ownerId: string, name: string) => {
-    const url = receivedFiles[id]?.url;
+    if (fileActionBusyRef.current) return;
+    fileActionBusyRef.current = true;
     const file = getLocalFile(id);
-    if (ownerId === userId && !url && !file) {
+    if (ownerId === userId && !file) {
       toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+      fileActionBusyRef.current = false;
       return;
     }
     try {
       const handle = await pickFileDestination(name);
-      if (url) await saveBlobToHandle(await (await fetch(url)).blob(), handle);
-      else if (file) await saveBlobToHandle(file, handle);
+      const currentFile = getLocalFile(id);
+      if (currentFile) await saveBlobToHandle(currentFile, handle);
+      else if (ownerId === userId) {
+        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        return;
+      }
       else {
         setDownloadDestination(id, handle);
         const availability = await onCheckAvailability([id], ownerId);
@@ -94,10 +116,9 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
           throw new Error("The sender did not respond. Try again when they are available.");
         }
         if (availability.unavailableFileIds.length) {
-          setReuploadPrompt({ files: [{ id, name }], onFinish: (request) => {
-            clearDownloadDestination(id);
-            if (request) onRequestReupload([id], ownerId, [name]);
-          } });
+          const request = await new Promise<boolean>((resolve) => promptForReupload([{ id, name }], resolve));
+          clearDownloadDestination(id);
+          if (request) onRequestReupload([id], ownerId, [name]);
           return;
         }
         if (!onRequestFile([id], ownerId)) {
@@ -109,6 +130,8 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       toast.success(`Saved ${name}`);
     } catch (error) {
       toast.error("Could not save download", { description: describeSaveError(error) });
+    } finally {
+      fileActionBusyRef.current = false;
     }
   };
 
@@ -123,7 +146,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
     </div>
 
     <div className={activeTab === "chat" ? "flex min-h-0 flex-1 flex-col" : "hidden"} role="tabpanel" aria-label="Chat messages">
-      <MessagesContainer onRequestFile={onRequestFile} onCheckAvailability={onCheckAvailability} onRequestReupload={onRequestReupload} onPromptReupload={(files, onFinish) => setReuploadPrompt({ files, onFinish })} />
+      <MessagesContainer onRequestFile={onRequestFile} onCheckAvailability={onCheckAvailability} onRequestReupload={onRequestReupload} onPromptReupload={promptForReupload} />
       <div className="border-t border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
         {filesToBeSent.length > 0 && <AttachementsToSend filesToBeSent={filesToBeSent} handleRemoveQueuedFile={removeFile} formatBytes={formatBytes} />}
         <div className="flex gap-2">
@@ -138,11 +161,11 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">Shared files stay available for 10 minutes. Availability is checked before each download.</p>
       {!sharedFiles.length ? <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500 dark:border-stone-700">No files shared yet.</div> : <ul className="space-y-2">{sharedFiles.map(({ file, sender }) => {
         const local = Boolean(getLocalFile(file.id)) || filesToBeSent.some((entry) => entry.id === file.id);
-        const ready = Boolean(receivedFiles[file.id]?.url);
         const progress = downloadProgress[file.id];
-        const status = local ? "Available to room" : ready ? "Downloaded" : progress?.status === "requested" ? "Request sent" : progress?.status === "in-progress" ? "Downloading" : "Available to request";
+        const expired = file.ownerId === userId && !local;
+        const status = local ? "Available to room" : expired ? "Expired · attach again" : progress?.status === "requested" ? "Request sent" : progress?.status === "in-progress" ? "Downloading" : "Available to request";
         const percent = progress?.status === "in-progress" && progress.totalBytes ? Math.min(100, Math.round(progress.receivedBytes / progress.totalBytes * 100)) : 0;
-        return <li key={file.id} className="rounded-xl border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-950"><div className="flex items-start gap-3"><FileIcon size={18} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" /><div className="min-w-0 flex-1"><p className="break-all text-sm font-medium">{file.name}</p><p className="mt-1 text-xs text-stone-500">{formatBytes(file.size)} · Shared by {sender || (local ? "You" : "participant")}</p><p className="mt-1 text-xs text-stone-500">{status}{progress?.status === "in-progress" ? ` · ${percent}%` : ""}</p>{progress?.status === "in-progress" && <progress className="mt-2 h-1.5 w-full accent-amber-600" max={100} value={percent} aria-label={`Downloading ${file.name}`} />}</div><Button size="sm" variant="secondary" className="min-h-10 shrink-0" disabled={!local && !ready && Boolean(progress)} onClick={() => handleFileAction(file.id, file.ownerId, file.name)} aria-label={`${local || ready ? "Download" : progress ? "Download pending" : "Request"} ${file.name}`}>{local || ready ? <><Download size={15} /><span className="ml-1">Download</span></> : progress ? "Pending" : "Request"}</Button></div></li>;
+        return <li key={file.id} className="rounded-xl border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-950"><div className="flex items-start gap-3"><FileIcon size={18} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" /><div className="min-w-0 flex-1"><p className="break-all text-sm font-medium">{file.name}</p><p className="mt-1 text-xs text-stone-500">{formatBytes(file.size)} · Shared by {sender || (local ? "You" : "participant")}</p><p className="mt-1 text-xs text-stone-500">{status}{progress?.status === "in-progress" ? ` · ${percent}%` : ""}</p>{progress?.status === "in-progress" && <progress className="mt-2 h-1.5 w-full accent-amber-600" max={100} value={percent} aria-label={`Downloading ${file.name}`} />}</div><Button size="sm" variant="secondary" className="min-h-10 shrink-0" disabled={expired || (!local && Boolean(progress))} onClick={() => handleFileAction(file.id, file.ownerId, file.name)} aria-label={`${expired ? "Expired" : local ? "Download" : progress ? "Download pending" : "Request"} ${file.name}`}>{local ? <><Download size={15} /><span className="ml-1">Download</span></> : expired ? "Expired" : progress ? "Pending" : "Request"}</Button></div></li>;
       })}</ul>}
     </section>
     <input ref={fileInputRef} type="file" className="hidden" multiple onChange={handleFileSelection} aria-label="Choose files to share" />

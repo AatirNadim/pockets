@@ -75,6 +75,7 @@ export default function Room() {
   const isHost = userType === UserType.HOST;
 
   const cleanUpRef = useRef(cleanUp);
+  const connectToRoomRef = useRef(connectToRoom);
 
   useEffect(() => {
     if (!isValidUUID(roomId)) {
@@ -93,6 +94,10 @@ export default function Room() {
   }, [cleanUp]);
 
   useEffect(() => {
+    connectToRoomRef.current = connectToRoom;
+  }, [connectToRoom]);
+
+  useEffect(() => {
     if (!leaveDialogOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -106,8 +111,8 @@ export default function Room() {
 
   useEffect(() => {
     if (!isValidUUID(roomId) || !userId) return;
-    connectToRoom();
-  }, [connectToRoom, roomId, userId]);
+    void connectToRoomRef.current();
+  }, [roomId, userId]);
 
   useEffect(() => {
     // 1. Handler to prompt the user before reloading/closing

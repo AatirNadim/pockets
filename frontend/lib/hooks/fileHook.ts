@@ -30,7 +30,6 @@ export const useFile = ({
   const {
     filesToBeSent,
     clearFilesToBeSent,
-    registerReceivedFile,
     getLocalFileEntry,
     beginDownload,
     updateDownloadProgress,
@@ -44,6 +43,21 @@ export const useFile = ({
   const incomingTransfersRef = useRef<Record<string, IncomingTransferState>>(
     {}
   );
+
+  const cancelIncomingTransfers = (remoteUserId?: string) => {
+    for (const [channelLabel, transfer] of Object.entries(incomingTransfersRef.current)) {
+      if (remoteUserId && transfer.remoteUserId !== remoteUserId) continue;
+      if (transfer.timeoutId) clearTimeout(transfer.timeoutId as ReturnType<typeof setTimeout>);
+      if (transfer.currentFile) {
+        const fileId = transfer.currentFile.metadata.fileId;
+        const writer = transfer.currentFile.writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
+        void writer?.abort?.(new Error("Transfer cancelled")).catch(() => undefined);
+        clearDownloadProgress([fileId]);
+        clearDownloadDestination(fileId);
+      }
+      delete incomingTransfersRef.current[channelLabel];
+    }
+  };
 
   /**
    * Initiates the file sending process to all connected peers.
@@ -204,6 +218,10 @@ export const useFile = ({
           console.log(
             `[Session ${session.sessionId}] Status changed to: ${status}`
           );
+          if (status === "cancelled") {
+            endUploadSession(session.sessionId);
+            uploadSessionRegistry.remove(session.sessionId);
+          }
         },
         onComplete: () => {
           console.log(`[Session ${session.sessionId}] Transfer completed`);
@@ -265,28 +283,27 @@ export const useFile = ({
 
     // Set up a stale transfer timeout - if we don't receive a complete signal
     // within STALE_TRANSFER_TIMEOUT_MS, we'll check if the transfer is complete
-    const staleTimeoutId = setTimeout(() => {
-      const transfer = incomingTransfersRef.current[channel.label];
-      if (!transfer) return;
+    const refreshStaleTimeout = () => {
+      const current = incomingTransfersRef.current[channel.label];
+      if (!current) return;
+      if (current.timeoutId) clearTimeout(current.timeoutId as number);
+      const timeoutId = setTimeout(async () => {
+        await receiveQueue;
+        const transfer = incomingTransfersRef.current[channel.label];
+        if (!transfer || transfer.timeoutId !== timeoutId) return;
 
-      console.warn(
-        `[${channel.label}] Stale transfer timeout reached, forcing finalization`
-      );
-
-      // Finalize any current file in progress
-      if (transfer.currentFile) {
-        finalizeCurrentFile(channel.label);
-      }
-
-      // Finalize all completed files
-      finalizeAllCompletedFiles(channel.label);
-      channel.close();
-    }, STALE_TRANSFER_TIMEOUT_MS);
-
-    incomingTransfersRef.current[channel.label].timeoutId = staleTimeoutId;
+        console.warn(`[${channel.label}] Stale transfer timeout reached, forcing finalization`);
+        if (transfer.currentFile) await finalizeCurrentFile(channel.label);
+        finalizeAllCompletedFiles(channel.label);
+        channel.close();
+      }, STALE_TRANSFER_TIMEOUT_MS);
+      current.timeoutId = timeoutId;
+    };
+    refreshStaleTimeout();
 
     const rejectTransfer = (message: string) => {
       const current = incomingTransfersRef.current[channel.label];
+      if (!current) return;
       if (current?.timeoutId) clearTimeout(current.timeoutId as number);
       if (current?.currentFile) {
         const writer = current.currentFile.writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
@@ -333,25 +350,7 @@ export const useFile = ({
             transfer.expectedTotalBytes = payload.totalBytes;
             transfer.expectedFileCount = payload.fileCount;
 
-            // Clear stale timeout and set a new one based on expected transfer
-            if (transfer.timeoutId) {
-              clearTimeout(transfer.timeoutId as number);
-            }
-            transfer.timeoutId = setTimeout(() => {
-              const currentTransfer =
-                incomingTransfersRef.current[channel.label];
-              if (!currentTransfer) return;
-
-              console.warn(
-                `[${channel.label}] Transfer timeout, forcing finalization`
-              );
-
-              if (currentTransfer.currentFile) {
-                finalizeCurrentFile(channel.label);
-              }
-              finalizeAllCompletedFiles(channel.label);
-              channel.close();
-            }, STALE_TRANSFER_TIMEOUT_MS);
+            refreshStaleTimeout();
             return;
           }
 
@@ -376,7 +375,6 @@ export const useFile = ({
             transfer.receivedFileIds.push(metadata.fileId);
             transfer.currentFile = {
               metadata: metadata as unknown as FileMetadataPayload,
-              chunks: [],
               receivedBytes: 0,
             };
             const destination = takeDownloadDestination(metadata.fileId);
@@ -384,14 +382,22 @@ export const useFile = ({
               try {
                 transfer.currentFile.writable = await destination.createWritable();
               } catch (error) {
+                transfer.currentFile.writeFailed = true;
+                transfer.failed = true;
                 clearDownloadProgress([metadata.fileId]);
-                rejectTransfer(`Could not open ${metadata.name} for writing: ${describeSaveError(error)}`);
-                return;
+                toast.error(`Could not open ${metadata.name} for writing: ${describeSaveError(error)}`);
               }
+            } else {
+              transfer.currentFile.writeFailed = true;
+              transfer.failed = true;
+              toast.error(`Could not save ${metadata.name}`, {
+                description: "Choose a download location before requesting this file.",
+              });
             }
             beginDownload(metadata.fileId, metadata.size);
+            refreshStaleTimeout();
             if (metadata.size === 0) {
-              finalizeCurrentFile(channel.label);
+              await finalizeCurrentFile(channel.label);
               if (transfer.receivedFileCount === transfer.expectedFileCount && transfer.totalReceivedBytes === transfer.expectedTotalBytes) {
                 if (transfer.timeoutId) clearTimeout(transfer.timeoutId as number);
                 channel.close();
@@ -427,13 +433,16 @@ export const useFile = ({
         rejectTransfer("A file chunk was duplicated, out of order, or exceeded the declared file size.");
         return;
       }
+      refreshStaleTimeout();
       const chunkBuffer = event.data.slice(8);
       const writer = transfer.currentFile.writable as { write: (data: Blob) => Promise<void> } | undefined;
       if (writer && !transfer.currentFile.writeFailed) {
         try {
           await writer.write(new Blob([chunkBuffer]));
+          refreshStaleTimeout();
         } catch (error) {
           transfer.currentFile.writeFailed = true;
+          transfer.failed = true;
           void (writer as { abort?: (reason?: unknown) => Promise<void> }).abort?.(error).catch(() => undefined);
           clearDownloadDestination(transfer.currentFile.metadata.fileId);
           clearDownloadProgress([transfer.currentFile.metadata.fileId]);
@@ -441,49 +450,32 @@ export const useFile = ({
             description: describeSaveError(error),
           });
         }
-      } else if (!writer && !transfer.currentFile.writeFailed) {
-        transfer.currentFile.chunks.push(chunkBuffer);
       }
       transfer.currentFile.receivedBytes += chunkBuffer.byteLength;
       transfer.totalReceivedBytes += chunkBuffer.byteLength;
       channel.send(JSON.stringify({ kind: "chunk-ack", payload: { offset: transfer.currentFile.receivedBytes } }));
 
-      // Update download progress for current file
       updateDownloadProgress(
         transfer.currentFile.metadata.fileId,
         transfer.currentFile.receivedBytes
       );
 
-      // Check if current file is complete
-      if (
-        transfer.currentFile.receivedBytes >= transfer.currentFile.metadata.size
-      ) {
-        console.log(
-          `[${channel.label}] File ${transfer.currentFile.metadata.name} complete`
-        );
-
-        // Finalize the completed file
-        finalizeCurrentFile(channel.label);
-
-        // Check if all expected bytes have been received (transfer complete)
+      if (transfer.currentFile.receivedBytes >= transfer.currentFile.metadata.size) {
+        console.log(`[${channel.label}] File ${transfer.currentFile.metadata.name} complete`);
+        await finalizeCurrentFile(channel.label);
         if (
-        transfer.expectedTotalBytes !== undefined &&
+          transfer.expectedTotalBytes !== undefined &&
           transfer.totalReceivedBytes === transfer.expectedTotalBytes &&
           transfer.receivedFileCount === transfer.expectedFileCount
         ) {
-          console.log(
-            `[${channel.label}] All bytes received (${transfer.totalReceivedBytes}/${transfer.expectedTotalBytes}), closing channel`
-          );
-          if (transfer.timeoutId) {
-            clearTimeout(transfer.timeoutId as number);
-          }
+          console.log(`[${channel.label}] All bytes received (${transfer.totalReceivedBytes}/${transfer.expectedTotalBytes}), closing channel`);
+          if (transfer.timeoutId) clearTimeout(transfer.timeoutId as number);
           finalizeAllCompletedFiles(channel.label);
           channel.close();
         }
         if (transfer.receivedFileCount >= (transfer.expectedFileCount ?? 0) && (transfer.totalReceivedBytes !== transfer.expectedTotalBytes || transfer.declaredBytes !== transfer.expectedTotalBytes)) {
           rejectTransfer("Received bytes did not match the declared transfer total.");
         }
-        // Otherwise, wait for next file metadata
       }
     };
     channel.onmessage = (event) => {
@@ -497,110 +489,79 @@ export const useFile = ({
       const transfer = incomingTransfersRef.current[channel.label];
       if (!transfer) return;
 
-      // Clear any pending timeouts
-      if (transfer.timeoutId) {
-        clearTimeout(transfer.timeoutId as number);
-      }
-
-      console.log(`[${channel.label}] Channel closed`);
-
-      // Finalize any remaining files
-      if (transfer.currentFile) {
-        // Check if current file is complete
-        if (
-          transfer.currentFile.receivedBytes >=
-          transfer.currentFile.metadata.size
-        ) {
-          finalizeCurrentFile(channel.label);
-        } else {
-          const writer = transfer.currentFile.writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
-          void writer?.abort?.(new Error("Transfer interrupted")).catch(() => undefined);
-          // Incomplete file
-          clearDownloadProgress([transfer.currentFile.metadata.fileId]);
-          clearDownloadDestination(transfer.currentFile.metadata.fileId);
-          transfer.failed = true;
+      const finishClose = async () => {
+        await receiveQueue;
+        const current = incomingTransfersRef.current[channel.label];
+        if (!current) return;
+        if (current.timeoutId) clearTimeout(current.timeoutId as number);
+        console.log(`[${channel.label}] Channel closed`);
+        if (current.currentFile) {
+          if (current.currentFile.receivedBytes >= current.currentFile.metadata.size) {
+            await finalizeCurrentFile(channel.label);
+          } else {
+            const writer = current.currentFile.writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
+            void writer?.abort?.(new Error("Transfer interrupted")).catch(() => undefined);
+            clearDownloadProgress([current.currentFile.metadata.fileId]);
+            clearDownloadDestination(current.currentFile.metadata.fileId);
+            current.failed = true;
+            current.currentFile = undefined;
+          }
         }
-      }
-
-      // Finalize any completed but not yet persisted files
-      finalizeAllCompletedFiles(channel.label);
-
-      if (!transfer.failed && transfer.expectedFileCount !== undefined && (transfer.receivedFileCount !== transfer.expectedFileCount || transfer.totalReceivedBytes !== transfer.expectedTotalBytes || transfer.declaredBytes !== transfer.expectedTotalBytes)) {
-        toast.error("Download interrupted", { description: "The sender closed before all declared files arrived." });
-      }
-
-      delete incomingTransfersRef.current[channel.label];
+        finalizeAllCompletedFiles(channel.label);
+        if (!current.failed && current.expectedFileCount !== undefined && (current.receivedFileCount !== current.expectedFileCount || current.totalReceivedBytes !== current.expectedTotalBytes || current.declaredBytes !== current.expectedTotalBytes)) {
+          toast.error("Download interrupted", { description: "The sender closed before all declared files arrived." });
+        }
+        delete incomingTransfersRef.current[channel.label];
+      };
+      void finishClose().catch((error) => console.error(`[${channel.label}] Close cleanup failed`, error));
     };
   };
 
   /**
    * Finalizes the current file being received and moves it to completedFiles.
    */
-  const finalizeCurrentFile = (channelLabel: string) => {
+  const finalizeCurrentFile = async (channelLabel: string): Promise<void> => {
     const transfer = incomingTransfersRef.current[channelLabel];
     if (!transfer?.currentFile) return;
 
-    const { metadata, chunks, receivedBytes, writable } = transfer.currentFile;
+    const currentFile = transfer.currentFile;
+    const { metadata, receivedBytes, writable } = currentFile;
 
-    if (transfer.currentFile.writeFailed) {
-      transfer.currentFile.chunks = [];
-      transfer.currentFile.writable = undefined;
-      transfer.currentFile = undefined;
+    if (currentFile.writeFailed) {
+      currentFile.writable = undefined;
       transfer.receivedFileCount += 1;
+      transfer.currentFile = undefined;
       return;
     }
 
-    // Check if file is complete
     if (receivedBytes < metadata.size) {
-      console.warn(
-        `[${channelLabel}] Finalizing incomplete file: ${metadata.name} (${receivedBytes}/${metadata.size})`
-      );
+      console.warn(`[${channelLabel}] Finalizing incomplete file: ${metadata.name} (${receivedBytes}/${metadata.size})`);
       clearDownloadProgress([metadata.fileId]);
       clearDownloadDestination(metadata.fileId);
       const writer = writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
       void writer?.abort?.(new Error("Incomplete file")).catch(() => undefined);
       transfer.failed = true;
-      toast.error("Download incomplete", {
-        description: `${metadata.name} was only partially received.`,
-      });
+      toast.error("Download incomplete", { description: `${metadata.name} was only partially received.` });
       transfer.currentFile = undefined;
       return;
     }
 
     try {
       const writer = writable as { close: () => Promise<void> } | undefined;
-      if (writer) {
-        void writer.close().then(() => toast.success(`Saved ${metadata.name}`)).catch((error) => {
-          console.error(`[${channelLabel}] Failed to close ${metadata.name}`, error);
-          toast.error("Could not save download", { description: describeSaveError(error) });
-        });
-      }
-      const blob = writer ? undefined : new Blob(chunks, { type: metadata.type || "application/octet-stream" });
-      const url =
-        blob && typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
-
-      registerReceivedFile({
-        id: metadata.fileId,
-        ownerId: metadata.ownerId,
-        name: metadata.name,
-        type: metadata.type,
-        size: metadata.size,
-        url,
-        receivedAt: Date.now(),
-      });
+      if (!writer) throw new Error("No download destination was selected.");
+      await writer.close();
       clearDownloadProgress([metadata.fileId]);
-      toast.success(`Received ${metadata.name}`);
-
-      // Move to completed files list
-      transfer.completedFiles.push(transfer.currentFile);
-      transfer.receivedFileCount += 1;
-      transfer.currentFile = undefined;
+      toast.success(`Saved ${metadata.name}`);
+      transfer.completedFiles.push(currentFile);
     } catch (error) {
-      console.error(`[${channelLabel}] Failed to finalize file`, error);
+      console.error(`[${channelLabel}] Failed to finalize ${metadata.name}`, error);
       clearDownloadProgress([metadata.fileId]);
-      toast.error("Download failed", {
-        description: `Could not process ${metadata.name}.`,
-      });
+      clearDownloadDestination(metadata.fileId);
+      transfer.failed = true;
+      toast.error(`Could not save ${metadata.name}`, { description: describeSaveError(error) });
+    } finally {
+      currentFile.writable = undefined;
+      transfer.receivedFileCount += 1;
       transfer.currentFile = undefined;
     }
   };
@@ -612,7 +573,6 @@ export const useFile = ({
     const transfer = incomingTransfersRef.current[channelLabel];
     if (!transfer) return;
 
-    // Clear the completed files array (they've already been registered)
     transfer.completedFiles = [];
   };
 
@@ -620,5 +580,6 @@ export const useFile = ({
     sendFile,
     sendFilesToUser,
     registerIncomingTransferChannel,
+    cancelIncomingTransfers,
   };
 };

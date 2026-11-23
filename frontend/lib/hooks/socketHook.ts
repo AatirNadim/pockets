@@ -34,8 +34,10 @@ import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
 import { useConnectionStore } from "../stores/connectionStore";
-import { clearDownloadDestination } from "../utils/fileSaving";
+import { clearAllDownloadDestinations, clearDownloadDestination } from "../utils/fileSaving";
 import { v4 as uuidv4 } from "uuid";
+
+const DOWNLOAD_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
 
 export const useSocket = () => {
   const router = useRouter();
@@ -51,6 +53,10 @@ export const useSocket = () => {
   const peerTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
   const pendingAvailability = useRef(new Map<string, (result: { availableFileIds: string[]; unavailableFileIds: string[] } | null) => void>());
+  const connectAttempt = useRef<Promise<void> | null>(null);
+  const roomLifecycleGeneration = useRef(0);
+  const roomCleanupComplete = useRef(false);
+  const activeRoomId = useRef<string | null>(null);
   const setPeerStatus = useConnectionStore((state) => state.setPeerStatus);
   const removePeerStatus = useConnectionStore((state) => state.removePeerStatus);
   const clearPeerStatuses = useConnectionStore((state) => state.clearPeerStatuses);
@@ -211,7 +217,7 @@ export const useSocket = () => {
     clearRequests: clearJoinRequests,
   } = useJoinRequestStore();
 
-  const { sendFile, sendFilesToUser, registerIncomingTransferChannel } =
+  const { sendFile, sendFilesToUser, registerIncomingTransferChannel, cancelIncomingTransfers } =
     useFile({
       peerConnections,
       dataChannelMap,
@@ -221,6 +227,25 @@ export const useSocket = () => {
     const timer = setInterval(() => expireSharedFiles(), 5 * 60 * 1000);
     return () => clearInterval(timer);
   }, [expireSharedFiles]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const progress = useFileStore.getState().downloadProgress;
+      const now = Date.now();
+      const expiredFileIds = Object.entries(progress)
+        .filter(([, item]) => now - item.lastActivityAt >= DOWNLOAD_IDLE_TIMEOUT_MS)
+        .map(([fileId]) => fileId);
+      if (expiredFileIds.length) {
+        clearDownloadProgress(expiredFileIds);
+        expiredFileIds.forEach(clearDownloadDestination);
+        toast.error("Download timed out", {
+          description: `${expiredFileIds.length} ${expiredFileIds.length === 1 ? "file has" : "files have"} been idle too long. You can try again.`,
+        });
+        console.warn(`Cleared ${expiredFileIds.length} stale download request(s)`);
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [clearDownloadProgress]);
 
   useEffect(() => {
     if (!roomId || !userId) return;
@@ -432,16 +457,55 @@ export const useSocket = () => {
   };
 
   const connectToRoom = async () => {
+    if (connectAttempt.current) return connectAttempt.current;
+    const existingSocket = socketRef.current;
+    if (activeRoomId.current === roomId && existingSocket && existingSocket.readyState < WebSocket.CLOSING) return;
+
+    roomCleanupComplete.current = false;
+    const generation = ++roomLifecycleGeneration.current;
+    const attempt = (async () => {
+      try {
+        clearChatMessages();
+        resetUnreadCount();
+        console.log("connecting to room...");
+        const mediaPromise = createMediaStreams().then((stream) => {
+          if (generation !== roomLifecycleGeneration.current || roomCleanupComplete.current) {
+            stream?.getTracks().forEach((track) => track.stop());
+            if (localStream.current === stream) {
+              localStream.current = null;
+              if (localVideoRef.current?.srcObject === stream) localVideoRef.current.srcObject = null;
+            }
+          }
+          return stream;
+        });
+        const [stream] = await Promise.all([mediaPromise, loadIceServers()]);
+        if (generation !== roomLifecycleGeneration.current || roomCleanupComplete.current) {
+          stream?.getTracks().forEach((track) => track.stop());
+          if (localStream.current === stream) {
+            localStream.current = null;
+            if (localVideoRef.current?.srcObject === stream) localVideoRef.current.srcObject = null;
+          }
+          return;
+        }
+        activeRoomId.current = roomId;
+        createWSConnection();
+      } catch (error) {
+        if (generation === roomLifecycleGeneration.current) {
+          roomLifecycleGeneration.current += 1;
+          const stream = localStream.current;
+          stream?.getTracks().forEach((track) => track.stop());
+          if (localVideoRef.current?.srcObject === stream) localVideoRef.current.srcObject = null;
+          localStream.current = null;
+        }
+        console.error("Error creating room:", error);
+        toast.error("Failed to create room. Please try again.");
+      }
+    })();
+    connectAttempt.current = attempt;
     try {
-      clearChatMessages();
-      resetUnreadCount();
-      console.log("connecting to room...");
-      await Promise.all([createMediaStreams(), loadIceServers()]);
-      createWSConnection();
-    } catch (error) {
-      console.error("Error creating room:", error);
-      toast.error("Failed to create room. Please try again.");
+      await attempt;
     } finally {
+      if (connectAttempt.current === attempt) connectAttempt.current = null;
     }
   };
 
@@ -1224,6 +1288,13 @@ export const useSocket = () => {
       removePeerStatus(remoteUserId);
       // Cancel any active upload sessions for this peer
       uploadSessionRegistry.cancelSessionsForPeer(remoteUserId);
+      cancelIncomingTransfers(remoteUserId);
+
+      const ownedDownloads = Object.entries(useFileStore.getState().downloadProgress)
+        .filter(([, progress]) => progress.ownerId === remoteUserId)
+        .map(([fileId]) => fileId);
+      clearDownloadProgress(ownedDownloads);
+      ownedDownloads.forEach(clearDownloadDestination);
 
       peerConnections.current[remoteUserId]?.close();
       delete peerConnections.current[remoteUserId];
@@ -1577,7 +1648,7 @@ export const useSocket = () => {
     if (!fileIds.length || fileIds.length > MAX_QUEUED_FILES ||
       fileIds.some((id) => typeof id !== "string" || id.length > 128)) return false;
 
-    markDownloadRequested(fileIds);
+    markDownloadRequested(fileIds, ownerId);
 
     console.log("sending file download request for file:", fileIds);
 
@@ -1639,39 +1710,60 @@ export const useSocket = () => {
   };
 
   const cleanUp = () => {
-    try {
-      pendingAvailability.current.forEach((resolve) => resolve(null));
-      pendingAvailability.current.clear();
-      intentionalSocketClose.current = true;
-      if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
-      admissionRosterTimeout.current = null;
-      Object.keys(peerTimeouts.current).forEach(clearPeerTimeout);
-      pendingIceCandidates.current = {};
-      Object.values(peerConnections.current).forEach((pc) => pc.close());
+    if (roomCleanupComplete.current) return;
+    roomCleanupComplete.current = true;
+    roomLifecycleGeneration.current += 1;
+    connectAttempt.current = null;
+    intentionalSocketClose.current = true;
 
-      console.log("leaving room:", roomId);
+    const runCleanupStep = (label: string, action: () => void) => {
+      try {
+        action();
+      } catch (error) {
+        console.error(`Cleanup step failed (${label})`, error);
+      }
+    };
 
-      socketRef.current?.send(
-        JSON.stringify({
-          type: "leave-room",
-          roomId,
-          userId,
-        } as LeaveRoomMessage)
-      );
-      socketRef.current?.close();
-      localStream.current?.getTracks().forEach((track) => track.stop());
-      localStream.current = null;
-      cleanUpMediaDevices();
-      clearChatMessages();
-      resetUnreadCount();
-      resetFileStore();
-      leaveRoom();
-      clearMediaStreams();
-      clearJoinRequests();
-      clearPeerStatuses();
-    } catch (error) {
-      console.error("Error cleaning up WebSocket connection:", error);
+    pendingAvailability.current.forEach((resolve) => resolve(null));
+    pendingAvailability.current.clear();
+    if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+    admissionRosterTimeout.current = null;
+    Object.keys(peerTimeouts.current).forEach(clearPeerTimeout);
+    pendingIceCandidates.current = {};
+    iceRestartAttempts.current = {};
+
+    runCleanupStep("cancel file uploads", () => uploadSessionRegistry.cancelAll());
+    runCleanupStep("cancel incoming file transfers", () => cancelIncomingTransfers());
+    const peersToClose = Object.values(peerConnections.current);
+    peerConnections.current = {};
+    dataChannelMap.current = {};
+    runCleanupStep("close peer connections", () => peersToClose.forEach((pc) => pc.close()));
+
+    console.log("leaving room:", roomId);
+    const socket = socketRef.current;
+    socketRef.current = null;
+    if (socket?.readyState === WebSocket.OPEN && roomId && userId) {
+      runCleanupStep("send room leave", () => socket.send(JSON.stringify({
+        type: "leave-room",
+        roomId,
+        userId,
+      } as LeaveRoomMessage)));
     }
+    if (socket && socket.readyState < WebSocket.CLOSING) {
+      runCleanupStep("close signaling socket", () => socket.close());
+    }
+
+    activeRoomId.current = null;
+    runCleanupStep("stop local media", cleanUpMediaDevices);
+    runCleanupStep("clear download destinations", clearAllDownloadDestinations);
+    runCleanupStep("clear chat messages", clearChatMessages);
+    runCleanupStep("clear unread count", resetUnreadCount);
+    runCleanupStep("reset file store", resetFileStore);
+    runCleanupStep("leave room store", leaveRoom);
+    runCleanupStep("clear remote media", clearMediaStreams);
+    runCleanupStep("clear join requests", clearJoinRequests);
+    runCleanupStep("clear peer statuses", clearPeerStatuses);
+    setIsConnected(false);
   };
 
   return {

@@ -32,13 +32,6 @@ const useMedia = () => {
     delete videoSendersRef.current[userId];
   }, []);
 
-  const handleMediaCleanup = () => {
-    currentVideoDeviceId.current = null;
-    currentAudioDeviceId.current = null;
-    audioSendersRef.current = {};
-    videoSendersRef.current = {};
-  };
-
   const populateAvailableDevices = useCallback(async () => {
     if (
       typeof navigator === "undefined" ||
@@ -424,6 +417,15 @@ const useMedia = () => {
   };
 
   const createMediaStreams = async () => {
+    const previousStream = localStream.current;
+    if (previousStream) {
+      previousStream.getTracks().forEach((track) => track.stop());
+      if (localVideoRef.current?.srcObject === previousStream) {
+        localVideoRef.current.srcObject = null;
+      }
+      localStream.current = null;
+    }
+
     try {
       if (
         typeof navigator === "undefined" ||
@@ -474,6 +476,7 @@ const useMedia = () => {
       localStream.current.getTracks().forEach(watchLocalTrack);
       await populateAvailableDevices();
       if (localStream.current.getTracks().length) setMediaError(null);
+      return localStream.current;
     } catch (error) {
       console.error("Error accessing media devices:", error);
       const reason = error instanceof DOMException ? error.name : "";
@@ -484,6 +487,7 @@ const useMedia = () => {
         : "Camera and microphone could not start. Check device access and try again.";
       setMediaError(message);
       toast.error("Media unavailable", { description: message });
+      return null;
     }
   };
 
@@ -510,6 +514,7 @@ const useMedia = () => {
 
     // stop all tracks and clear refs
     localStream.current?.getTracks().forEach((track) => track.stop());
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
     localStream.current = null;
 
     // clear device ids and sender refs

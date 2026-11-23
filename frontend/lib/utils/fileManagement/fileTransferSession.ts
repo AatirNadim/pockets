@@ -3,7 +3,7 @@ import {
   CHUNK_SIZE,
   MAX_CHANNELS_FOR_DATA_TRANSMISSION,
 } from "../../constants";
-import type { QueuedFile } from "../../stores/fileStore";
+import { SHARED_FILE_TTL_MS, type QueuedFile } from "../../stores/fileStore";
 import type {
   DataChannelEnvelope,
   FileMetadataPayload,
@@ -53,6 +53,7 @@ export class FileTransferSession {
   private readonly channels: RTCDataChannel[] = [];
   private readonly readers = new Set<FileReader>();
   private readonly cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly pendingAckCancels = new Set<() => void>();
 
   constructor(
     pc: RTCPeerConnection,
@@ -98,12 +99,25 @@ export class FileTransferSession {
       );
     }
 
-    const validationError = validateFileBatch(this.files.map((entry) => entry.file));
-    if (validationError) throw new Error(validationError);
-
     this.setStatus("sending");
 
     try {
+      const validationError = validateFileBatch(this.files.map((entry) => entry.file));
+      if (validationError) throw new Error(validationError);
+
+      const expiresAt = this.files.reduce<number | null>((earliest, entry) => {
+        if (entry.sharedAt === undefined) return earliest;
+        const expiry = entry.sharedAt + SHARED_FILE_TTL_MS;
+        return earliest === null ? expiry : Math.min(earliest, expiry);
+      }, null);
+      if (expiresAt !== null && expiresAt <= Date.now()) {
+        throw new Error("The shared file has expired");
+      }
+      if (expiresAt !== null) {
+        const expiryTimer = setTimeout(() => this.cancel(), expiresAt - Date.now());
+        this.cleanupTimers.add(expiryTimer);
+      }
+
       await this.sendFilesToPeer();
       this.setStatus("completed");
       this.callbacks.onComplete?.();
@@ -146,6 +160,8 @@ export class FileTransferSession {
   private cleanup(): void {
     this.cleanupTimers.forEach(clearTimeout);
     this.cleanupTimers.clear();
+    Array.from(this.pendingAckCancels).forEach((cancel) => cancel());
+    this.pendingAckCancels.clear();
     this.readers.forEach((reader) => { if (reader.readyState === FileReader.LOADING) reader.abort(); });
     this.readers.clear();
     // Close all channels created by this session
@@ -216,10 +232,23 @@ export class FileTransferSession {
     );
 
     return new Promise((resolve, reject) => {
+      let processingFinished = false;
+      let promiseSettled = false;
+      const resolveOnce = () => {
+        if (promiseSettled) return;
+        promiseSettled = true;
+        processingFinished = true;
+        resolve();
+      };
+      const rejectOnce = (error: unknown) => {
+        if (promiseSettled) return;
+        promiseSettled = true;
+        reject(error instanceof Error ? error : new Error(String(error)));
+      };
       // Check if session was cancelled
       const checkCancelled = () => {
         if (this._status === "cancelled") {
-          reject(new Error("Transfer cancelled"));
+          rejectOnce(new Error("Transfer cancelled"));
           return true;
         }
         return false;
@@ -294,14 +323,14 @@ export class FileTransferSession {
 
           // Resolve immediately - don't wait for channel close
           // The channel will be cleaned up by timeout or receiver close
-          resolve();
+          resolveOnce();
         } catch (error) {
           console.error(
             `[Session ${this.sessionId}] Error in channel ${channel.label}:`,
             error
           );
           channel.close();
-          reject(error);
+          rejectOnce(error);
         }
       };
 
@@ -316,13 +345,14 @@ export class FileTransferSession {
           `[Session ${this.sessionId}] Channel error ${channel.label}:`,
           err
         );
-        reject(err);
+        rejectOnce(err);
       };
 
       channel.onclose = () => {
         console.log(
           `[Session ${this.sessionId}] Channel ${channel.label} closed`
         );
+        if (!processingFinished) rejectOnce(new Error(`Channel ${channel.label} closed before its queue finished`));
       };
     });
   }
@@ -408,18 +438,31 @@ export class FileTransferSession {
       const fileReader = new FileReader();
       this.readers.add(fileReader);
       let settled = false;
+      let cleanupAckWait = () => undefined;
+      let cleanupBufferedWait = () => undefined;
+      let cancelAckWait: (() => void) | undefined;
       const fail = (error: unknown) => {
         if (settled) return;
         settled = true;
+        cleanupAckWait();
+        cleanupBufferedWait();
+        channel.removeEventListener("close", onChannelClose);
+        if (cancelAckWait) this.pendingAckCancels.delete(cancelAckWait);
         this.readers.delete(fileReader);
         reject(error instanceof Error ? error : new Error(String(error)));
       };
       const complete = () => {
         if (settled) return;
         settled = true;
+        cleanupAckWait();
+        cleanupBufferedWait();
+        channel.removeEventListener("close", onChannelClose);
+        if (cancelAckWait) this.pendingAckCancels.delete(cancelAckWait);
         this.readers.delete(fileReader);
         resolve();
       };
+      const onChannelClose = () => fail(new Error("Channel closed before the file was confirmed"));
+      channel.addEventListener("close", onChannelClose, { once: true });
       let offset = 0;
 
       const readNextSlice = () => {
@@ -464,11 +507,12 @@ export class FileTransferSession {
           // Basic backpressure handling (10MB buffer threshold)
           if (channel.bufferedAmount > 10 * 1024 * 1024) {
             const onBufferedAmountLow = () => {
-              channel.removeEventListener(
-                "bufferedamountlow",
-                onBufferedAmountLow
-              );
+              cleanupBufferedWait();
               sendChunk();
+            };
+            cleanupBufferedWait = () => {
+              channel.removeEventListener("bufferedamountlow", onBufferedAmountLow);
+              cleanupBufferedWait = () => undefined;
             };
             channel.addEventListener("bufferedamountlow", onBufferedAmountLow);
             return;
@@ -491,11 +535,18 @@ export class FileTransferSession {
               try {
                 const message = JSON.parse(event.data);
                 if (message.kind !== "chunk-ack" || message.payload?.offset !== expectedOffset) return;
-                clearTimeout(timeout);
-                channel.removeEventListener("message", onAck);
+                cleanupAckWait();
+                if (cancelAckWait) this.pendingAckCancels.delete(cancelAckWait);
                 readNextSlice();
               } catch { /* Ignore unrelated control messages. */ }
             };
+            cleanupAckWait = () => {
+              clearTimeout(timeout);
+              channel.removeEventListener("message", onAck);
+              cleanupAckWait = () => undefined;
+            };
+            cancelAckWait = () => fail(new Error("Transfer cancelled"));
+            this.pendingAckCancels.add(cancelAckWait);
             channel.addEventListener("message", onAck);
             channel.send(packet);
             offset = expectedOffset;
