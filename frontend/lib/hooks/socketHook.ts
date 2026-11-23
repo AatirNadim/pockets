@@ -34,6 +34,7 @@ import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
 import { useConnectionStore } from "../stores/connectionStore";
+import { clearDownloadDestination } from "../utils/fileSaving";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -1369,6 +1370,7 @@ export const useSocket = () => {
     }
 
     clearDownloadProgress(payload.fileIds);
+    payload.fileIds.forEach(clearDownloadDestination);
 
     const reason =
       payload.reason ||

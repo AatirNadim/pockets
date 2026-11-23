@@ -484,10 +484,22 @@ export class FileTransferSession {
             view.setUint32(0, offset, true);
             view.setUint32(4, chunkSize, true);
             new Uint8Array(packet, 8).set(new Uint8Array(fileChunk));
+            const expectedOffset = offset + chunkSize;
+            const timeout = setTimeout(() => fail(new Error("Receiver did not confirm the saved chunk")), 30000);
+            const onAck = (event: MessageEvent) => {
+              if (typeof event.data !== "string") return;
+              try {
+                const message = JSON.parse(event.data);
+                if (message.kind !== "chunk-ack" || message.payload?.offset !== expectedOffset) return;
+                clearTimeout(timeout);
+                channel.removeEventListener("message", onAck);
+                readNextSlice();
+              } catch { /* Ignore unrelated control messages. */ }
+            };
+            channel.addEventListener("message", onAck);
             channel.send(packet);
-            offset += chunkSize;
+            offset = expectedOffset;
             this.addSentBytes(chunkSize);
-            readNextSlice();
           } catch (error) {
             fail(error);
           }

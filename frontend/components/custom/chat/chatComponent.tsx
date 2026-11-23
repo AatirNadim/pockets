@@ -11,6 +11,7 @@ import { useUserStore } from "@/lib/stores/userStore";
 import dynamic from "next/dynamic";
 import { MAX_FILE_SIZE_MB_MULTIPLE_SEND, MAX_FILE_SIZE_SINGLE_SEND, MAX_QUEUED_FILES } from "@/lib/constants";
 import { toast } from "sonner";
+import { clearDownloadDestination, describeSaveError, pickFileDestination, saveBlobToHandle, setDownloadDestination } from "@/lib/utils/fileSaving";
 
 const MessagesContainer = dynamic(() => import("./messagesContainer"), { ssr: false });
 const AttachementsToSend = dynamic(() => import("./attachementsToSend"), { ssr: false });
@@ -50,17 +51,25 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentP
     if (!selected.length && (event.target.files?.length ?? 0) > 0) toast.info("Those files are already queued.");
     event.target.value = "";
   }, [addFiles, filesToBeSent]);
-  const handleFileAction = (id: string, ownerId: string, name: string) => {
+  const handleFileAction = async (id: string, ownerId: string, name: string) => {
     const url = receivedFiles[id]?.url;
     const file = getLocalFile(id);
-    const downloadUrl = url || (file ? URL.createObjectURL(file) : null);
-    if (downloadUrl) {
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = name;
-      anchor.click();
-      if (file) URL.revokeObjectURL(downloadUrl);
-    } else onRequestFile([id], ownerId);
+    try {
+      const handle = await pickFileDestination(name);
+      if (url) await saveBlobToHandle(await (await fetch(url)).blob(), handle);
+      else if (file) await saveBlobToHandle(file, handle);
+      else {
+        setDownloadDestination(id, handle);
+        if (!onRequestFile([id], ownerId)) {
+          clearDownloadDestination(id);
+          throw new Error("Could not send the download request to the peer.");
+        }
+        return;
+      }
+      toast.success(`Saved ${name}`);
+    } catch (error) {
+      toast.error("Could not save download", { description: describeSaveError(error) });
+    }
   };
 
   return <div className="flex h-full min-h-0 flex-col text-stone-800 dark:text-stone-100">

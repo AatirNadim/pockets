@@ -12,6 +12,7 @@ import type {
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
 import { MAX_FILES_TO_SEND_TOGETHER } from "../constants";
 import { validateFileBatch } from "../utils/fileValidation";
+import { clearDownloadDestination, describeSaveError, takeDownloadDestination } from "../utils/fileSaving";
 import { CHUNK_SIZE, MAX_CHANNELS_FOR_DATA_TRANSMISSION, MAX_FILE_SIZE_MB_MULTIPLE_SEND, MAX_FILE_SIZE_SINGLE_SEND } from "../constants";
 
 /** Timeout for stale transfers that never receive a complete signal */
@@ -287,7 +288,12 @@ export const useFile = ({
     const rejectTransfer = (message: string) => {
       const current = incomingTransfersRef.current[channel.label];
       if (current?.timeoutId) clearTimeout(current.timeoutId as number);
-      if (current?.currentFile) clearDownloadProgress([current.currentFile.metadata.fileId]);
+      if (current?.currentFile) {
+        const writer = current.currentFile.writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
+        void writer?.abort?.(new Error(message)).catch(() => undefined);
+        clearDownloadProgress([current.currentFile.metadata.fileId]);
+        clearDownloadDestination(current.currentFile.metadata.fileId);
+      }
       if (current) {
         current.currentFile = undefined;
         current.failed = true;
@@ -296,7 +302,8 @@ export const useFile = ({
       channel.close();
     };
 
-    channel.onmessage = async (event) => {
+    let receiveQueue = Promise.resolve();
+    const receiveMessage = async (event: MessageEvent) => {
       const transfer = incomingTransfersRef.current[channel.label];
       if (!transfer) return;
 
@@ -348,6 +355,8 @@ export const useFile = ({
             return;
           }
 
+          if (envelope.kind === "chunk-ack") return;
+
           if (envelope.kind === "file-metadata") {
             const metadata = envelope.payload;
             const maxBytes = MAX_FILE_SIZE_SINGLE_SEND * 1024 * 1024;
@@ -370,6 +379,16 @@ export const useFile = ({
               chunks: [],
               receivedBytes: 0,
             };
+            const destination = takeDownloadDestination(metadata.fileId);
+            if (destination) {
+              try {
+                transfer.currentFile.writable = await destination.createWritable();
+              } catch (error) {
+                clearDownloadProgress([metadata.fileId]);
+                rejectTransfer(`Could not open ${metadata.name} for writing: ${describeSaveError(error)}`);
+                return;
+              }
+            }
             beginDownload(metadata.fileId, metadata.size);
             if (metadata.size === 0) {
               finalizeCurrentFile(channel.label);
@@ -409,9 +428,25 @@ export const useFile = ({
         return;
       }
       const chunkBuffer = event.data.slice(8);
-      transfer.currentFile.chunks.push(chunkBuffer);
+      const writer = transfer.currentFile.writable as { write: (data: Blob) => Promise<void> } | undefined;
+      if (writer && !transfer.currentFile.writeFailed) {
+        try {
+          await writer.write(new Blob([chunkBuffer]));
+        } catch (error) {
+          transfer.currentFile.writeFailed = true;
+          void (writer as { abort?: (reason?: unknown) => Promise<void> }).abort?.(error).catch(() => undefined);
+          clearDownloadDestination(transfer.currentFile.metadata.fileId);
+          clearDownloadProgress([transfer.currentFile.metadata.fileId]);
+          toast.error(`Could not save ${transfer.currentFile.metadata.name}`, {
+            description: describeSaveError(error),
+          });
+        }
+      } else if (!writer && !transfer.currentFile.writeFailed) {
+        transfer.currentFile.chunks.push(chunkBuffer);
+      }
       transfer.currentFile.receivedBytes += chunkBuffer.byteLength;
       transfer.totalReceivedBytes += chunkBuffer.byteLength;
+      channel.send(JSON.stringify({ kind: "chunk-ack", payload: { offset: transfer.currentFile.receivedBytes } }));
 
       // Update download progress for current file
       updateDownloadProgress(
@@ -451,6 +486,12 @@ export const useFile = ({
         // Otherwise, wait for next file metadata
       }
     };
+    channel.onmessage = (event) => {
+      receiveQueue = receiveQueue.then(() => receiveMessage(event)).catch((error) => {
+        console.error(`[${channel.label}] Receive processing failed`, error);
+        rejectTransfer("The file could not be written to storage.");
+      });
+    };
 
     channel.onclose = () => {
       const transfer = incomingTransfersRef.current[channel.label];
@@ -472,8 +513,11 @@ export const useFile = ({
         ) {
           finalizeCurrentFile(channel.label);
         } else {
+          const writer = transfer.currentFile.writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
+          void writer?.abort?.(new Error("Transfer interrupted")).catch(() => undefined);
           // Incomplete file
           clearDownloadProgress([transfer.currentFile.metadata.fileId]);
+          clearDownloadDestination(transfer.currentFile.metadata.fileId);
           transfer.failed = true;
         }
       }
@@ -496,7 +540,15 @@ export const useFile = ({
     const transfer = incomingTransfersRef.current[channelLabel];
     if (!transfer?.currentFile) return;
 
-    const { metadata, chunks, receivedBytes } = transfer.currentFile;
+    const { metadata, chunks, receivedBytes, writable } = transfer.currentFile;
+
+    if (transfer.currentFile.writeFailed) {
+      transfer.currentFile.chunks = [];
+      transfer.currentFile.writable = undefined;
+      transfer.currentFile = undefined;
+      transfer.receivedFileCount += 1;
+      return;
+    }
 
     // Check if file is complete
     if (receivedBytes < metadata.size) {
@@ -504,6 +556,9 @@ export const useFile = ({
         `[${channelLabel}] Finalizing incomplete file: ${metadata.name} (${receivedBytes}/${metadata.size})`
       );
       clearDownloadProgress([metadata.fileId]);
+      clearDownloadDestination(metadata.fileId);
+      const writer = writable as { abort?: (reason?: unknown) => Promise<void> } | undefined;
+      void writer?.abort?.(new Error("Incomplete file")).catch(() => undefined);
       transfer.failed = true;
       toast.error("Download incomplete", {
         description: `${metadata.name} was only partially received.`,
@@ -513,12 +568,16 @@ export const useFile = ({
     }
 
     try {
-      console.log(`[${channelLabel}] Creating blob for file: ${metadata.name}`);
-      const blob = new Blob(chunks, {
-        type: metadata.type || "application/octet-stream",
-      });
+      const writer = writable as { close: () => Promise<void> } | undefined;
+      if (writer) {
+        void writer.close().then(() => toast.success(`Saved ${metadata.name}`)).catch((error) => {
+          console.error(`[${channelLabel}] Failed to close ${metadata.name}`, error);
+          toast.error("Could not save download", { description: describeSaveError(error) });
+        });
+      }
+      const blob = writer ? undefined : new Blob(chunks, { type: metadata.type || "application/octet-stream" });
       const url =
-        typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
+        blob && typeof window !== "undefined" ? URL.createObjectURL(blob) : null;
 
       registerReceivedFile({
         id: metadata.fileId,

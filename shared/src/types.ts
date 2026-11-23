@@ -219,6 +219,10 @@ export type IncomingFileState = {
   metadata: FileMetadataPayload;
   chunks: ArrayBuffer[];
   receivedBytes: number;
+  /** Kept as unknown here so the shared protocol package stays browser agnostic. */
+  writable?: unknown;
+  /** The file could not be persisted; continue draining its packets to reach the next file. */
+  writeFailed?: boolean;
 };
 
 /**

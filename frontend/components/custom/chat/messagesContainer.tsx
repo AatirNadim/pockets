@@ -10,6 +10,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Download, Paperclip } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
 import DownloadIndicator from "../downloadIndicator";
+import { clearDownloadDestination, describeSaveError, pickFileDestination, pickFolderDestinations, saveBlobToHandle, setDownloadDestination } from "@/lib/utils/fileSaving";
+import { toast } from "sonner";
 
 type MessagesContainerProps = {
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
@@ -32,19 +34,6 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
     }
   }, [chatMessages]);
 
-  const downloadBlob = (url: string, name: string) => {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = name;
-    anchor.click();
-  };
-
-  const triggerLocalDownload = useCallback((file: File, name: string) => {
-    const localUrl = URL.createObjectURL(file);
-    downloadBlob(localUrl, name);
-    URL.revokeObjectURL(localUrl);
-  }, []);
-
   const deriveAttachmentState = useCallback(
     (attachment: FileAttachment): AttachmentState => {
       if (attachment.ownerId === userId || hasLocalFile(attachment.id)) {
@@ -61,54 +50,61 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
     [getReceivedFile, hasLocalFile, userId]
   );
 
-  const downloadAllLocalFiles = useCallback(
-    (attachments: FileAttachment[]) => {
-      attachments.forEach((attachment) => {
-        const state = deriveAttachmentState(attachment);
-        if (state === AttachmentState.LOCAL) {
-          const file = getLocalFile(attachment.id);
-          if (file) {
-            triggerLocalDownload(file, attachment.name);
-          }
-        } else if (state === AttachmentState.READY) {
-          const received = getReceivedFile(attachment.id);
-          if (received?.url) {
-            downloadBlob(received.url, attachment.name);
-          }
+  const saveAttachment = useCallback(async (attachment: FileAttachment) => {
+    try {
+      const handle = await pickFileDestination(attachment.name);
+      const state = deriveAttachmentState(attachment);
+      const localFile = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
+      const received = state === AttachmentState.READY ? getReceivedFile(attachment.id) : undefined;
+      if (localFile) await saveBlobToHandle(localFile, handle);
+      else if (received?.url) await saveBlobToHandle(await (await fetch(received.url)).blob(), handle);
+      else {
+        setDownloadDestination(attachment.id, handle);
+        if (!onRequestFile([attachment.id], attachment.ownerId)) {
+          clearDownloadDestination(attachment.id);
+          throw new Error("Could not send the download request to the peer.");
         }
-      });
-    },
-    [deriveAttachmentState, getLocalFile, getReceivedFile, triggerLocalDownload]
-  );
-
-  const handleAttachmentAction = useCallback(
-    (attachments: FileAttachment[]) => {
-      const attachmentsToReceive = attachments.filter((attachment) => {
-        const state = deriveAttachmentState(attachment);
-        return state === AttachmentState.REMOTE;
-      });
-
-      const attachmentsToOpen = attachments.filter((attachment) => {
-        const state = deriveAttachmentState(attachment);
-        return state !== AttachmentState.REMOTE;
-      });
-
-      console.log("attachements total:", {
-        attachmentsToOpen,
-        attachmentsToReceive,
-      });
-
-      if (attachmentsToReceive.length === 0) {
-        downloadAllLocalFiles(attachmentsToOpen);
-      } else {
-        onRequestFile(
-          attachmentsToReceive.map((a) => a.id),
-          attachmentsToReceive[0].ownerId
-        );
+        return;
       }
-    },
-    [deriveAttachmentState, downloadAllLocalFiles, onRequestFile]
-  );
+      toast.success(`Saved ${attachment.name}`);
+    } catch (error) {
+      toast.error("Could not save download", { description: describeSaveError(error) });
+    }
+  }, [deriveAttachmentState, getLocalFile, getReceivedFile, onRequestFile]);
+
+  const handleAttachmentAction = useCallback(async (attachments: FileAttachment[]) => {
+    if (attachments.length === 1) {
+      await saveAttachment(attachments[0]);
+      return;
+    }
+    try {
+      const destinations = await pickFolderDestinations(attachments.map(({ id, name }) => ({ id, name })));
+      const remoteByOwner = new Map<string, string[]>();
+      for (const attachment of attachments) {
+        const handle = destinations.get(attachment.id);
+        if (!handle) continue;
+        const state = deriveAttachmentState(attachment);
+        if (state === AttachmentState.REMOTE) {
+          setDownloadDestination(attachment.id, handle);
+          remoteByOwner.set(attachment.ownerId, [...(remoteByOwner.get(attachment.ownerId) ?? []), attachment.id]);
+          continue;
+        }
+        const file = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
+        const received = state === AttachmentState.READY ? getReceivedFile(attachment.id) : undefined;
+        if (file) await saveBlobToHandle(file, handle);
+        else if (received?.url) await saveBlobToHandle(await (await fetch(received.url)).blob(), handle);
+      }
+      for (const [ownerId, fileIds] of remoteByOwner) {
+        if (!onRequestFile(fileIds, ownerId)) {
+          fileIds.forEach(clearDownloadDestination);
+          toast.error("Could not request some files", { description: "The request could not be sent to a peer." });
+        }
+      }
+      if (!remoteByOwner.size) toast.success("Files saved to the selected folder");
+    } catch (error) {
+      toast.error("Could not save files", { description: describeSaveError(error) });
+    }
+  }, [deriveAttachmentState, getLocalFile, getReceivedFile, onRequestFile, saveAttachment]);
 
   const renderDownloadIndicator = useCallback(
     (attachmentId: string) => {
