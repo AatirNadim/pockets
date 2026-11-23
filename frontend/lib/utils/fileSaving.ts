@@ -30,9 +30,30 @@ export const pickFolderDestinations = async (files: Array<{ id: string; name: st
   if (!picker) throw new Error("Your browser does not support choosing a download folder. Use a current version of Chrome or Edge.");
   const directory = await picker.call(window);
   const result = new Map<string, SaveFileHandle>();
+  const usedNames = new Set<string>();
   for (const file of files) {
+    const dot = file.name.lastIndexOf(".");
+    const base = dot > 0 ? file.name.slice(0, dot) : file.name;
+    const extension = dot > 0 ? file.name.slice(dot) : "";
+    let name = file.name;
+    let suffix = 2;
+    let occupied = true;
+    while (occupied) {
+      if (usedNames.has(name.toLocaleLowerCase())) {
+        name = `${base} (${suffix++})${extension}`;
+        continue;
+      }
+      try {
+        await directory.getFileHandle(name, { create: false });
+        name = `${base} (${suffix++})${extension}`;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "NotFoundError") occupied = false;
+        else throw error;
+      }
+    }
+    usedNames.add(name.toLocaleLowerCase());
     result.set(file.id, {
-      createWritable: async () => (await directory.getFileHandle(file.name, { create: true })).createWritable(),
+      createWritable: async () => (await directory.getFileHandle(name, { create: true })).createWritable(),
     });
   }
   return result;
@@ -45,8 +66,6 @@ export const takeDownloadDestination = (fileId: string) => {
   destinations.delete(fileId);
   return handle;
 };
-
-export const openDownloadWriter = async (handle: SaveFileHandle) => handle.createWritable();
 
 export const saveBlobToHandle = async (blob: Blob, handle: SaveFileHandle) => {
   const writable = await handle.createWritable();

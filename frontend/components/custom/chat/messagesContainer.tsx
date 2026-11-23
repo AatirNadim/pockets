@@ -12,12 +12,22 @@ import React, { useCallback, useEffect, useRef } from "react";
 import DownloadIndicator from "../downloadIndicator";
 import { clearDownloadDestination, describeSaveError, pickFileDestination, pickFolderDestinations, saveBlobToHandle, setDownloadDestination } from "@/lib/utils/fileSaving";
 import { toast } from "sonner";
+import type { SaveFileHandle } from "@/lib/utils/fileSaving";
+
+const groupByOwner = <T extends { ownerId: string }>(files: T[]) => {
+  const grouped = new Map<string, T[]>();
+  for (const file of files) grouped.set(file.ownerId, [...(grouped.get(file.ownerId) ?? []), file]);
+  return grouped;
+};
 
 type MessagesContainerProps = {
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
+  onCheckAvailability: (fileIds: string[], ownerId: string) => Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>;
+  onRequestReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
+  onPromptReupload: (files: Array<{ id: string; name: string }>, onFinish: (request: boolean) => void) => void;
 };
 
-const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
+const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReupload, onPromptReupload }: MessagesContainerProps) => {
   const { chatMessages } = useChatStore();
 
   const { userId } = useUserStore();
@@ -36,7 +46,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
 
   const deriveAttachmentState = useCallback(
     (attachment: FileAttachment): AttachmentState => {
-      if (attachment.ownerId === userId || hasLocalFile(attachment.id)) {
+      if (hasLocalFile(attachment.id)) {
         return AttachmentState.LOCAL;
       }
 
@@ -52,6 +62,10 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
 
   const saveAttachment = useCallback(async (attachment: FileAttachment) => {
     try {
+      if (attachment.ownerId === userId && !getLocalFile(attachment.id) && !getReceivedFile(attachment.id)?.url) {
+        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        return;
+      }
       const handle = await pickFileDestination(attachment.name);
       const state = deriveAttachmentState(attachment);
       const localFile = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
@@ -60,6 +74,18 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
       else if (received?.url) await saveBlobToHandle(await (await fetch(received.url)).blob(), handle);
       else {
         setDownloadDestination(attachment.id, handle);
+        const availability = await onCheckAvailability([attachment.id], attachment.ownerId);
+        if (!availability) {
+          clearDownloadDestination(attachment.id);
+          throw new Error("The sender did not respond. Try again when they are available.");
+        }
+        if (availability.unavailableFileIds.length) {
+          onPromptReupload([{ id: attachment.id, name: attachment.name }], (request) => {
+            clearDownloadDestination(attachment.id);
+            if (request) onRequestReupload([attachment.id], attachment.ownerId, [attachment.name]);
+          });
+          return;
+        }
         if (!onRequestFile([attachment.id], attachment.ownerId)) {
           clearDownloadDestination(attachment.id);
           throw new Error("Could not send the download request to the peer.");
@@ -70,7 +96,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
     } catch (error) {
       toast.error("Could not save download", { description: describeSaveError(error) });
     }
-  }, [deriveAttachmentState, getLocalFile, getReceivedFile, onRequestFile]);
+  }, [deriveAttachmentState, getLocalFile, getReceivedFile, onRequestFile, onCheckAvailability, onPromptReupload, onRequestReupload, userId]);
 
   const handleAttachmentAction = useCallback(async (attachments: FileAttachment[]) => {
     if (attachments.length === 1) {
@@ -80,31 +106,73 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
     try {
       const destinations = await pickFolderDestinations(attachments.map(({ id, name }) => ({ id, name })));
       const remoteByOwner = new Map<string, string[]>();
+      const direct: Array<{ attachment: FileAttachment; handle: SaveFileHandle }> = [];
+      const unavailable: Array<{ id: string; name: string; ownerId: string }> = [];
       for (const attachment of attachments) {
         const handle = destinations.get(attachment.id);
         if (!handle) continue;
         const state = deriveAttachmentState(attachment);
         if (state === AttachmentState.REMOTE) {
+          if (attachment.ownerId === userId) {
+            unavailable.push({ id: attachment.id, name: attachment.name, ownerId: attachment.ownerId });
+            continue;
+          }
           setDownloadDestination(attachment.id, handle);
           remoteByOwner.set(attachment.ownerId, [...(remoteByOwner.get(attachment.ownerId) ?? []), attachment.id]);
           continue;
         }
         const file = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
         const received = state === AttachmentState.READY ? getReceivedFile(attachment.id) : undefined;
-        if (file) await saveBlobToHandle(file, handle);
-        else if (received?.url) await saveBlobToHandle(await (await fetch(received.url)).blob(), handle);
+        if (file || received?.url) direct.push({ attachment, handle });
       }
-      for (const [ownerId, fileIds] of remoteByOwner) {
-        if (!onRequestFile(fileIds, ownerId)) {
-          fileIds.forEach(clearDownloadDestination);
-          toast.error("Could not request some files", { description: "The request could not be sent to a peer." });
+
+      const availabilityEntries = await Promise.all(Array.from(remoteByOwner, async ([ownerId, fileIds]) => [ownerId, fileIds, await onCheckAvailability(fileIds, ownerId)] as const));
+      if (availabilityEntries.some(([, , result]) => !result)) {
+        remoteByOwner.forEach((fileIds) => fileIds.forEach(clearDownloadDestination));
+        throw new Error("A sender did not respond. No files were saved; try again when everyone is available.");
+      }
+      const availableByOwner = new Map<string, string[]>();
+      for (const [ownerId, fileIds, result] of availabilityEntries) {
+        if (!result) continue;
+        availableByOwner.set(ownerId, result.availableFileIds);
+        const missing = new Set(result.unavailableFileIds);
+        attachments.filter((file) => fileIds.includes(file.id) && missing.has(file.id)).forEach((file) => unavailable.push({ id: file.id, name: file.name, ownerId }));
+      }
+
+      const finish = async (askToReupload: boolean) => {
+        if (askToReupload) {
+          const requestable = unavailable.filter((file) => file.ownerId !== userId);
+          for (const [ownerId, files] of groupByOwner(requestable)) {
+            onRequestReupload(files.map((file) => file.id), ownerId, files.map((file) => file.name));
+          }
+          if (unavailable.some((file) => file.ownerId === userId)) toast.info("Attach expired files again", { description: "Your own shared copy expired from room memory and must be selected again." });
         }
+        unavailable.forEach(({ id }) => clearDownloadDestination(id));
+        for (const { attachment, handle } of direct) {
+          const file = getLocalFile(attachment.id);
+          const received = getReceivedFile(attachment.id);
+          if (file) await saveBlobToHandle(file, handle);
+          else if (received?.url) await saveBlobToHandle(await (await fetch(received.url)).blob(), handle);
+        }
+        for (const [ownerId, fileIds] of availableByOwner) {
+          fileIds.forEach((id) => { const handle = destinations.get(id); if (handle) setDownloadDestination(id, handle); });
+          if (!onRequestFile(fileIds, ownerId)) {
+            fileIds.forEach(clearDownloadDestination);
+            toast.error("Could not request some files", { description: "The request could not be sent to a peer." });
+          }
+        }
+        if (!availableByOwner.size && direct.length) toast.success("Files saved to the selected folder");
+      };
+
+      if (unavailable.length) {
+        onPromptReupload(unavailable.map(({ id, name }) => ({ id, name })), (request) => { void finish(request); });
+        return;
       }
-      if (!remoteByOwner.size) toast.success("Files saved to the selected folder");
+      await finish(false);
     } catch (error) {
       toast.error("Could not save files", { description: describeSaveError(error) });
     }
-  }, [deriveAttachmentState, getLocalFile, getReceivedFile, onRequestFile, saveAttachment]);
+  }, [deriveAttachmentState, getLocalFile, getReceivedFile, onRequestFile, onCheckAvailability, onRequestReupload, onPromptReupload, saveAttachment, userId]);
 
   const renderDownloadIndicator = useCallback(
     (attachmentId: string) => {

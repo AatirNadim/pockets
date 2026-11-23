@@ -67,6 +67,8 @@ export default function Room() {
     respondToJoinRequest,
     sendChatMessage,
     requestFileDownload,
+    requestFileAvailability,
+    requestFileReupload,
   } = useSocket();
   const { requests } = useJoinRequestStore();
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -183,6 +185,8 @@ export default function Room() {
         <ChatSidebar
           sendChatMessage={sendChatMessage}
           requestFileDownload={requestFileDownload}
+          requestFileAvailability={requestFileAvailability}
+          requestFileReupload={requestFileReupload}
         />
       </div>
 

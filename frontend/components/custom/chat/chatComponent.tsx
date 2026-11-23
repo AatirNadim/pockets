@@ -1,7 +1,7 @@
 "use client";
 
 import { Files, File as FileIcon, MessageSquare, Paperclip, Send, X, Download } from "lucide-react";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { formatBytes } from "@/lib/utils";
@@ -12,6 +12,9 @@ import dynamic from "next/dynamic";
 import { MAX_FILE_SIZE_MB_MULTIPLE_SEND, MAX_FILE_SIZE_SINGLE_SEND, MAX_QUEUED_FILES } from "@/lib/constants";
 import { toast } from "sonner";
 import { clearDownloadDestination, describeSaveError, pickFileDestination, saveBlobToHandle, setDownloadDestination } from "@/lib/utils/fileSaving";
+import { ReuploadRequestDialog } from "./reuploadRequestDialog";
+
+type AvailabilityResult = { availableFileIds: string[]; unavailableFileIds: string[] } | null;
 
 const MessagesContainer = dynamic(() => import("./messagesContainer"), { ssr: false });
 const AttachementsToSend = dynamic(() => import("./attachementsToSend"), { ssr: false });
@@ -19,17 +22,38 @@ const AttachementsToSend = dynamic(() => import("./attachementsToSend"), { ssr: 
 type ChatComponentProps = {
   onSendMessage: (message: string) => boolean;
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
+  onCheckAvailability: (fileIds: string[], ownerId: string) => Promise<AvailabilityResult>;
+  onRequestReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
   onClose?: () => void;
 };
 
-const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentProps) => {
+const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRequestReupload, onClose }: ChatComponentProps) => {
   const { receivedFiles, filesToBeSent, downloadProgress, addFiles, removeFile, getLocalFile } = useFileStore();
   const { chatMessages } = useChatStore();
   const { userId } = useUserStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [chatMessage, setChatMessage] = useState("");
   const [activeTab, setActiveTab] = useState<"chat" | "files">("chat");
+  const [reuploadPrompt, setReuploadPrompt] = useState<{ files: Array<{ id: string; name: string }>; onFinish: (request: boolean) => void } | null>(null);
   const sharedFiles = Array.from(new Map(chatMessages.flatMap((message) => (message.attachments ?? []).map((file) => [file.id, { file, sender: message.userName }] as const))).values());
+
+  useEffect(() => {
+    const handleUnavailable = (event: Event) => {
+      const detail = (event as CustomEvent<{ fileIds: string[]; availableFileIds: string[]; ownerId: string }>).detail;
+      if (!detail?.ownerId || !Array.isArray(detail.fileIds)) return;
+      const unavailable = detail.fileIds.filter((id) => !detail.availableFileIds?.includes(id));
+      const files = useChatStore.getState().chatMessages.flatMap((message) => message.attachments ?? [])
+        .filter((file) => unavailable.includes(file.id))
+        .map((file) => ({ id: file.id, name: file.name }));
+      if (!files.length) return;
+      setReuploadPrompt({ files, onFinish: (request) => {
+        if (request) onRequestReupload(files.map((file) => file.id), detail.ownerId, files.map((file) => file.name));
+        if (detail.availableFileIds.length) onRequestFile(detail.availableFileIds, detail.ownerId);
+      } });
+    };
+    window.addEventListener("file-download-unavailable", handleUnavailable);
+    return () => window.removeEventListener("file-download-unavailable", handleUnavailable);
+  }, [onRequestFile, onRequestReupload]);
 
   const handleSend = useCallback(() => {
     if (chatMessage.trim() && onSendMessage(chatMessage)) setChatMessage("");
@@ -54,12 +78,28 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentP
   const handleFileAction = async (id: string, ownerId: string, name: string) => {
     const url = receivedFiles[id]?.url;
     const file = getLocalFile(id);
+    if (ownerId === userId && !url && !file) {
+      toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+      return;
+    }
     try {
       const handle = await pickFileDestination(name);
       if (url) await saveBlobToHandle(await (await fetch(url)).blob(), handle);
       else if (file) await saveBlobToHandle(file, handle);
       else {
         setDownloadDestination(id, handle);
+        const availability = await onCheckAvailability([id], ownerId);
+        if (!availability) {
+          clearDownloadDestination(id);
+          throw new Error("The sender did not respond. Try again when they are available.");
+        }
+        if (availability.unavailableFileIds.length) {
+          setReuploadPrompt({ files: [{ id, name }], onFinish: (request) => {
+            clearDownloadDestination(id);
+            if (request) onRequestReupload([id], ownerId, [name]);
+          } });
+          return;
+        }
         if (!onRequestFile([id], ownerId)) {
           clearDownloadDestination(id);
           throw new Error("Could not send the download request to the peer.");
@@ -83,7 +123,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentP
     </div>
 
     <div className={activeTab === "chat" ? "flex min-h-0 flex-1 flex-col" : "hidden"} role="tabpanel" aria-label="Chat messages">
-      <MessagesContainer onRequestFile={onRequestFile} />
+      <MessagesContainer onRequestFile={onRequestFile} onCheckAvailability={onCheckAvailability} onRequestReupload={onRequestReupload} onPromptReupload={(files, onFinish) => setReuploadPrompt({ files, onFinish })} />
       <div className="border-t border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
         {filesToBeSent.length > 0 && <AttachementsToSend filesToBeSent={filesToBeSent} handleRemoveQueuedFile={removeFile} formatBytes={formatBytes} />}
         <div className="flex gap-2">
@@ -95,9 +135,9 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentP
     </div>
 
     <section role="tabpanel" aria-label="Shared files" className={activeTab === "files" ? "flex-1 overflow-y-auto p-4" : "hidden"}>
-      <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">Recipients request a copy when a file is available.</p>
+      <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">Shared files stay available for 10 minutes. Availability is checked before each download.</p>
       {!sharedFiles.length ? <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500 dark:border-stone-700">No files shared yet.</div> : <ul className="space-y-2">{sharedFiles.map(({ file, sender }) => {
-        const local = file.ownerId === userId || filesToBeSent.some((entry) => entry.id === file.id);
+        const local = Boolean(getLocalFile(file.id)) || filesToBeSent.some((entry) => entry.id === file.id);
         const ready = Boolean(receivedFiles[file.id]?.url);
         const progress = downloadProgress[file.id];
         const status = local ? "Available to room" : ready ? "Downloaded" : progress?.status === "requested" ? "Request sent" : progress?.status === "in-progress" ? "Downloading" : "Available to request";
@@ -106,6 +146,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onClose }: ChatComponentP
       })}</ul>}
     </section>
     <input ref={fileInputRef} type="file" className="hidden" multiple onChange={handleFileSelection} aria-label="Choose files to share" />
+    <ReuploadRequestDialog files={reuploadPrompt?.files ?? []} open={Boolean(reuploadPrompt)} onConfirm={() => { reuploadPrompt?.onFinish(true); setReuploadPrompt(null); }} onCancel={() => { reuploadPrompt?.onFinish(false); setReuploadPrompt(null); }} />
   </div>;
 };
 

@@ -168,10 +168,13 @@ export type FileDownloadRequest = {
   fileIds: string[];
   ownerId: string;
   requesterId: string;
+  requestId?: string;
+  checkAvailability?: boolean;
 };
 
 export type FileDownloadResponse = FileDownloadRequest & {
-  status: "accepted(all)" | "accepted(partial)" | "rejected" | "unavailable";
+  status: "accepted(all)" | "accepted(partial)" | "rejected" | "unavailable" | "availability";
+  availableFileIds?: string[];
   reason?: string;
 };
 

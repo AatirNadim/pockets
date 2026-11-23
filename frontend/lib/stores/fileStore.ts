@@ -7,7 +7,10 @@ import { MAX_QUEUED_FILES } from "../constants";
 export type QueuedFile = {
   id: string;
   file: File;
+  sharedAt?: number;
 };
+
+export const SHARED_FILE_TTL_MS = 10 * 60 * 1000;
 
 export type ReceivedFileRecord = FileAttachment & {
   url: string | null;
@@ -61,6 +64,8 @@ interface FileActions {
   setIsSending: (isSending: boolean) => void;
   registerReceivedFile: (file: ReceivedFileRecord) => void;
   getLocalFileEntry: (fileId: string) => QueuedFile | undefined;
+  markFilesShared: (fileIds: string[], sharedAt?: number) => void;
+  expireSharedFiles: (now?: number) => void;
   getLocalFile: (fileId: string) => File | undefined;
   hasLocalFile: (fileId: string) => boolean;
   getReceivedFile: (fileId: string) => ReceivedFileRecord | undefined;
@@ -86,6 +91,8 @@ const revokeUrl = (url?: string | null) => {
   }
   URL.revokeObjectURL(url);
 };
+
+const fileExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export type { FileState };
 
@@ -261,12 +268,61 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
       });
       return newState;
     }),
-  getLocalFileEntry: (fileId) => get().fileCatalog[fileId],
-  getLocalFile: (fileId) => get().fileCatalog[fileId]?.file,
-  hasLocalFile: (fileId) => Boolean(get().fileCatalog[fileId]),
+  getLocalFileEntry: (fileId) => {
+    const entry = get().fileCatalog[fileId];
+    if (!entry || entry.sharedAt === undefined || Date.now() - entry.sharedAt >= SHARED_FILE_TTL_MS) return undefined;
+    return entry;
+  },
+  markFilesShared: (fileIds, sharedAt = Date.now()) => {
+    set((state) => {
+      const fileCatalog = { ...state.fileCatalog };
+      for (const fileId of fileIds) {
+        const entry = fileCatalog[fileId];
+        if (entry) fileCatalog[fileId] = { ...entry, sharedAt };
+      }
+      return { ...state, fileCatalog };
+    });
+    for (const fileId of fileIds) {
+      const previous = fileExpiryTimers.get(fileId);
+      if (previous) clearTimeout(previous);
+      fileExpiryTimers.set(fileId, setTimeout(() => {
+        useFileStore.getState().expireSharedFiles();
+        fileExpiryTimers.delete(fileId);
+      }, Math.max(0, sharedAt + SHARED_FILE_TTL_MS - Date.now())));
+    }
+  },
+  expireSharedFiles: (now = Date.now()) => set((state) => {
+    const fileCatalog = { ...state.fileCatalog };
+    let changed = false;
+    for (const [fileId, entry] of Object.entries(fileCatalog)) {
+      if (entry.sharedAt !== undefined && now - entry.sharedAt >= SHARED_FILE_TTL_MS) {
+        delete fileCatalog[fileId];
+        changed = true;
+      }
+    }
+    if (!changed) return state;
+    for (const [fileId, entry] of Object.entries(state.fileCatalog)) {
+      if (entry.sharedAt !== undefined && now - entry.sharedAt >= SHARED_FILE_TTL_MS) {
+        const timer = fileExpiryTimers.get(fileId);
+        if (timer) clearTimeout(timer);
+        fileExpiryTimers.delete(fileId);
+      }
+    }
+    return { ...state, fileCatalog };
+  }),
+  getLocalFile: (fileId) => {
+    const entry = get().fileCatalog[fileId];
+    return entry && (entry.sharedAt === undefined || Date.now() - entry.sharedAt < SHARED_FILE_TTL_MS) ? entry.file : undefined;
+  },
+  hasLocalFile: (fileId) => {
+    const entry = get().fileCatalog[fileId];
+    return Boolean(entry && (entry.sharedAt === undefined || Date.now() - entry.sharedAt < SHARED_FILE_TTL_MS));
+  },
   getReceivedFile: (fileId) => get().receivedFiles[fileId],
   resetFileStore: () => {
     const state = get();
+    fileExpiryTimers.forEach(clearTimeout);
+    fileExpiryTimers.clear();
     Object.values(state.receivedFiles).forEach((record) =>
       revokeUrl(record.url)
     );

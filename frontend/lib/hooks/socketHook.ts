@@ -35,6 +35,7 @@ import useMedia from "./mediaHook";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
 import { useConnectionStore } from "../stores/connectionStore";
 import { clearDownloadDestination } from "../utils/fileSaving";
+import { v4 as uuidv4 } from "uuid";
 
 export const useSocket = () => {
   const router = useRouter();
@@ -49,6 +50,7 @@ export const useSocket = () => {
   const iceRestartAttempts = useRef<Record<string, number>>({});
   const peerTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
+  const pendingAvailability = useRef(new Map<string, (result: { availableFileIds: string[]; unavailableFileIds: string[] } | null) => void>());
   const setPeerStatus = useConnectionStore((state) => state.setPeerStatus);
   const removePeerStatus = useConnectionStore((state) => state.removePeerStatus);
   const clearPeerStatuses = useConnectionStore((state) => state.clearPeerStatuses);
@@ -179,6 +181,8 @@ export const useSocket = () => {
     resetFileStore,
     markDownloadRequested,
     clearDownloadProgress,
+    markFilesShared,
+    expireSharedFiles,
   } = useFileStore();
 
   const addChatMessage = useChatStore((state) => state.addChatMessage);
@@ -212,6 +216,11 @@ export const useSocket = () => {
       peerConnections,
       dataChannelMap,
     });
+
+  useEffect(() => {
+    const timer = setInterval(() => expireSharedFiles(), 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [expireSharedFiles]);
 
   useEffect(() => {
     if (!roomId || !userId) return;
@@ -1270,6 +1279,8 @@ export const useSocket = () => {
   const isValidFileRequest = (value: unknown, senderId: string): value is FileDownloadRequest =>
     isRecord(value) && value.requesterId === senderId &&
     typeof value.ownerId === "string" && value.ownerId.length <= 128 &&
+    (value.requestId === undefined || (typeof value.requestId === "string" && value.requestId.length <= 128)) &&
+    (value.checkAvailability === undefined || typeof value.checkAvailability === "boolean") &&
     Array.isArray(value.fileIds) && value.fileIds.length > 0 && value.fileIds.length <= MAX_QUEUED_FILES &&
     value.fileIds.every((id) => typeof id === "string" && id.length <= 128);
 
@@ -1295,6 +1306,26 @@ export const useSocket = () => {
 
       // check whether the file is still available locally
       const entries = payload.fileIds.map(getLocalFileEntry).filter(Boolean);
+      const availableFileIds = entries.map((entry) => entry!.id);
+      if (payload.checkAvailability) {
+        sendEnvelope({ kind: "file-download-response", payload: {
+          ...payload,
+          status: "availability",
+          availableFileIds,
+        } }, senderId);
+        return;
+      }
+
+      if (entries.length !== payload.fileIds.length) {
+        sendEnvelope({ kind: "file-download-response", payload: {
+          ...payload,
+          status: "unavailable",
+          availableFileIds,
+          reason: "One or more files are no longer available. Please check availability and try again.",
+        } }, senderId);
+        return;
+      }
+
       if (entries.length === 0) {
         console.log(
           "requested files are no longer available locally:",
@@ -1355,6 +1386,20 @@ export const useSocket = () => {
       return;
     }
 
+    if (payload.status === "availability" && payload.requestId) {
+      const resolve = pendingAvailability.current.get(payload.requestId);
+      if (!resolve) return;
+      pendingAvailability.current.delete(payload.requestId);
+      const availableFileIds = Array.isArray(payload.availableFileIds)
+        ? payload.availableFileIds.filter((id) => payload.fileIds.includes(id))
+        : [];
+      resolve({
+        availableFileIds,
+        unavailableFileIds: payload.fileIds.filter((id) => !availableFileIds.includes(id)),
+      });
+      return;
+    }
+
     if (payload.status === "accepted(all)") {
       toast.info("Download approved", {
         description: "Peer accepted your request. Transfer will start shortly.",
@@ -1370,6 +1415,17 @@ export const useSocket = () => {
     }
 
     clearDownloadProgress(payload.fileIds);
+    if (payload.status === "unavailable" && typeof window !== "undefined") {
+      const availableFileIds = Array.isArray(payload.availableFileIds)
+        ? payload.availableFileIds.filter((id) => payload.fileIds.includes(id))
+        : [];
+      const available = new Set(availableFileIds);
+      payload.fileIds.filter((id) => !available.has(id)).forEach(clearDownloadDestination);
+      window.dispatchEvent(new CustomEvent("file-download-unavailable", {
+        detail: { fileIds: payload.fileIds, availableFileIds, ownerId: payload.ownerId },
+      }));
+      return;
+    }
     payload.fileIds.forEach(clearDownloadDestination);
 
     const reason =
@@ -1431,7 +1487,7 @@ export const useSocket = () => {
                 envelope.payload.ownerId === remoteUserId && envelope.payload.requesterId === userId &&
                 Array.isArray(envelope.payload.fileIds) && envelope.payload.fileIds.length <= MAX_QUEUED_FILES &&
                 envelope.payload.fileIds.every((id) => typeof id === "string" && id.length <= 128) &&
-                ["accepted(all)", "accepted(partial)", "rejected", "unavailable"].includes(String(envelope.payload.status))) {
+                ["accepted(all)", "accepted(partial)", "rejected", "unavailable", "availability"].includes(String(envelope.payload.status))) {
                 handleDownloadResponse(envelope.payload, remoteUserId);
               }
               break;
@@ -1496,6 +1552,7 @@ export const useSocket = () => {
     addChatMessage(localMessage);
 
     if (attachments.length) {
+      markFilesShared(attachments.map((file) => file.id), timestamp);
       clearFilesToBeSent();
     }
 
@@ -1543,8 +1600,48 @@ export const useSocket = () => {
     return delivered;
   };
 
+  const requestFileAvailability = (fileIds: string[], ownerId: string) => new Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>((resolve) => {
+    if (!userId || ownerId === userId || !fileIds.length || fileIds.length > MAX_QUEUED_FILES) {
+      resolve(null);
+      return;
+    }
+    const requestId = uuidv4();
+    const timeout = setTimeout(() => {
+      pendingAvailability.current.delete(requestId);
+      resolve(null);
+    }, 12000);
+    pendingAvailability.current.set(requestId, (result) => {
+      clearTimeout(timeout);
+      resolve(result);
+    });
+    const delivered = sendEnvelope({ kind: "file-download-request", payload: {
+      fileIds, ownerId, requesterId: userId, requestId, checkAvailability: true,
+    } }, ownerId);
+    if (!delivered) {
+      clearTimeout(timeout);
+      pendingAvailability.current.delete(requestId);
+      resolve(null);
+    }
+  });
+
+  const requestFileReupload = (fileIds: string[], ownerId: string, names: string[]) => {
+    if (!userId || !userName || !fileIds.length) return false;
+    const message: ChatMessage = {
+      id: `${userId}-${Date.now()}-${uuidv4()}`,
+      userId,
+      userName,
+      timestamp: Date.now(),
+      message: `Could you upload these files again? They are no longer available to download: ${names.join(", ")}`.slice(0, MAX_CHAT_MESSAGE_LENGTH),
+    };
+    if (!sendEnvelope({ kind: "chat-message", payload: message }, ownerId)) return false;
+    addChatMessage(message);
+    return true;
+  };
+
   const cleanUp = () => {
     try {
+      pendingAvailability.current.forEach((resolve) => resolve(null));
+      pendingAvailability.current.clear();
       intentionalSocketClose.current = true;
       if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
       admissionRosterTimeout.current = null;
@@ -1594,6 +1691,8 @@ export const useSocket = () => {
     sendFile,
     sendChatMessage,
     requestFileDownload,
+    requestFileAvailability,
+    requestFileReupload,
     createPeerConnection,
     createOffer,
     handleSignalingMessage,
