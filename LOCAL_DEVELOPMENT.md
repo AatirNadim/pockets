@@ -1,6 +1,6 @@
 # Local Development and Deployment
 
-Pockets is a pnpm workspace with a Next.js frontend, a Node WebSocket signaling service, and a shared protocol package. The server relays signaling; audio, video, chat, and file bytes travel over peer connections when the network permits. This is a small-room, single signaling-server prototype.
+Pockets is a pnpm workspace with a Next.js frontend, a Node WebSocket signaling service, and a shared protocol package. The server relays signaling; audio, video, chat, and file bytes travel over peer connections when the network permits. This is a small-room, single signaling-server prototype. For the system overview, room lifecycle, and feature diagrams, see [Architecture and feature flows](docs/README.md). Package-specific notes are in [frontend](frontend/README.md), [signaling server](server/README.md), and [shared protocol](shared/README.md); the [root README](README.md) is the project entry point.
 
 ## Requirements
 
