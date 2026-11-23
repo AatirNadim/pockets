@@ -1,6 +1,6 @@
 "use client";
 
-import { Files, File as FileIcon, MessageSquare, Paperclip, Send, X, Download } from "lucide-react";
+import { Files, File as FileIcon, MessageSquare, Paperclip, Send, X, Download, Users } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
@@ -8,6 +8,7 @@ import { formatBytes } from "@/lib/utils";
 import { useFileStore } from "@/lib/stores/fileStore";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useUserStore } from "@/lib/stores/userStore";
+import { useConnectionStore } from "@/lib/stores/connectionStore";
 import dynamic from "next/dynamic";
 import { MAX_FILE_SIZE_MB_MULTIPLE_SEND, MAX_FILE_SIZE_SINGLE_SEND, MAX_QUEUED_FILES } from "@/lib/constants";
 import { toast } from "sonner";
@@ -20,7 +21,7 @@ const MessagesContainer = dynamic(() => import("./messagesContainer"), { ssr: fa
 const AttachementsToSend = dynamic(() => import("./attachementsToSend"), { ssr: false });
 
 type ChatComponentProps = {
-  onSendMessage: (message: string) => boolean;
+  onSendMessage: (message: string, recipientIds?: string[]) => boolean;
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
   onCheckAvailability: (fileIds: string[], ownerId: string) => Promise<AvailabilityResult>;
   onRequestReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
@@ -31,6 +32,10 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
   const { filesToBeSent, downloadProgress, addFiles, removeFile, getLocalFile } = useFileStore();
   const { chatMessages } = useChatStore();
   const { userId } = useUserStore();
+  const remoteUsers = useUserStore((state) => state.remoteUsers);
+  const peers = useConnectionStore((state) => state.peers);
+  const [recipientIds, setRecipientIds] = useState<string[]>([]);
+  const connectedPeople = Object.entries(remoteUsers).filter(([id]) => peers[id]?.phase === "connected");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileActionBusyRef = useRef(false);
   const [chatMessage, setChatMessage] = useState("");
@@ -72,8 +77,8 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
   }, [onRequestFile, onRequestReupload, promptForReupload]);
 
   const handleSend = useCallback(() => {
-    if (chatMessage.trim() && onSendMessage(chatMessage)) setChatMessage("");
-  }, [chatMessage, onSendMessage]);
+    if (chatMessage.trim() && onSendMessage(chatMessage, recipientIds)) setChatMessage("");
+  }, [chatMessage, onSendMessage, recipientIds]);
   const handleFileSelection = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? []).filter((file) => !filesToBeSent.some((entry) => entry.file.name === file.name && entry.file.size === file.size));
     const availableSlots = Math.max(0, MAX_QUEUED_FILES - filesToBeSent.length);
@@ -149,6 +154,22 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       <MessagesContainer onRequestFile={onRequestFile} onCheckAvailability={onCheckAvailability} onRequestReupload={onRequestReupload} onPromptReupload={promptForReupload} />
       <div className="border-t border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
         {filesToBeSent.length > 0 && <AttachementsToSend filesToBeSent={filesToBeSent} handleRemoveQueuedFile={removeFile} formatBytes={formatBytes} />}
+        <details className="group mb-2">
+          <summary className="flex min-h-9 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800">
+            <Users size={15} />
+            {recipientIds.length ? `Only ${recipientIds.length} ${recipientIds.length === 1 ? "person" : "people"}` : "Everyone in the room"}
+            <span aria-hidden="true" className="text-stone-400">▾</span>
+          </summary>
+          <div className="mb-2 max-h-40 overflow-y-auto rounded-lg border border-stone-200 bg-white p-2 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            {connectedPeople.length === 0 ? <p className="px-2 py-1 text-xs text-stone-500">No other connected participants.</p> : connectedPeople.map(([id, person]) => (
+              <label key={id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
+                <input type="checkbox" checked={recipientIds.includes(id)} onChange={(event) => setRecipientIds((current) => event.target.checked ? [...current, id] : current.filter((item) => item !== id))} className="accent-amber-600" />
+                <span>{person.name}</span>
+              </label>
+            ))}
+            <p className="px-2 pt-1 text-[11px] text-stone-500">No one selected sends to everyone.</p>
+          </div>
+        </details>
         <div className="flex gap-2">
           <Button type="button" onClick={() => fileInputRef.current?.click()} variant="ghost" size="sm" className="h-11 w-11 shrink-0 rounded-xl border border-stone-200 dark:border-stone-700" aria-label="Attach files"><Paperclip size={17} /></Button>
           <Input value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message…" aria-label="Message" className="min-w-0 rounded-xl bg-white dark:bg-stone-800" />

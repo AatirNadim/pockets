@@ -13,7 +13,7 @@ const ChatComponent = dynamic(() => import("./chatComponent"), {
 });
 
 type ChatSidebarProps = {
-  sendChatMessage: (message: string) => boolean;
+  sendChatMessage: (message: string, recipientIds?: string[]) => boolean;
   requestFileDownload: (fileIds: string[], ownerId: string) => boolean;
   requestFileAvailability: (fileIds: string[], ownerId: string) => Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>;
   requestFileReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;

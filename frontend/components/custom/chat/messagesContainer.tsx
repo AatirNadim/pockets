@@ -259,6 +259,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                     userId || ""
                   )}
                 </div>
+                {msg.recipients?.length ? <span className="mb-1 inline-flex cursor-help items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[10px]" title={`Visible to: ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`} aria-label={`Private message visible to ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`}><span aria-hidden="true">◉</span> {msg.recipients.length === 1 ? "Private" : `${msg.recipients.length} recipients`}</span> : null}
                 <div className="text-sm wrap-break-word whitespace-pre-wrap">
                   {msg.message}
                 </div>

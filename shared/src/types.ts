@@ -161,6 +161,8 @@ export type ChatMessage = {
   userName: string;
   message: string;
   timestamp: number;
+  /** Present for messages sent to selected room participants. */
+  recipients?: Array<{ userId: string; userName: string }>;
   attachments?: FileAttachment[];
 };
 

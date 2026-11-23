@@ -1337,6 +1337,8 @@ export const useSocket = () => {
       typeof message !== "string" || message.length > MAX_CHAT_MESSAGE_LENGTH ||
       typeof timestamp !== "number" || !Number.isFinite(timestamp)
     ) return false;
+    if (value.recipients !== undefined && (!Array.isArray(value.recipients) || value.recipients.length === 0 || value.recipients.length > 100 ||
+      !value.recipients.every((recipient) => isRecord(recipient) && typeof recipient.userId === "string" && recipient.userId.length <= 128 && typeof recipient.userName === "string" && recipient.userName.length <= 80))) return false;
     if (attachments === undefined) return true;
     return Array.isArray(attachments) && attachments.length <= MAX_QUEUED_FILES &&
       attachments.every((item) => isRecord(item) &&
@@ -1577,7 +1579,7 @@ export const useSocket = () => {
     };
   };
 
-  const sendChatMessage = (chatText: string) => {
+  const sendChatMessage = (chatText: string, recipientIds?: string[]) => {
     if (!chatText) {
       return false;
     }
@@ -1610,16 +1612,39 @@ export const useSocket = () => {
       type: entry.file.type,
     }));
 
+    const selectedRecipients = recipientIds?.length
+      ? recipientIds.map((id) => ({ userId: id, userName: useUserStore.getState().remoteUsers[id]?.name ?? "Participant" }))
+      : undefined;
+    if (selectedRecipients?.some(({ userId: id }) => !useConnectionStore.getState().peers[id] || useConnectionStore.getState().peers[id].phase !== "connected")) {
+      toast.error("Message delivery failed", { description: "A selected participant is no longer connected. Update your selection and try again." });
+      return false;
+    }
+
     const localMessage: ChatMessage = {
       id: `${userId}-${timestamp}`,
       userId,
       userName,
       message: trimmedMessage,
       timestamp,
+      recipients: selectedRecipients,
       attachments: attachments.length ? attachments : undefined,
     };
 
-    if (!sendEnvelope({ kind: "chat-message", payload: localMessage })) return false;
+    const envelope: ChatDataEnvelope = { kind: "chat-message", payload: localMessage };
+    if (selectedRecipients) {
+      const channels = selectedRecipients.map(({ userId: id }) => dataChannelMap.current[id]);
+      if (channels.some((channel) => channel?.readyState !== "open")) {
+        toast.error("Message delivery failed", { description: "A selected participant is no longer reachable. Update your selection and try again." });
+        return false;
+      }
+      const payload = JSON.stringify(envelope);
+      try { channels.forEach((channel) => channel!.send(payload)); }
+      catch (error) {
+        console.error("Failed to deliver selected chat message", error);
+        toast.error("Message delivery failed", { description: "Unable to reach every selected participant." });
+        return false;
+      }
+    } else if (!sendEnvelope(envelope)) return false;
     addChatMessage(localMessage);
 
     if (attachments.length) {
