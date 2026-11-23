@@ -8,6 +8,7 @@ import {
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/custom/theme-provider";
+import { siteDescription, siteName, siteUrl } from "@/lib/site";
 
 const archivo = Archivo({
   variable: "--font-archivo",
@@ -30,8 +31,31 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Pockets",
-  description: "Pockets into collaborative spaces",
+  metadataBase: siteUrl,
+  applicationName: siteName,
+  title: {
+    default: "Pockets — Meet in a pocket studio",
+    template: "%s | Pockets",
+  },
+  description: siteDescription,
+  alternates: { canonical: "/" },
+  icons: {
+    icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }],
+    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
+  },
+  openGraph: {
+    type: "website",
+    siteName,
+    title: "Pockets — Meet in a pocket studio",
+    description: siteDescription,
+    url: "/",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pockets — Meet in a pocket studio",
+    description: siteDescription,
+  },
 };
 
 export default function RootLayout({

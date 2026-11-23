@@ -1,5 +1,7 @@
 # Pockets frontend
 
+Set `NEXT_PUBLIC_SITE_URL` to the canonical public origin for sitemap and social metadata. Vercel's deployment hostname is used when this is unset; local development falls back to `http://localhost:3000`.
+
 The frontend is a Next.js 15 App Router application using React 19. It provides the landing and room experiences, obtains browser media, establishes WebRTC connections, and manages room chat and file transfers.
 
 Start with the [root README](../README.md) for the workspace overview and quick start. See [architecture and feature flows](../docs/README.md) for the complete room and peer connection diagrams, [the server README](../server/README.md) for signaling behavior, and [local development and deployment](../LOCAL_DEVELOPMENT.md) for setup and HTTPS.
