@@ -5,16 +5,19 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev:frontend": "pnpm --filter pockets-ui dev",
+    "dev:landing": "pnpm --filter pockets-landing dev",
     "dev:server": "pnpm --filter pockets-signaling-server dev",
     "build:shared": "pnpm --filter @pockets/shared build",
     "build:server": "pnpm --filter @pockets/shared build && pnpm --filter pockets-signaling-server build",
     "build:frontend": "pnpm --filter @pockets/shared build && pnpm --filter pockets-ui build",
+    "build:landing": "pnpm --filter pockets-landing build",
     "start:server": "pnpm --filter pockets-signaling-server start",
     "start:frontend": "pnpm --filter pockets-ui start",
+    "start:landing": "pnpm --filter pockets-landing start",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --filter pockets-ui lint",
     "test": "pnpm --filter pockets-signaling-server test",
-    "build": "pnpm build:shared && pnpm build:server && pnpm build:frontend",
+    "build": "pnpm build:shared && pnpm build:server && pnpm build:frontend && pnpm build:landing",
     "clean": "pnpm -r clean"
   },
   "devDependencies": {

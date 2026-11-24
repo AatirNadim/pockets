@@ -1,0 +1,142 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Pockets Design System: 60-30-10 Archetype
+   Light: Warm Cream Stone canvas, Deep Navy structure, Berry Magenta & Sunset Coral accents.
+   Dark: Deep Obsidian Navy canvas, Midnight Navy surfaces, Sunset Coral & Berry accents. */
+@theme {
+  --color-white: #FFFCF6;
+  --color-black: #001735;
+  --color-stone-50: #FFF8EC;
+  --color-stone-100: #FFFCF6;
+  --color-stone-200: #F2E8D8;
+  --color-stone-300: #E1D3BD;
+  --color-stone-400: #B8A77E;
+  --color-stone-500: #7E7B72;
+  --color-stone-600: #555D6C;
+  --color-stone-700: #30445D;
+  --color-stone-800: #163254;
+  --color-stone-900: #001F52;
+  --color-stone-950: #001735;
+
+  --color-amber-50: #FFFCF6;
+  --color-amber-100: #FFE4C9;
+  --color-amber-200: #FFC5A8;
+  --color-amber-300: #FFA586;
+  --color-amber-400: #FF8D68;
+  --color-amber-500: #A10054;
+  --color-amber-600: #A10054;
+  --color-amber-700: #832642;
+  --color-amber-800: #610037;
+  --color-amber-900: #44002A;
+  --color-amber-950: #2D001E;
+
+  --color-orange-400: #FF8D68;
+  --color-orange-500: #F97858;
+  --color-orange-600: #DF604C;
+  --color-rose-400: #D13778;
+  --color-rose-500: #B91F69;
+  --color-rose-600: #A10054;
+  --color-rose-700: #800044;
+  --color-rose-800: #610037;
+  --color-rose-900: #44002A;
+  --color-emerald-600: #FF8D68;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sohne), system-ui, -apple-system, sans-serif;
+  --font-heading: var(--font-sohne), system-ui, -apple-system, sans-serif;
+  --font-ui: var(--font-sohne), system-ui, -apple-system, sans-serif;
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: #FFF8EC;
+  --foreground: #001F52;
+  --card: #FFFCF6;
+  --card-foreground: #001F52;
+  --primary: #A10054;
+  --primary-foreground: #FFF8EC;
+  --secondary: #F2E8D8;
+  --secondary-foreground: #001F52;
+  --muted: #F2E8D8;
+  --muted-foreground: #555D6C;
+  --accent: #FFE4C9;
+  --accent-foreground: #001F52;
+  --border: #E1D3BD;
+  --input: #E1D3BD;
+  --ring: #FF8D68;
+}
+
+.dark {
+  --background: #001735;
+  --foreground: #FFF8EC;
+  --card: #001F52;
+  --card-foreground: #FFF8EC;
+  --primary: #FF8D68;
+  --primary-foreground: #001735;
+  --secondary: #163254;
+  --secondary-foreground: #FFF8EC;
+  --muted: #163254;
+  --muted-foreground: #E1D3BD;
+  --accent: #44002A;
+  --accent-foreground: #FFF8EC;
+  --border: #30445D;
+  --input: #30445D;
+  --ring: #FF8D68;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sohne), system-ui, -apple-system, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    text-rendering: optimizeLegibility;
+    min-width: 320px;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sohne), system-ui, -apple-system, sans-serif;
+    text-wrap: pretty;
+  }
+
+  button, input, textarea, select { font: inherit; }
+  button:not(:disabled) { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  img, video { max-width: 100%; }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: light;
+  }
+
+  html.dark { color-scheme: dark; }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring/50 ring-offset-2 ring-offset-background;
+  }
+}

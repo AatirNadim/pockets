@@ -62,7 +62,13 @@ export default function Room() {
     toggleSpeakerOff,
   } = useMediaStore();
   const toggleShowChat = useChatStore((state) => state.toggleShowChat);
-  const { userType, userId } = useUserStore();
+  const {
+    userType,
+    userId,
+    initializeUserAsHost,
+    initializeUserAsGuest,
+    setRoomId,
+  } = useUserStore();
 
   const router = useRouter();
   const params = useParams();
@@ -102,10 +108,25 @@ export default function Room() {
       return;
     }
     if (!userId) {
-      toast.error("Your room session is missing. Please rejoin from the home page.");
-      router.push("/");
+      const searchParams = new URLSearchParams(window.location.search);
+      const name = searchParams.get("name") || undefined;
+      const isHostParam = searchParams.get("host") === "true";
+      setRoomId(roomId);
+      if (isHostParam) {
+        initializeUserAsHost(name);
+      } else {
+        initializeUserAsGuest(name);
+      }
+      return;
     }
-  }, [router, roomId, userId]);
+  }, [
+    router,
+    roomId,
+    userId,
+    initializeUserAsHost,
+    initializeUserAsGuest,
+    setRoomId,
+  ]);
 
   // cleanupref will always have latest cleanUp function
   useEffect(() => {

@@ -20,11 +20,12 @@ The signaling service coordinates room membership and relays WebRTC offers, answ
 
 ## Repository guide
 
-This is a pnpm workspace with three packages:
+This is a pnpm workspace with four packages:
 
 | Readme | Covers |
 | --- | --- |
 | [Architecture and feature flows](docs/README.md) | System boundaries, room admission, signaling, media, chat, file transfer, and operating limits |
+| [Landing page](landing/README.md) | Dedicated Next.js product landing page, interactive studio simulation, and bento showcase |
 | [Frontend](frontend/README.md) | Next.js app structure, room lifecycle, browser state, WebRTC, and frontend configuration |
 | [Signaling server](server/README.md) | WebSocket protocol handling, room admission, persistence, lifecycle, and server configuration |
 | [Shared protocol](shared/README.md) | Types and constants shared by the browser and signaling server |
@@ -56,7 +57,8 @@ Run from the repository root:
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm dev:frontend` | Start Next.js in development mode |
+| `pnpm dev:frontend` | Start Next.js collaboration app in development mode (`localhost:3000`) |
+| `pnpm dev:landing` | Start Next.js landing page in development mode (`localhost:3001`) |
 | `pnpm dev:server` | Start the signaling service with watch mode |
 | `pnpm typecheck` | Typecheck each workspace package |
 | `pnpm lint` | Lint the frontend |

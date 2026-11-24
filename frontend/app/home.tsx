@@ -33,7 +33,7 @@ export default function Home() {
     }
   }, [busy, displayName, initializeUserAsHost, router, setRoomId]);
 
-  const joinRoom = () => {
+  const joinRoom = useCallback(() => {
     const id = (roomId || "").trim();
     if (!isValidUUID(id)) {
       toast.error(id ? "Enter a valid room invite ID." : "Enter a room invite ID.");
@@ -42,7 +42,7 @@ export default function Home() {
     setBusy(true);
     initializeUserAsGuest(displayName.trim());
     router.push(`/room/${id}`);
-  };
+  }, [displayName, initializeUserAsGuest, roomId, router]);
 
   const handleShortcut = useCallback((key: string) => {
     if (key === "n") createRoom();
