@@ -144,7 +144,7 @@ export const useSocket = () => {
     toast.error("Signaling connection lost", {
       description: connectedPeers
         ? "Existing media calls may continue, but new calls and room updates are unavailable. Rejoin to restore them."
-        : "Peer calls could not be established. Rejoin the room when your network is available.",
+        : "The room connection was lost before setup finished. Check your network and rejoin to try again.",
       duration: 10000,
     });
   };
@@ -438,8 +438,13 @@ export const useSocket = () => {
       console.log("room created with ID:", roomId);
       console.log("user details:", userId, userName, userType);
 
+      const configuredServerPath = serverPath.trim();
+      const explicitWebSocketUrl = /^wss?:\/\//i.test(configuredServerPath);
       const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socket = new WebSocket(`${wsProtocol}://${serverPath}`);
+      const socketUrl = explicitWebSocketUrl
+        ? configuredServerPath
+        : `${wsProtocol}://${configuredServerPath}`;
+      const socket = new WebSocket(socketUrl);
       intentionalSocketClose.current = false;
       signalingFailureReported.current = false;
       hasReceivedRoomRoster.current = false;
@@ -567,22 +572,28 @@ export const useSocket = () => {
         });
 
         handleRemoteUserLeft(message.userId);
-        toast.error("User Left", {
-          description: "The other user has left the room.",
-        });
         break;
 
       case "error":
+      {
         console.log("error signalling message received:", message);
-        setStatus("Connection failed");
+        const wasDeclined = message.message === "Your request to join the room was declined by the host.";
+        setStatus(wasDeclined ? "Request declined" : "Connection failed");
         setIsConnected(false);
-        toast.error("Error", {
-          description: message.message || "An error occurred",
-        });
+        if (wasDeclined) {
+          toast.info("Request declined", {
+            description: "The host declined your request to join the room.",
+          });
+        } else {
+          toast.error("Room connection failed", {
+            description: message.message || "The room operation could not be completed. Please try again.",
+          });
+        }
         console.log("cleanup being called after error signalling message...");
         cleanUp();
         router.push("/");
         break;
+      }
 
       case "room-full":
         setIsRoomFull(true);
@@ -630,7 +641,7 @@ export const useSocket = () => {
       case "join-request-rejected":
         if (message.guestUserId === userId) {
           setStatus("Host rejected your request");
-          toast.error("Request Rejected", {
+          toast.info("Request declined", {
             description: `${
               message.hostName ?? "Host"
             } declined your request to join.`,
@@ -654,7 +665,7 @@ export const useSocket = () => {
 
       case "host-closed-room":
         if (userType === UserType.GUEST) {
-          toast.error("Room Closed", {
+          toast.info("Room closed", {
             description: "The host ended this room. Returning to the lobby...",
             duration: 5000,
           });
@@ -849,9 +860,6 @@ export const useSocket = () => {
           break;
         case "closed":
           console.warn(`Connection with remote user ${remoteUserId} closed.`);
-          toast.info("Connection Closed", {
-            description: `Connection with user ${remoteUserName} has been closed.`,
-          });
           handleRemoteUserLeft(remoteUserId);
 
           break;

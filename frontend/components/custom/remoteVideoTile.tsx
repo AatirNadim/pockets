@@ -1,5 +1,6 @@
-import { Crown, MicOff, VideoOff, Waves } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Crown, Eye, EyeOff, MicOff, VideoOff, Volume2, VolumeX, Waves } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { PeerConnectionStatus } from "@/lib/stores/connectionStore";
 
 type RemoteVideoTileProps = {
@@ -27,6 +28,8 @@ const RemoteVideoTile = ({
 }: RemoteVideoTileProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [isLocallyMuted, setIsLocallyMuted] = useState(false);
+  const [isVideoHiddenForMe, setIsVideoHiddenForMe] = useState(false);
   const normalizedLevel = Math.min(Math.max(voiceLevel, 0), 1);
   const isSpeaking = audioEnabled && normalizedLevel > 0.18;
   const displayName = userName || `Participant ${userId.slice(0, 4)}`;
@@ -37,7 +40,7 @@ const RemoteVideoTile = ({
       return;
     }
 
-    if (videoEnabled && stream) {
+    if (videoEnabled && !isVideoHiddenForMe && stream) {
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
       }
@@ -45,25 +48,21 @@ const RemoteVideoTile = ({
     }
 
     videoRef.current.srcObject = null;
-  }, [stream, videoEnabled]);
+  }, [stream, videoEnabled, isVideoHiddenForMe]);
 
   useEffect(() => {
-    if (!audioRef.current) {
-      return;
+    if (audioRef.current.srcObject !== stream) {
+      audioRef.current.srcObject = stream;
     }
+    audioRef.current.muted = isLocallyMuted;
 
-    if (!videoEnabled && audioEnabled && stream) {
-      if (audioRef.current.srcObject !== stream) {
-        audioRef.current.srcObject = stream;
-      }
-
+    if (audioEnabled) {
       void audioRef.current.play().catch(() => undefined);
       return;
     }
 
     audioRef.current.pause();
-    audioRef.current.srcObject = null;
-  }, [stream, videoEnabled, audioEnabled]);
+  }, [stream, audioEnabled, isLocallyMuted]);
 
   return (
     <div
@@ -86,8 +85,9 @@ const RemoteVideoTile = ({
         ref={videoRef}
         autoPlay
         playsInline
+        muted
         className={`w-full h-full object-cover ${
-          videoEnabled && !connectionInterrupted ? "opacity-100" : "opacity-0"
+          videoEnabled && !isVideoHiddenForMe && !connectionInterrupted ? "opacity-100" : "opacity-0"
         }`}
       />
       <audio ref={audioRef} autoPlay className="hidden" />
@@ -105,6 +105,31 @@ const RemoteVideoTile = ({
           </div>
         </div>
       )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
+        aria-pressed={isLocallyMuted}
+        title={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
+        onClick={() => setIsLocallyMuted((muted) => !muted)}
+        className="absolute right-3 top-3 z-10 size-10 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
+      >
+        {isLocallyMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        disabled={!videoEnabled}
+        aria-label={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
+        aria-pressed={isVideoHiddenForMe}
+        title={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
+        onClick={() => setIsVideoHiddenForMe((hidden) => !hidden)}
+        className="absolute right-3 top-14 z-10 size-10 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
+      >
+        {isVideoHiddenForMe ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+      </Button>
       <div
         className={`absolute top-3 left-3 flex items-center gap-2 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition-all duration-150 ${
           audioEnabled ? "opacity-100" : "opacity-30"
@@ -130,14 +155,14 @@ const RemoteVideoTile = ({
           ? isSpeaking ? "Speaking" : "Live"
           : connectionPhase === "failed" ? "Unavailable" : "Connecting"}
       </div>
-      {!videoEnabled && (
+      {(!videoEnabled || isVideoHiddenForMe) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-800/80 text-white">
-          <VideoOff className="w-10 h-10" />
-          <span className="text-sm font-semibold">Video unavailable</span>
+          {videoEnabled ? <EyeOff className="w-10 h-10" /> : <VideoOff className="w-10 h-10" />}
+          <span className="text-sm font-semibold">{videoEnabled ? "Video hidden for you" : "Video unavailable"}</span>
         </div>
       )}
       {!audioEnabled && (
-        <div className="absolute top-3 right-3 rounded-full bg-stone-900/80 p-2 text-white">
+        <div className="absolute right-3 top-28 rounded-full bg-stone-900/80 p-2 text-white" title="Their microphone is muted">
           <MicOff className="w-4 h-4" />
         </div>
       )}

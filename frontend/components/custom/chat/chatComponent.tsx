@@ -173,7 +173,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
         <div className="flex gap-2">
           <Button type="button" onClick={() => fileInputRef.current?.click()} variant="ghost" size="sm" className="h-11 w-11 shrink-0 rounded-xl border border-stone-200 dark:border-stone-700" aria-label="Attach files"><Paperclip size={17} /></Button>
           <Input value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message…" aria-label="Message" className="min-w-0 rounded-xl bg-white dark:bg-stone-800" />
-          <Button onClick={handleSend} disabled={!chatMessage.trim()} className="h-11 w-11 shrink-0 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-500 dark:text-stone-950" aria-label="Send message"><Send size={17} /></Button>
+          <Button onClick={handleSend} disabled={!chatMessage.trim()} className="h-11 w-11 shrink-0 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-400 dark:text-stone-950" aria-label="Send message"><Send size={17} /></Button>
         </div>
       </div>
     </div>

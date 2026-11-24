@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuidV4 } from "uuid";
@@ -10,6 +10,7 @@ import { useUserStore } from "@/lib/stores/userStore";
 import { isValidUUID } from "@/lib/utils";
 import { ThemeToggle } from "@/components/custom/themeToggle";
 import StaticBackground from "@/components/custom/staticBackground";
+import { KeyboardShortcuts } from "@/components/custom/keyboardShortcuts";
 
 export default function Home() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"create" | "join">("create");
   const [busy, setBusy] = useState(false);
 
-  const createRoom = () => {
+  const createRoom = useCallback(() => {
     if (busy) return;
     setBusy(true);
     try {
@@ -30,7 +31,7 @@ export default function Home() {
       setBusy(false);
       toast.error("Could not prepare a room. Please try again.");
     }
-  };
+  }, [busy, displayName, initializeUserAsHost, router, setRoomId]);
 
   const joinRoom = () => {
     const id = (roomId || "").trim();
@@ -43,6 +44,18 @@ export default function Home() {
     router.push(`/room/${id}`);
   };
 
+  const handleShortcut = useCallback((key: string) => {
+    if (key === "n") createRoom();
+    if (key === "enter") {
+      if (activeTab === "create") createRoom();
+      else joinRoom();
+    }
+    if (key === "j") {
+      setActiveTab("join");
+      window.requestAnimationFrame(() => document.getElementById("room-id")?.focus());
+    }
+  }, [activeTab, createRoom, joinRoom]);
+
   return (
     <main className="relative min-h-dvh overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       <StaticBackground />
@@ -51,7 +64,13 @@ export default function Home() {
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-600 text-white"><Video size={19} /></span>
           <span className="text-xl">Pockets</span>
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <KeyboardShortcuts
+            shortcuts={[{ key: "enter", label: "Create or join the selected room" }, { key: "n", label: "Create a new room" }, { key: "j", label: "Choose join a room" }]}
+            onShortcut={handleShortcut}
+          />
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-5rem)] w-full max-w-6xl items-center gap-12 px-5 py-10 lg:grid-cols-[1fr_430px] lg:px-10">
@@ -76,9 +95,9 @@ export default function Home() {
           <input id="display-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} autoComplete="nickname" placeholder="What should people call you?" className="mt-2 h-12 w-full rounded-xl border border-stone-300 bg-white px-4 text-base outline-none placeholder:text-stone-400 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950" />
           <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">This is the name other people in the room will see.</p>
 
-          {activeTab === "join" && <div className="mt-5"><label htmlFor="room-id" className="block text-sm font-medium">Room invite ID</label><div className="relative mt-2"><Link2 size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" /><input id="room-id" value={roomId || ""} onChange={(e) => setRoomId(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") joinRoom(); }} placeholder="Paste the room ID" className="h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-4 font-mono text-sm outline-none placeholder:font-sans placeholder:text-stone-400 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950" /></div></div>}
+          {activeTab === "join" && <div className="mt-5"><label htmlFor="room-id" className="block text-sm font-medium">Room invite ID</label><div className="relative mt-2"><Link2 size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" /><input id="room-id" value={roomId || ""} onChange={(e) => setRoomId(e.target.value)} placeholder="Paste the room ID" className="h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-4 font-mono text-sm outline-none placeholder:font-sans placeholder:text-stone-400 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950" /></div></div>}
 
-          <button type="button" onClick={activeTab === "create" ? createRoom : joinRoom} disabled={busy} className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 font-semibold text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">
+          <button type="button" onClick={activeTab === "create" ? createRoom : joinRoom} disabled={busy} className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 font-semibold text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300">
             {busy ? "Opening room…" : activeTab === "create" ? <>Create room <ArrowRight size={18} /></> : <>Request to join <Users size={18} /></>}
           </button>
           <p className="mt-4 text-center text-xs leading-5 text-stone-500 dark:text-stone-400">Room entry and peer connections depend on network availability. File downloads are requested by each recipient.</p>

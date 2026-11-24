@@ -46,7 +46,7 @@ Copy `frontend/.env.example` to `frontend/.env.local` for development.
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_SERVER_PATH` | Browser-reachable signaling hostname and port, without a scheme; HTTPS pages use `wss://` automatically. Defaults to `localhost:8080`. |
+| `NEXT_PUBLIC_SERVER_PATH` | Browser-reachable signaling hostname and port. The client selects `ws://` or `wss://` from the page protocol; a `ws://` or `wss://` prefix can override this. Defaults to `localhost:8080`. |
 | `TURN_CREDENTIALS_URL` | Optional URL fetched by the Next.js server for short lived ICE/TURN credentials. It must return `{ "iceServers": [...] }`. |
 | `TURN_CREDENTIALS_TOKEN` | Optional bearer token sent server-to-server to the credential endpoint. Keep it private; do not rename it with `NEXT_PUBLIC_`. |
 

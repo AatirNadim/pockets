@@ -10,18 +10,18 @@ export function SocialCard() {
         height: "100%",
         display: "flex",
         alignItems: "center",
-        background: "linear-gradient(135deg, #fafaf9 0%, #fffbeb 58%, #fff7ed 100%)",
-        color: "#292524",
+        background: "linear-gradient(135deg, #FFF8EC 0%, #FFFCF6 70%, #FFEFE1 100%)",
+        color: "#001F52",
         padding: "76px",
         fontFamily: "sans-serif",
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 30, maxWidth: 920 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div style={{ width: 68, height: 68, borderRadius: 18, background: "#d97706", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 68, height: 68, borderRadius: 18, background: "#A10054", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect x="3" y="6" width="12" height="12" rx="3" fill="white" />
-              <path d="m15 10 5-3v10l-5-3v-4Z" fill="white" />
+              <rect x="3" y="6" width="12" height="12" rx="3" fill="#FFF8EC" />
+              <path d="m15 10 5-3v10l-5-3v-4Z" fill="#FFF8EC" />
             </svg>
           </div>
           <span style={{ fontSize: 32, fontWeight: 700 }}>Pockets</span>
@@ -29,7 +29,7 @@ export function SocialCard() {
         <div style={{ fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: -2 }}>
           Meet in a pocket studio.
         </div>
-        <div style={{ fontSize: 27, color: "#57534e", lineHeight: 1.4 }}>
+        <div style={{ fontSize: 27, color: "#30445D", lineHeight: 1.4 }}>
           Face-to-face conversations, chat, and file sharing in a room of your own.
         </div>
       </div>

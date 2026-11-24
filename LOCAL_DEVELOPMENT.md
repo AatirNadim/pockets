@@ -33,7 +33,7 @@ pnpm dev:server
 pnpm dev:frontend
 ```
 
-By default, the frontend listens on port `3000` and signaling listens on port `8080`. The frontend's `NEXT_PUBLIC_SERVER_PATH` setting is the browser-reachable signaling `host:port` (no `ws://` or `wss://` prefix). The browser chooses `ws://` on HTTP pages and `wss://` on HTTPS pages. This value is compiled into the frontend, so restart the dev frontend after changing it.
+By default, the frontend listens on port `3000` and signaling listens on port `8080`. The frontend's `NEXT_PUBLIC_SERVER_PATH` setting is the browser-reachable signaling `host:port`. The client chooses `ws://` when the page is opened over HTTP and `wss://` when it is opened over HTTPS. You can prefix the value with `ws://` or `wss://` to choose explicitly. This value is compiled into the frontend, so restart the dev frontend after changing it.
 
 ## Method 1: Connect over the LAN using the host IP
 
@@ -52,7 +52,7 @@ Use this when both devices are on the same reachable Wi-Fi or wired network and 
 
 The Next.js development script already binds to `0.0.0.0`; the signaling server also listens on the host's network interfaces. `localhost` or `127.0.0.1` on the other device would point back to that device, so use the development computer's address for both the page and signaling setting.
 
-**Camera and microphone:** browsers require a secure context for camera/microphone access. `http://localhost` is treated specially as secure on the same device, but a LAN IP served over plain HTTP is not. Use Method 2 for media-device testing.
+**Camera and microphone:** HTTPS is not required for ordinary local development. Browsers allow camera and microphone access from `http://localhost` on the same device. When opening the app from another device, browsers require a secure context for those media features, so use Method 2. For HTTP development, point `NEXT_PUBLIC_SERVER_PATH` at the signaling server's HTTP endpoint (for example, `localhost:8080`); for HTTPS, use its HTTPS/WSS endpoint (for example, `yourhostname.local:8443`).
 
 ## Method 2: Use an mDNS name, optionally with a Caddy HTTPS proxy
 
@@ -144,7 +144,7 @@ pnpm build:frontend
 | `PORT` | Server | HTTP and WebSocket listen port; defaults to `8080`. |
 | `REDIS_URL` | Server | Optional Redis URL for room metadata; connection failure stops startup. Unset uses in-memory metadata. |
 | `ROOM_TTL_SECONDS` | Server | Redis room metadata expiry; defaults to one hour and is refreshed while a room has live sessions. |
-| `NEXT_PUBLIC_SERVER_PATH` | Frontend | Browser-visible signaling host and port, without `ws://` or `wss://`; compiled into the frontend. |
+| `NEXT_PUBLIC_SERVER_PATH` | Frontend | Browser-visible signaling host and port; may include `ws://` or `wss://` to select the protocol explicitly. Compiled into the frontend. |
 | `TURN_CREDENTIALS_URL` | Frontend server | Optional private credential endpoint returning `{ "iceServers": [...] }` with short-lived TURN credentials. |
 | `TURN_CREDENTIALS_TOKEN` | Frontend server | Optional bearer token sent only from the Next.js server to the credential endpoint; never use a `NEXT_PUBLIC_` name. |
 

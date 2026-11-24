@@ -7,6 +7,8 @@ import { useMediaStore } from "@/lib/stores/mediaStore";
 import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
+import { useChatStore } from "@/lib/stores/chatStore";
+import type { Shortcut } from "@/components/custom/keyboardShortcuts";
 import { UserType } from "@/lib/constants";
 import { cn, isValidUUID } from "@/lib/utils";
 import { toast } from "sonner";
@@ -38,6 +40,15 @@ const JoinRequestList = dynamic(
   { ssr: false }
 );
 
+const ROOM_SHORTCUTS: Shortcut[] = [
+  { key: "m", label: "Toggle microphone" },
+  { key: "v", label: "Toggle camera" },
+  { key: "s", label: "Toggle speaker audio" },
+  { key: "c", label: "Open or close chat and files" },
+  { key: "i", label: "Copy room invite" },
+  { key: "l", label: "Open leave room confirmation" },
+];
+
 export default function Room() {
   const {
     availableCameras,
@@ -46,7 +57,11 @@ export default function Room() {
     selectedMicrophoneId,
     mediaError,
     setMediaError,
+    isMicrophoneMuted,
+    isVideoOff,
+    toggleSpeakerOff,
   } = useMediaStore();
+  const toggleShowChat = useChatStore((state) => state.toggleShowChat);
   const { userType, userId } = useUserStore();
 
   const router = useRouter();
@@ -72,15 +87,19 @@ export default function Room() {
   } = useSocket();
   const { requests } = useJoinRequestStore();
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const didValidateEntry = useRef(false);
   const isHost = userType === UserType.HOST;
 
   const cleanUpRef = useRef(cleanUp);
   const connectToRoomRef = useRef(connectToRoom);
 
   useEffect(() => {
+    if (didValidateEntry.current) return;
+    didValidateEntry.current = true;
     if (!isValidUUID(roomId)) {
       toast.error("This room link is not valid.");
       router.push("/");
+      return;
     }
     if (!userId) {
       toast.error("Your room session is missing. Please rejoin from the home page.");
@@ -147,6 +166,22 @@ export default function Room() {
     router.push("/");
   }, [router]);
 
+  const handleShortcut = useCallback((key: string) => {
+    if (key === "m" && availableMicrophones.length) {
+      void updateAudioSendStateForPeers(!isMicrophoneMuted);
+    } else if (key === "v" && availableCameras.length) {
+      void updateVideoSendStateForPeers(!isVideoOff);
+    } else if (key === "s") {
+      toggleSpeakerOff();
+    } else if (key === "c") {
+      toggleShowChat();
+    } else if (key === "i") {
+      window.dispatchEvent(new CustomEvent("pockets:copy-invite"));
+    } else if (key === "l") {
+      setLeaveDialogOpen(true);
+    }
+  }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, toggleSpeakerOff, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
+
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
 
@@ -156,6 +191,8 @@ export default function Room() {
         status={status}
         isConnected={isConnected}
         isRoomFull={isRoomFull}
+        shortcuts={ROOM_SHORTCUTS}
+        onShortcut={handleShortcut}
       />
       {mediaError && <div role="status" className="z-10 flex items-center justify-between gap-3 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"><span>{mediaError}</span><Button variant="ghost" size="sm" onClick={() => setMediaError(null)} aria-label="Dismiss media notice">Dismiss</Button></div>}
 
