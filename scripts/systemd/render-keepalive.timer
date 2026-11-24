@@ -1,0 +1,13 @@
+[Unit]
+Description=Trigger Render Keep-Alive every 12 minutes
+
+[Timer]
+# Run every 12 minutes
+OnCalendar=*:0/12
+# Run immediately on resume if machine was asleep when scheduled
+Persistent=true
+# Randomize slightly within 30 seconds to prevent exact stampedes
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
