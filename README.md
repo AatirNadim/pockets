@@ -1,5 +1,9 @@
 # Pockets
 
+<p align="center">
+  <img src="./assets/pockets-banner.svg" alt="Pockets — a small room for your people" width="100%" />
+</p>
+
 Pockets is a browser based collaboration prototype for small, temporary rooms. Participants can meet with audio/video, chat, and exchange files. Guests request entry and the room host approves each request.
 
 ## How a room works
