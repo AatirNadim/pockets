@@ -1,33 +1,19 @@
 import type { Metadata } from "next";
-import {
-  Archivo,
-  Montserrat,
-  Quicksand,
-  Inter,
-} from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/custom/theme-provider";
 import { siteDescription, siteName, siteUrl } from "@/lib/site";
 
-const archivo = Archivo({
-  variable: "--font-archivo",
-  subsets: ["latin"],
-});
-
-const quickSand = Quicksand({
-  variable: "--font-quicksand",
-  subsets: ["latin"],
-});
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-});
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
+const sohne = localFont({
+  src: [
+    { path: "../public/fonts/sohne-regular.otf", weight: "400", style: "normal" },
+    { path: "../public/fonts/sohne-medium.otf", weight: "500", style: "normal" },
+    { path: "../public/fonts/sohne-semibold.otf", weight: "600", style: "normal" },
+    { path: "../public/fonts/sohne-bold.otf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-sohne",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -66,7 +52,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${archivo.variable} ${montserrat.variable} ${quickSand.variable} ${inter.variable} antialiased`}
+        className={`${sohne.variable} antialiased`}
       >
         <ThemeProvider>
           {children}
