@@ -51,17 +51,22 @@ const RemoteVideoTile = ({
   }, [stream, videoEnabled, isVideoHiddenForMe]);
 
   useEffect(() => {
-    if (audioRef.current.srcObject !== stream) {
-      audioRef.current.srcObject = stream;
-    }
-    audioRef.current.muted = isLocallyMuted;
-
-    if (audioEnabled) {
-      void audioRef.current.play().catch(() => undefined);
+    const audioElement = audioRef.current;
+    if (!audioElement) {
       return;
     }
 
-    audioRef.current.pause();
+    if (audioElement.srcObject !== stream) {
+      audioElement.srcObject = stream;
+    }
+    audioElement.muted = isLocallyMuted;
+
+    if (audioEnabled) {
+      void audioElement.play().catch(() => undefined);
+      return;
+    }
+
+    audioElement.pause();
   }, [stream, audioEnabled, isLocallyMuted]);
 
   return (
