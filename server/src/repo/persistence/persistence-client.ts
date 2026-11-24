@@ -3,9 +3,16 @@ import type { Room, User } from "@pockets/shared";
 export interface PersistenceClient {
   // rooms
   getRoomById(roomId: string): Promise<Room | null>;
+  touchRoom(roomId: string): Promise<void>;
   createRoom(roomId: string, hostId: string): Promise<Room>;
+  /** Atomically reserve a room slot for a pending guest. */
+  requestGuestAdmission(roomId: string, guestId: string, maxCapacity: number): Promise<"queued" | "full" | "missing" | "duplicate">;
+  /** Atomically transition one pending guest into the active guest list. */
+  admitPendingGuest(roomId: string, guestId: string, maxCapacity: number): Promise<"accepted" | "full" | "not-pending">;
   updateRoom(room: Room): Promise<void>;
   deleteRoom(roomId: string): Promise<void>;
+  /** Remove persisted metadata for rooms that cannot survive a process restart. */
+  resetEphemeralState(): Promise<void>;
   getAllRoomIds(): Promise<string[]>;
 
   getUserById(userId: string): Promise<User | null>;

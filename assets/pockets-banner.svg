@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Pockets — meet, talk, and share</title>
+  <desc id="desc">A warm banner with a miniature Pockets room interface: room header, ready state, self-view, and media controls.</desc>
+  <defs>
+    <linearGradient id="wash" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFF8EC"/>
+      <stop offset=".62" stop-color="#FFE4C9"/>
+      <stop offset="1" stop-color="#FFC5A8"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FF8D68"/>
+      <stop offset="1" stop-color="#A10054"/>
+    </linearGradient>
+    <filter id="shadow" x="-.2" y="-.2" width="1.4" height="1.5">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#001735" flood-opacity=".12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="360" rx="28" fill="url(#wash)"/>
+  <circle cx="1090" cy="-12" r="180" fill="#FF8D68" opacity=".14"/>
+  <circle cx="1050" cy="355" r="170" fill="#A10054" opacity=".07"/>
+  <path d="M0 300c180-82 287 43 459-3 144-39 192-110 325-91v154H0z" fill="#FFFCF6" opacity=".6"/>
+
+  <g font-family="Sohne, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" fill="#001F52">
+    <g transform="translate(76 62)">
+      <rect width="48" height="48" rx="15" fill="#A10054"/>
+      <rect x="10" y="15" width="22" height="17" rx="5" fill="#FFF8EC"/>
+      <path d="m35 20 5-4v15l-7-4z" fill="#FFF8EC"/>
+      <text x="64" y="34" font-size="25" font-weight="700" letter-spacing="-.7">Pockets</text>
+    </g>
+    <text x="76" y="178" font-size="48" font-weight="700" letter-spacing="-1.8">Meet, talk, and share</text>
+    <text x="76" y="232" font-size="48" font-weight="700" letter-spacing="-1.8" fill="#A10054">in a pocket studio.</text>
+    <text x="78" y="278" font-size="18" fill="#30445D">Temporary rooms for face-to-face conversation and direct file sharing.</text>
+    <g transform="translate(78 310)" font-size="13" font-weight="700" fill="#30445D">
+      <circle cx="5" cy="-4" r="4" fill="#FF8D68"/><text x="17" y="0">NO ACCOUNT NEEDED</text>
+      <circle cx="187" cy="-4" r="4" fill="#A10054"/><text x="199" y="0">HOST-APPROVED ENTRY</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)" transform="translate(730 48)">
+    <!-- Room window -->
+    <rect width="414" height="264" rx="21" fill="#FFFCF6"/>
+    <path d="M21 0h372a21 21 0 0 1 21 21v31H0V21A21 21 0 0 1 21 0" fill="#FFFCF6"/>
+    <rect x="17" y="13" width="26" height="26" rx="13" fill="#A10054"/>
+    <path d="M25 21h10v8H25zM35 23l4-2v8l-4-2z" fill="#FFF8EC"/>
+    <text x="52" y="25" font-size="12" font-weight="700">Pockets</text>
+    <text x="99" y="25" font-size="11" fill="#555D6C">/ Room</text>
+    <circle cx="54" cy="37" r="3" fill="#A10054"/>
+    <text x="62" y="40" font-size="8.5" fill="#555D6C">Waiting for other users…</text>
+    <g fill="#FFFCF6" stroke="#E1D3BD">
+      <circle cx="353" cy="26" r="15"/>
+      <circle cx="390" cy="26" r="15"/>
+    </g>
+    <g fill="none" stroke="#001F52" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="350" cy="23" r="3"/><path d="M344 32c.5-4 2.5-6 6-6s5.5 2 6 6M355 20a3 3 0 0 1 0 6"/>
+      <rect x="385" y="21" width="10" height="10" rx="1.5"/><path d="M388 18h10v10"/>
+    </g>
+
+    <!-- Empty room canvas and ready message -->
+    <rect x="13" y="59" width="388" height="183" rx="13" fill="#F2E8D8"/>
+    <rect x="197" y="98" width="34" height="34" rx="11" fill="#FFE4C9"/>
+    <g fill="none" stroke="#800044" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="209" cy="110" r="3.2"/><circle cx="218" cy="110" r="3.2"/>
+      <path d="M203 122c.4-4 2.4-6 6-6s5.6 2 6 6M215 116c3.4-.5 5.5 1.5 6 5"/>
+    </g>
+    <text x="214" y="151" text-anchor="middle" font-size="12" font-weight="700">Your room is ready</text>
+    <text x="214" y="168" text-anchor="middle" font-size="9.5" fill="#555D6C">Copy the invite from the room header and send it</text>
+    <text x="214" y="181" text-anchor="middle" font-size="9.5" fill="#555D6C">to the people you want to meet.</text>
+
+    <!-- Small self-view tile -->
+    <rect x="342" y="199" width="52" height="38" rx="9" fill="#30445D" stroke="#FFFCF6" stroke-width="2"/>
+    <rect x="347" y="204" width="42" height="28" rx="6" fill="#B8A77E"/>
+    <circle cx="367" cy="213" r="6" fill="#FFC5A8"/>
+    <path d="M356 230c1-8 5-12 11-12s10 4 11 12" fill="#001F52"/>
+    <rect x="347" y="222" width="20" height="8" rx="4" fill="#001F52"/>
+    <text x="357" y="228" text-anchor="middle" font-size="5.5" fill="#FFF8EC">You</text>
+
+    <!-- Media toolbar -->
+    <path d="M0 247h414" stroke="#F2E8D8"/>
+    <g transform="translate(135 252)" fill="none" stroke="#30445D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="0" y="3" width="9" height="12" rx="4.5"/><path d="M-2 9a6.5 6.5 0 0 0 13 0M4.5 16v3m-3 0h6"/>
+      <rect x="48" y="4" width="13" height="10" rx="2"/><path d="m61 7 5-3v10l-5-3z"/>
+      <path d="M99 7v5m-3-2a3 3 0 0 0 6 0V7a1.5 1.5 0 0 0-3 0v3m6-1a6 6 0 0 1-12 0m6 7v3"/>
+    </g>
+    <rect x="306" y="250" width="26" height="26" rx="9" fill="#A10054"/>
+    <path d="m314 258 10 10m0-10-10 10" stroke="#FFF8EC" stroke-width="1.6" stroke-linecap="round"/>
+  </g>
+</svg>

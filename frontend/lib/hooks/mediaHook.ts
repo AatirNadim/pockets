@@ -22,19 +22,15 @@ const useMedia = () => {
     setAvailableMicrophones,
     setSelectedCameraId,
     setSelectedMicrophoneId,
+    setMediaError,
+    setIsVideoOff,
+    setMicrophoneMuted,
   } = useMediaStore();
 
   const handleRemoteSenderLeft = useCallback((userId: string) => {
     delete audioSendersRef.current[userId];
     delete videoSendersRef.current[userId];
   }, []);
-
-  const handleMediaCleanup = () => {
-    currentVideoDeviceId.current = null;
-    currentAudioDeviceId.current = null;
-    audioSendersRef.current = {};
-    videoSendersRef.current = {};
-  };
 
   const populateAvailableDevices = useCallback(async () => {
     if (
@@ -105,7 +101,19 @@ const useMedia = () => {
 
     const mediaDevices = navigator.mediaDevices;
     const handleDeviceChange = () => {
-      populateAvailableDevices();
+      void populateAvailableDevices().then(async () => {
+        const devices = await mediaDevices.enumerateDevices();
+        const videoIds = new Set(devices.filter((device) => device.kind === "videoinput").map((device) => device.deviceId));
+        const audioIds = new Set(devices.filter((device) => device.kind === "audioinput").map((device) => device.deviceId));
+        if (currentVideoDeviceId.current && !videoIds.has(currentVideoDeviceId.current)) {
+          setIsVideoOff(true);
+          setMediaError("Your camera was disconnected. Choose another camera from the device menu.");
+        }
+        if (currentAudioDeviceId.current && !audioIds.has(currentAudioDeviceId.current)) {
+          setMicrophoneMuted(true);
+          setMediaError("Your microphone was disconnected. Choose another microphone from the device menu.");
+        }
+      }).catch(() => undefined);
     };
 
     if (mediaDevices.addEventListener) {
@@ -120,7 +128,7 @@ const useMedia = () => {
     return () => {
       mediaDevices.ondevicechange = originalHandler || null;
     };
-  }, [populateAvailableDevices]);
+  }, [populateAvailableDevices, setIsVideoOff, setMediaError, setMicrophoneMuted]);
 
   const captureDeviceIdsFromStream = (stream: MediaStream) => {
     const videoTrack = stream.getVideoTracks()[0];
@@ -151,6 +159,21 @@ const useMedia = () => {
     } else {
       console.warn("No audio device ID found in the stream.");
     }
+  };
+
+  const watchLocalTrack = (track: MediaStreamTrack) => {
+    track.addEventListener("ended", () => {
+      const message = track.kind === "video"
+        ? "Your camera stopped. Check that it is connected and available."
+        : "Your microphone stopped. Check that it is connected and available.";
+      if (track.kind === "video") setIsVideoOff(true);
+      else {
+        setMicrophoneMuted(true);
+        if (userId) audioLevelManager.stopAnalyzing(userId);
+      }
+      setMediaError(message);
+      toast.error(message);
+    }, { once: true });
   };
 
   const getNewTrackForTrackType = async (
@@ -217,6 +240,7 @@ const useMedia = () => {
     // add the new track (this will be the only track of this kind now)
     localStream.current.addTrack(newTrack);
     console.log("added new", kind, "track to local stream:", newTrack);
+    watchLocalTrack(newTrack);
 
     // update the video element if it's a video track
     if (kind === "video" && localVideoRef.current) {
@@ -393,6 +417,15 @@ const useMedia = () => {
   };
 
   const createMediaStreams = async () => {
+    const previousStream = localStream.current;
+    if (previousStream) {
+      previousStream.getTracks().forEach((track) => track.stop());
+      if (localVideoRef.current?.srcObject === previousStream) {
+        localVideoRef.current.srcObject = null;
+      }
+      localStream.current = null;
+    }
+
     try {
       if (
         typeof navigator === "undefined" ||
@@ -413,21 +446,48 @@ const useMedia = () => {
 
       // creating both audio and video tracks
       // media tracks are created regardless of whether they are muted or not
-      localStream.current = await navigator.mediaDevices.getUserMedia(
-        constraints
-      );
+      try {
+        localStream.current = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (captureError) {
+        const reason = captureError instanceof DOMException ? captureError.name : "";
+        if (!["NotFoundError", "OverconstrainedError", "NotReadableError"].includes(reason)) throw captureError;
+        const tracks: MediaStreamTrack[] = [];
+        const failures: string[] = [];
+        for (const kind of ["audio", "video"] as const) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia(kind === "audio" ? { audio: true, video: false } : { audio: false, video: true });
+            tracks.push(...stream.getTracks());
+          } catch {
+            failures.push(kind === "audio" ? "microphone" : "camera");
+          }
+        }
+        localStream.current = new MediaStream(tracks);
+        if (!tracks.length) throw captureError;
+        const message = failures.length ? `Could not start your ${failures.join(" and ")}. You can still join with the available media.` : null;
+        setMediaError(message);
+        if (message) toast.warning("Some media is unavailable", { description: message });
+      }
       if (localVideoRef.current) {
         console.debug("Accessing local media streams...");
         localVideoRef.current.srcObject = localStream.current;
       }
 
       captureDeviceIdsFromStream(localStream.current);
+      localStream.current.getTracks().forEach(watchLocalTrack);
       await populateAvailableDevices();
+      if (localStream.current.getTracks().length) setMediaError(null);
+      return localStream.current;
     } catch (error) {
       console.error("Error accessing media devices:", error);
-      toast.error(
-        "Could not access camera or microphone. Please check permissions and try again."
-      );
+      const reason = error instanceof DOMException ? error.name : "";
+      const message = reason === "NotAllowedError" || reason === "SecurityError"
+        ? "Camera or microphone access was denied. You can continue without media; update browser permissions and rejoin to enable it."
+        : reason === "NotFoundError"
+        ? "No camera or microphone was found. You can continue without media."
+        : "Camera and microphone could not start. Check device access and try again.";
+      setMediaError(message);
+      toast.error("Media unavailable", { description: message });
+      return null;
     }
   };
 
@@ -454,6 +514,7 @@ const useMedia = () => {
 
     // stop all tracks and clear refs
     localStream.current?.getTracks().forEach((track) => track.stop());
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
     localStream.current = null;
 
     // clear device ids and sender refs
@@ -463,6 +524,7 @@ const useMedia = () => {
     // set senders info to null
     audioSendersRef.current = {};
     videoSendersRef.current = {};
+    setMediaError(null);
   };
 
   return {

@@ -38,7 +38,7 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
               className="flex-1 bg-amber-500 text-white hover:bg-amber-600 rounded-xl"
               onClick={() => respondToJoinRequest(request.guestId, "accept")}
             >
-              Accept
+              Admit
             </Button>
             <Button
               size="sm"
@@ -46,7 +46,7 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
               className="flex-1 bg-stone-100 text-stone-700 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700 rounded-xl"
               onClick={() => respondToJoinRequest(request.guestId, "reject")}
             >
-              Reject
+              Decline
             </Button>
           </div>
         </div>

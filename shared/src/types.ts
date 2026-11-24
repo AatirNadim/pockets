@@ -33,6 +33,7 @@ export type WebSocketMessage =
   | IceCandidateMessage
   | JoinRequestMessage
   | JoinRequestDecisionMessage
+  | RoomRosterMessage
   | UserJoinedMessage
   | UserLeftMessage
   | ErrorMessage
@@ -106,6 +107,13 @@ export type UserJoinedMessage = {
   userType: UserType;
 };
 
+/** Current active peers sent only to a guest after host approval. */
+export type RoomRosterMessage = {
+  type: "room-roster";
+  roomId: string;
+  users: User[];
+};
+
 export type UserLeftMessage = {
   type: "user-left";
   roomId: string;
@@ -153,6 +161,8 @@ export type ChatMessage = {
   userName: string;
   message: string;
   timestamp: number;
+  /** Present for messages sent to selected room participants. */
+  recipients?: Array<{ userId: string; userName: string }>;
   attachments?: FileAttachment[];
 };
 
@@ -160,10 +170,13 @@ export type FileDownloadRequest = {
   fileIds: string[];
   ownerId: string;
   requesterId: string;
+  requestId?: string;
+  checkAvailability?: boolean;
 };
 
 export type FileDownloadResponse = FileDownloadRequest & {
-  status: "accepted(all)" | "accepted(partial)" | "rejected" | "unavailable";
+  status: "accepted(all)" | "accepted(partial)" | "rejected" | "unavailable" | "availability";
+  availableFileIds?: string[];
   reason?: string;
 };
 
@@ -191,6 +204,7 @@ export type FileMetadataPayload = {
  * of the expected total bytes for this channel.
  */
 export type ChannelSetupPayload = {
+  protocolVersion: 1;
   sessionId: string;
   channelLabel: string;
   fileCount: number;
@@ -208,8 +222,11 @@ export type ChannelTransferCompletePayload = ChannelSetupPayload;
  */
 export type IncomingFileState = {
   metadata: FileMetadataPayload;
-  chunks: ArrayBuffer[];
   receivedBytes: number;
+  /** Kept as unknown here so the shared protocol package stays browser agnostic. */
+  writable?: unknown;
+  /** The file could not be persisted; continue draining its packets to reach the next file. */
+  writeFailed?: boolean;
 };
 
 /**
@@ -222,6 +239,13 @@ export type IncomingTransferState = {
   completedFiles: IncomingFileState[];
   /** Total bytes received across all files on this channel */
   totalReceivedBytes: number;
+  /** Sum of the file sizes declared so far in metadata envelopes. */
+  declaredBytes: number;
+  /** File IDs already seen on this channel, used to reject duplicates. */
+  receivedFileIds: string[];
+  /** Number of complete files validated on this channel. */
+  receivedFileCount: number;
+  failed?: boolean;
   /** Expected total bytes for all files (set from channel-setup) */
   expectedTotalBytes?: number;
   /** Expected file count for this channel */

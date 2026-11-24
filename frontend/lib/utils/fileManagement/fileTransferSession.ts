@@ -3,13 +3,14 @@ import {
   CHUNK_SIZE,
   MAX_CHANNELS_FOR_DATA_TRANSMISSION,
 } from "../../constants";
-import type { QueuedFile } from "../../stores/fileStore";
+import { SHARED_FILE_TTL_MS, type QueuedFile } from "../../stores/fileStore";
 import type {
   DataChannelEnvelope,
   FileMetadataPayload,
   ChannelSetupPayload,
   TransferSessionStatus,
 } from "@pockets/shared";
+import { validateFileBatch } from "../fileValidation";
 
 /** Timeout for sender to close channel if receiver hasn't closed it */
 const SENDER_CLEANUP_TIMEOUT_MS = 15000; // 15 seconds
@@ -50,6 +51,9 @@ export class FileTransferSession {
   private readonly files: QueuedFile[];
   private readonly callbacks: TransferSessionCallbacks;
   private readonly channels: RTCDataChannel[] = [];
+  private readonly readers = new Set<FileReader>();
+  private readonly cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly pendingAckCancels = new Set<() => void>();
 
   constructor(
     pc: RTCPeerConnection,
@@ -98,14 +102,30 @@ export class FileTransferSession {
     this.setStatus("sending");
 
     try {
+      const validationError = validateFileBatch(this.files.map((entry) => entry.file));
+      if (validationError) throw new Error(validationError);
+
+      const expiresAt = this.files.reduce<number | null>((earliest, entry) => {
+        if (entry.sharedAt === undefined) return earliest;
+        const expiry = entry.sharedAt + SHARED_FILE_TTL_MS;
+        return earliest === null ? expiry : Math.min(earliest, expiry);
+      }, null);
+      if (expiresAt !== null && expiresAt <= Date.now()) {
+        throw new Error("The shared file has expired");
+      }
+      if (expiresAt !== null) {
+        const expiryTimer = setTimeout(() => this.cancel(), expiresAt - Date.now());
+        this.cleanupTimers.add(expiryTimer);
+      }
+
       await this.sendFilesToPeer();
       this.setStatus("completed");
       this.callbacks.onComplete?.();
     } catch (error) {
-      this.setStatus("failed");
-      this.callbacks.onError?.(
-        error instanceof Error ? error : new Error(String(error))
-      );
+      if (!this.isCancelled()) {
+        this.setStatus("failed");
+        this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
+      }
       throw error;
     } finally {
       this.cleanup();
@@ -118,6 +138,7 @@ export class FileTransferSession {
   cancel(): void {
     if (this._status === "sending") {
       this.setStatus("cancelled");
+      this.readers.forEach((reader) => { if (reader.readyState === FileReader.LOADING) reader.abort(); });
       this.cleanup();
     }
   }
@@ -127,12 +148,22 @@ export class FileTransferSession {
     this.callbacks.onStatusChange?.(status);
   }
 
+  private isCancelled(): boolean {
+    return this._status === "cancelled";
+  }
+
   private addSentBytes(bytes: number): void {
     this._sentBytes += bytes;
     this.callbacks.onProgress?.(this.progress);
   }
 
   private cleanup(): void {
+    this.cleanupTimers.forEach(clearTimeout);
+    this.cleanupTimers.clear();
+    Array.from(this.pendingAckCancels).forEach((cancel) => cancel());
+    this.pendingAckCancels.clear();
+    this.readers.forEach((reader) => { if (reader.readyState === FileReader.LOADING) reader.abort(); });
+    this.readers.clear();
     // Close all channels created by this session
     this.channels.forEach((channel) => {
       try {
@@ -201,10 +232,23 @@ export class FileTransferSession {
     );
 
     return new Promise((resolve, reject) => {
+      let processingFinished = false;
+      let promiseSettled = false;
+      const resolveOnce = () => {
+        if (promiseSettled) return;
+        promiseSettled = true;
+        processingFinished = true;
+        resolve();
+      };
+      const rejectOnce = (error: unknown) => {
+        if (promiseSettled) return;
+        promiseSettled = true;
+        reject(error instanceof Error ? error : new Error(String(error)));
+      };
       // Check if session was cancelled
       const checkCancelled = () => {
         if (this._status === "cancelled") {
-          reject(new Error("Transfer cancelled"));
+          rejectOnce(new Error("Transfer cancelled"));
           return true;
         }
         return false;
@@ -228,6 +272,7 @@ export class FileTransferSession {
           const setupEnvelope: DataChannelEnvelope = {
             kind: "channel-setup",
             payload: {
+              protocolVersion: 1,
               sessionId: this.sessionId,
               channelLabel: channel.label,
               fileCount: queue.length,
@@ -265,7 +310,8 @@ export class FileTransferSession {
           );
 
           // Set sender-side cleanup timeout - close channel if receiver hasn't closed it
-          setTimeout(() => {
+          const timeout = setTimeout(() => {
+            this.cleanupTimers.delete(timeout);
             if (channel.readyState !== "closed") {
               console.log(
                 `[Session ${this.sessionId}] Sender cleanup timeout - closing ${channel.label}`
@@ -273,17 +319,18 @@ export class FileTransferSession {
               channel.close();
             }
           }, SENDER_CLEANUP_TIMEOUT_MS);
+          this.cleanupTimers.add(timeout);
 
           // Resolve immediately - don't wait for channel close
           // The channel will be cleaned up by timeout or receiver close
-          resolve();
+          resolveOnce();
         } catch (error) {
           console.error(
             `[Session ${this.sessionId}] Error in channel ${channel.label}:`,
             error
           );
           channel.close();
-          reject(error);
+          rejectOnce(error);
         }
       };
 
@@ -298,13 +345,14 @@ export class FileTransferSession {
           `[Session ${this.sessionId}] Channel error ${channel.label}:`,
           err
         );
-        reject(err);
+        rejectOnce(err);
       };
 
       channel.onclose = () => {
         console.log(
           `[Session ${this.sessionId}] Channel ${channel.label} closed`
         );
+        if (!processingFinished) rejectOnce(new Error(`Channel ${channel.label} closed before its queue finished`));
       };
     });
   }
@@ -338,10 +386,7 @@ export class FileTransferSession {
         }
 
         if (Date.now() - startTime > timeoutMs) {
-          console.warn(
-            `[Session ${this.sessionId}] Buffer drain timeout on ${channel.label}, proceeding anyway`
-          );
-          resolve();
+          reject(new Error(`Timed out waiting for ${channel.label} to drain`));
           return;
         }
 
@@ -391,11 +436,38 @@ export class FileTransferSession {
 
       // 2. Send chunks
       const fileReader = new FileReader();
+      this.readers.add(fileReader);
+      let settled = false;
+      let cleanupAckWait = () => undefined;
+      let cleanupBufferedWait = () => undefined;
+      let cancelAckWait: (() => void) | undefined;
+      const fail = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanupAckWait();
+        cleanupBufferedWait();
+        channel.removeEventListener("close", onChannelClose);
+        if (cancelAckWait) this.pendingAckCancels.delete(cancelAckWait);
+        this.readers.delete(fileReader);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      };
+      const complete = () => {
+        if (settled) return;
+        settled = true;
+        cleanupAckWait();
+        cleanupBufferedWait();
+        channel.removeEventListener("close", onChannelClose);
+        if (cancelAckWait) this.pendingAckCancels.delete(cancelAckWait);
+        this.readers.delete(fileReader);
+        resolve();
+      };
+      const onChannelClose = () => fail(new Error("Channel closed before the file was confirmed"));
+      channel.addEventListener("close", onChannelClose, { once: true });
       let offset = 0;
 
       const readNextSlice = () => {
         if (this._status === "cancelled") {
-          return reject(new Error("Transfer cancelled"));
+          return fail(new Error("Transfer cancelled"));
         }
 
         if (offset < file.size) {
@@ -405,40 +477,42 @@ export class FileTransferSession {
           console.log(
             `[Session ${this.sessionId}] Finished reading file ${file.name}`
           );
-          resolve();
+          complete();
         }
       };
 
       // registering file reader event handlers
-      fileReader.onerror = (err) => reject(err);
+      fileReader.onerror = (err) => fail(err);
+      fileReader.onabort = () => fail(new Error("Transfer cancelled"));
 
       fileReader.onload = (e) => {
         if (!e.target?.result) {
-          return reject(new Error("FileReader result is null"));
+          return fail(new Error("FileReader result is null"));
         }
 
-        const chunk = e.target.result as ArrayBuffer;
-        const chunkSize = chunk.byteLength;
+        const fileChunk = e.target.result as ArrayBuffer;
+        const chunkSize = fileChunk.byteLength;
 
         const sendChunk = () => {
           if (this._status === "cancelled") {
-            reject(new Error("Transfer cancelled"));
+            fail(new Error("Transfer cancelled"));
             return;
           }
 
           if (channel.readyState !== "open") {
-            reject(new Error("Channel closed"));
+            fail(new Error("Channel closed"));
             return;
           }
 
           // Basic backpressure handling (10MB buffer threshold)
           if (channel.bufferedAmount > 10 * 1024 * 1024) {
             const onBufferedAmountLow = () => {
-              channel.removeEventListener(
-                "bufferedamountlow",
-                onBufferedAmountLow
-              );
+              cleanupBufferedWait();
               sendChunk();
+            };
+            cleanupBufferedWait = () => {
+              channel.removeEventListener("bufferedamountlow", onBufferedAmountLow);
+              cleanupBufferedWait = () => undefined;
             };
             channel.addEventListener("bufferedamountlow", onBufferedAmountLow);
             return;
@@ -449,12 +523,36 @@ export class FileTransferSession {
             console.log(
               `[Session ${this.sessionId}] Sending chunk of size ${chunkSize} bytes for file ${file.name}`
             );
-            channel.send(chunk);
-            offset += chunkSize;
+            const packet = new ArrayBuffer(8 + chunkSize);
+            const view = new DataView(packet);
+            view.setUint32(0, offset, true);
+            view.setUint32(4, chunkSize, true);
+            new Uint8Array(packet, 8).set(new Uint8Array(fileChunk));
+            const expectedOffset = offset + chunkSize;
+            const timeout = setTimeout(() => fail(new Error("Receiver did not confirm the saved chunk")), 30000);
+            const onAck = (event: MessageEvent) => {
+              if (typeof event.data !== "string") return;
+              try {
+                const message = JSON.parse(event.data);
+                if (message.kind !== "chunk-ack" || message.payload?.offset !== expectedOffset) return;
+                cleanupAckWait();
+                if (cancelAckWait) this.pendingAckCancels.delete(cancelAckWait);
+                readNextSlice();
+              } catch { /* Ignore unrelated control messages. */ }
+            };
+            cleanupAckWait = () => {
+              clearTimeout(timeout);
+              channel.removeEventListener("message", onAck);
+              cleanupAckWait = () => undefined;
+            };
+            cancelAckWait = () => fail(new Error("Transfer cancelled"));
+            this.pendingAckCancels.add(cancelAckWait);
+            channel.addEventListener("message", onAck);
+            channel.send(packet);
+            offset = expectedOffset;
             this.addSentBytes(chunkSize);
-            readNextSlice();
           } catch (error) {
-            reject(error);
+            fail(error);
           }
         };
 

@@ -6,7 +6,9 @@ on:
       - main
     paths:
       - "server/**"
-      - "packages/shared/**"
+      - "shared/**"
+      - "pnpm-lock.yaml"
+      - "server/Dockerfile"
       - ".github/workflows/deploy-server.yml"
 
   # Allow manual trigger

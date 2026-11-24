@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "../stores/userStore";
-import { serverPath, STUN_SERVERS_LIST } from "@/lib/constants";
+import {
+  MAX_CHAT_MESSAGE_LENGTH,
+  MAX_QUEUED_FILES,
+  serverPath,
+  STUN_SERVERS_LIST,
+} from "@/lib/constants";
 
 import { toast } from "sonner";
 import { useJoinRequestStore } from "../stores/joinRequestStore";
@@ -28,12 +33,121 @@ import { useMediaStore } from "../stores/mediaStore";
 import { useFile } from "./fileHook";
 import useMedia from "./mediaHook";
 import { uploadSessionRegistry } from "../utils/fileManagement/uploadSessionRegistry";
+import { useConnectionStore } from "../stores/connectionStore";
+import { clearAllDownloadDestinations, clearDownloadDestination } from "../utils/fileSaving";
+import { v4 as uuidv4 } from "uuid";
+
+const DOWNLOAD_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
 
 export const useSocket = () => {
   const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
+  const intentionalSocketClose = useRef(false);
+  const signalingFailureReported = useRef(false);
+  const admissionRosterTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasReceivedRoomRoster = useRef(false);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const dataChannelMap = useRef<Record<string, RTCDataChannel | null>>({});
+  const iceServers = useRef<RTCIceServer[]>([{ urls: STUN_SERVERS_LIST }]);
+  const iceRestartAttempts = useRef<Record<string, number>>({});
+  const peerTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
+  const pendingAvailability = useRef(new Map<string, (result: { availableFileIds: string[]; unavailableFileIds: string[] } | null) => void>());
+  const connectAttempt = useRef<Promise<void> | null>(null);
+  const roomLifecycleGeneration = useRef(0);
+  const roomCleanupComplete = useRef(false);
+  const activeRoomId = useRef<string | null>(null);
+  const setPeerStatus = useConnectionStore((state) => state.setPeerStatus);
+  const removePeerStatus = useConnectionStore((state) => state.removePeerStatus);
+  const clearPeerStatuses = useConnectionStore((state) => state.clearPeerStatuses);
+
+  const clearPeerTimeout = (remoteUserId: string) => {
+    const timeout = peerTimeouts.current[remoteUserId];
+    if (timeout) clearTimeout(timeout);
+    delete peerTimeouts.current[remoteUserId];
+  };
+
+  const markPeerFailed = (
+    remoteUserId: string,
+    userName: string,
+    userType: UserType,
+    issue: string,
+    notify = true
+  ) => {
+    clearPeerTimeout(remoteUserId);
+    const pc = peerConnections.current[remoteUserId];
+    const previous = useConnectionStore.getState().peers[remoteUserId];
+    setPeerStatus(remoteUserId, {
+      userName,
+      userType,
+      state: pc?.connectionState ?? "failed",
+      iceState: pc?.iceConnectionState ?? "failed",
+      phase: "failed",
+      issue,
+    });
+    if (notify && previous?.phase !== "failed") {
+      toast.error(`Could not connect to ${userName}`, {
+        id: `peer-connection-${remoteUserId}`,
+        description: issue,
+        duration: 8000,
+      });
+    }
+  };
+
+  const watchPeerConnection = (
+    remoteUserId: string,
+    userName: string,
+    userType: UserType,
+    timeoutMs = 25000,
+    issue = `No connection was established with ${userName}. They may be offline or their network may block the call.`
+  ) => {
+    clearPeerTimeout(remoteUserId);
+    peerTimeouts.current[remoteUserId] = setTimeout(() => {
+      const pc = peerConnections.current[remoteUserId];
+      if (pc?.connectionState === "connected" &&
+        (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed")) return;
+      markPeerFailed(remoteUserId, userName, userType, issue);
+    }, timeoutMs);
+  };
+
+  const flushPendingIceCandidates = async (
+    remoteUserId: string,
+    pc: RTCPeerConnection
+  ) => {
+    const pending = pendingIceCandidates.current[remoteUserId] ?? [];
+    delete pendingIceCandidates.current[remoteUserId];
+    for (const candidate of pending) {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+  };
+
+  const reportSignalingUnavailable = () => {
+    if (intentionalSocketClose.current || signalingFailureReported.current) return;
+    signalingFailureReported.current = true;
+    if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+    admissionRosterTimeout.current = null;
+    const peers = useConnectionStore.getState().peers;
+    let connectedPeers = 0;
+    for (const [remoteUserId, peer] of Object.entries(peers)) {
+      const pc = peerConnections.current[remoteUserId];
+      if (pc?.connectionState === "connected") {
+        connectedPeers += 1;
+        continue;
+      }
+      markPeerFailed(remoteUserId, peer.userName, peer.userType,
+        "The signaling server disconnected before this call was established. Rejoin the room to try again.", false);
+    }
+    setIsConnected(connectedPeers > 0);
+    setStatus(connectedPeers
+      ? "Signaling server disconnected. Existing calls may continue; rejoin to restore room features."
+      : "Signaling server disconnected. Rejoin the room to continue.");
+    toast.error("Signaling connection lost", {
+      description: connectedPeers
+        ? "Existing media calls may continue, but new calls and room updates are unavailable. Rejoin to restore them."
+        : "The room connection was lost before setup finished. Check your network and rejoin to try again.",
+      duration: 10000,
+    });
+  };
 
   const [status, setStatus] = useState("Connecting to room...");
   const [isConnected, setIsConnected] = useState(false);
@@ -73,6 +187,8 @@ export const useSocket = () => {
     resetFileStore,
     markDownloadRequested,
     clearDownloadProgress,
+    markFilesShared,
+    expireSharedFiles,
   } = useFileStore();
 
   const addChatMessage = useChatStore((state) => state.addChatMessage);
@@ -101,11 +217,35 @@ export const useSocket = () => {
     clearRequests: clearJoinRequests,
   } = useJoinRequestStore();
 
-  const { sendFile, sendFilesToUser, registerIncomingTransferChannel } =
+  const { sendFile, sendFilesToUser, registerIncomingTransferChannel, cancelIncomingTransfers } =
     useFile({
       peerConnections,
       dataChannelMap,
     });
+
+  useEffect(() => {
+    const timer = setInterval(() => expireSharedFiles(), 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [expireSharedFiles]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const progress = useFileStore.getState().downloadProgress;
+      const now = Date.now();
+      const expiredFileIds = Object.entries(progress)
+        .filter(([, item]) => now - item.lastActivityAt >= DOWNLOAD_IDLE_TIMEOUT_MS)
+        .map(([fileId]) => fileId);
+      if (expiredFileIds.length) {
+        clearDownloadProgress(expiredFileIds);
+        expiredFileIds.forEach(clearDownloadDestination);
+        toast.error("Download timed out", {
+          description: `${expiredFileIds.length} ${expiredFileIds.length === 1 ? "file has" : "files have"} been idle too long. You can try again.`,
+        });
+        console.warn(`Cleared ${expiredFileIds.length} stale download request(s)`);
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [clearDownloadProgress]);
 
   useEffect(() => {
     if (!roomId || !userId) return;
@@ -260,35 +400,20 @@ export const useSocket = () => {
       };
 
       socket.onmessage = (event) => {
-        handleSignalingMessage(JSON.parse(event.data));
+        try {
+          handleSignalingMessage(JSON.parse(event.data));
+        } catch (error) {
+          console.error("Invalid message from signaling server", error);
+          setStatus("Received an invalid room update. Rejoin the room if the call does not recover.");
+        }
       };
 
       socket.onclose = () => {
-        setStatus("Disconnected from server");
-        setIsConnected(false);
-        toast.info("Disconnected", {
-          description:
-            "Disconnected from signaling server. Returning to home page.",
-        });
-        leaveRoom();
-        clearChatMessages();
-        resetUnreadCount();
-        resetFileStore();
-        clearMediaStreams();
-        clearJoinRequests();
+        reportSignalingUnavailable();
       };
 
       socket.onerror = () => {
-        toast.error("Connection Error", {
-          description: "Failed to connect to signaling server",
-        });
-        setStatus("Connection failed");
-        leaveRoom();
-        clearChatMessages();
-        resetUnreadCount();
-        resetFileStore();
-        clearMediaStreams();
-        clearJoinRequests();
+        reportSignalingUnavailable();
       };
     } catch (error) {
       console.error("Error registering WebSocket listeners:", error);
@@ -313,8 +438,16 @@ export const useSocket = () => {
       console.log("room created with ID:", roomId);
       console.log("user details:", userId, userName, userType);
 
+      const configuredServerPath = serverPath.trim();
+      const explicitWebSocketUrl = /^wss?:\/\//i.test(configuredServerPath);
       const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socket = new WebSocket(`${wsProtocol}://${serverPath}`);
+      const socketUrl = explicitWebSocketUrl
+        ? configuredServerPath
+        : `${wsProtocol}://${configuredServerPath}`;
+      const socket = new WebSocket(socketUrl);
+      intentionalSocketClose.current = false;
+      signalingFailureReported.current = false;
+      hasReceivedRoomRoster.current = false;
       socketRef.current = socket;
 
       registerListenersForSocket(socket);
@@ -329,26 +462,86 @@ export const useSocket = () => {
   };
 
   const connectToRoom = async () => {
+    if (connectAttempt.current) return connectAttempt.current;
+    const existingSocket = socketRef.current;
+    if (activeRoomId.current === roomId && existingSocket && existingSocket.readyState < WebSocket.CLOSING) return;
+
+    roomCleanupComplete.current = false;
+    const generation = ++roomLifecycleGeneration.current;
+    const attempt = (async () => {
+      try {
+        clearChatMessages();
+        resetUnreadCount();
+        console.log("connecting to room...");
+        const mediaPromise = createMediaStreams().then((stream) => {
+          if (generation !== roomLifecycleGeneration.current || roomCleanupComplete.current) {
+            stream?.getTracks().forEach((track) => track.stop());
+            if (localStream.current === stream) {
+              localStream.current = null;
+              if (localVideoRef.current?.srcObject === stream) localVideoRef.current.srcObject = null;
+            }
+          }
+          return stream;
+        });
+        const [stream] = await Promise.all([mediaPromise, loadIceServers()]);
+        if (generation !== roomLifecycleGeneration.current || roomCleanupComplete.current) {
+          stream?.getTracks().forEach((track) => track.stop());
+          if (localStream.current === stream) {
+            localStream.current = null;
+            if (localVideoRef.current?.srcObject === stream) localVideoRef.current.srcObject = null;
+          }
+          return;
+        }
+        activeRoomId.current = roomId;
+        createWSConnection();
+      } catch (error) {
+        if (generation === roomLifecycleGeneration.current) {
+          roomLifecycleGeneration.current += 1;
+          const stream = localStream.current;
+          stream?.getTracks().forEach((track) => track.stop());
+          if (localVideoRef.current?.srcObject === stream) localVideoRef.current.srcObject = null;
+          localStream.current = null;
+        }
+        console.error("Error creating room:", error);
+        toast.error("Failed to create room. Please try again.");
+      }
+    })();
+    connectAttempt.current = attempt;
     try {
-      clearChatMessages();
-      resetUnreadCount();
-      console.log("connecting to room...");
-      await createMediaStreams();
-      createWSConnection();
-    } catch (error) {
-      console.error("Error creating room:", error);
-      toast.error("Failed to create room. Please try again.");
+      await attempt;
     } finally {
+      if (connectAttempt.current === attempt) connectAttempt.current = null;
     }
   };
 
   const handleSignalingMessage = async (message: WebSocketMessage) => {
     console.debug("Received signaling message: ", message);
     switch (message.type) {
+      case "room-roster":
+        hasReceivedRoomRoster.current = true;
+        if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+        admissionRosterTimeout.current = null;
+        setStatus("Participant list received. Connecting to the room…");
+        for (const user of message.users) {
+          if (!user?.id || user.id === userId || !user.name) continue;
+          addRemoteUser(user.id, user.name, user.type);
+          setPeerStatus(user.id, {
+            userName: user.name,
+            userType: user.type,
+            state: "new",
+            iceState: "new",
+            phase: "waiting",
+            issue: `Waiting for ${user.name} to start the call.`,
+          });
+          createPeerConnection(user.id, user.name, user.type);
+        }
+        break;
+
       case "user-joined":
         console.log(
           "a new user has joined the room, creating a peer connection..."
         );
+        addRemoteUser(message.userId, message.userName, message.userType);
         createPeerConnection(
           message.userId,
           message.userName,
@@ -379,22 +572,28 @@ export const useSocket = () => {
         });
 
         handleRemoteUserLeft(message.userId);
-        toast.error("User Left", {
-          description: "The other user has left the room.",
-        });
         break;
 
       case "error":
+      {
         console.log("error signalling message received:", message);
-        setStatus("Connection failed");
+        const wasDeclined = message.message === "Your request to join the room was declined by the host.";
+        setStatus(wasDeclined ? "Request declined" : "Connection failed");
         setIsConnected(false);
-        toast.error("Error", {
-          description: message.message || "An error occurred",
-        });
+        if (wasDeclined) {
+          toast.info("Request declined", {
+            description: "The host declined your request to join the room.",
+          });
+        } else {
+          toast.error("Room connection failed", {
+            description: message.message || "The room operation could not be completed. Please try again.",
+          });
+        }
         console.log("cleanup being called after error signalling message...");
         cleanUp();
         router.push("/");
         break;
+      }
 
       case "room-full":
         setIsRoomFull(true);
@@ -420,6 +619,16 @@ export const useSocket = () => {
 
       case "join-request-accepted":
         if (message.guestUserId === userId) {
+          hasReceivedRoomRoster.current = false;
+          if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+          admissionRosterTimeout.current = setTimeout(() => {
+            if (hasReceivedRoomRoster.current) return;
+            setStatus("You were admitted, but the room roster did not arrive. Rejoin to restore peer connections.");
+            toast.error("Room setup did not finish", {
+              description: "The host approved you, but participant details did not arrive. Rejoin the room to try again.",
+              duration: 10000,
+            });
+          }, 10000);
           setStatus("Host accepted your request. Connecting...");
           toast.success("Request Accepted", {
             description: `${
@@ -432,7 +641,7 @@ export const useSocket = () => {
       case "join-request-rejected":
         if (message.guestUserId === userId) {
           setStatus("Host rejected your request");
-          toast.error("Request Rejected", {
+          toast.info("Request declined", {
             description: `${
               message.hostName ?? "Host"
             } declined your request to join.`,
@@ -456,7 +665,7 @@ export const useSocket = () => {
 
       case "host-closed-room":
         if (userType === UserType.GUEST) {
-          toast.error("Room Closed", {
+          toast.info("Room closed", {
             description: "The host ended this room. Returning to the lobby...",
             duration: 5000,
           });
@@ -469,15 +678,67 @@ export const useSocket = () => {
     }
   };
 
-  const sendWsMessage = (message: WebSocketMessage) => {
+  const sendWsMessage = (message: WebSocketMessage): boolean => {
     try {
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.send(JSON.stringify(message));
+        return true;
       } else {
         console.error("WebSocket is not open. Cannot send message.");
       }
     } catch (error) {
       console.error("Error sending WebSocket message:", error);
+    }
+    return false;
+  };
+
+  const restartPeerIce = async (remoteUserId: string, pc: RTCPeerConnection) => {
+    if (!userId || !userName || !roomId || userId.localeCompare(remoteUserId) > 0) return;
+    if ((iceRestartAttempts.current[remoteUserId] ?? 0) >= 1 || pc.signalingState !== "stable") return;
+    iceRestartAttempts.current[remoteUserId] = (iceRestartAttempts.current[remoteUserId] ?? 0) + 1;
+    setStatus(`Reconnecting to ${remoteUserId.slice(0, 6)}…`);
+    const peer = useConnectionStore.getState().peers[remoteUserId];
+    if (peer) {
+      setPeerStatus(remoteUserId, {
+        userName: peer.userName,
+        userType: peer.userType,
+        phase: "reconnecting",
+        issue: "The network path failed. Trying to reconnect…",
+      });
+      watchPeerConnection(remoteUserId, peer.userName, peer.userType, 20000,
+        `Could not restore the connection with ${peer.userName}. Check the network or TURN availability.`);
+    }
+    try {
+      pc.restartIce();
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      if (!offer.sdp) throw new Error("Browser did not create an ICE restart offer");
+      if (!sendWsMessage({
+        type: "offer",
+        roomId,
+        fromUserId: userId,
+        fromUserName: userName,
+        fromUserType: userType ?? UserType.GUEST,
+        toUserId: remoteUserId,
+        offer: { type: "offer", sdp: offer.sdp },
+      })) throw new Error("The signaling server is unavailable.");
+    } catch (error) {
+      console.error("ICE restart failed", error instanceof Error ? error.message : "unknown error");
+      const currentPeer = useConnectionStore.getState().peers[remoteUserId];
+      if (currentPeer) markPeerFailed(remoteUserId, currentPeer.userName, currentPeer.userType,
+        "The connection could not be restarted because signaling is unavailable.");
+    }
+  };
+
+  const loadIceServers = async () => {
+    try {
+      const response = await fetch("/api/ice", { cache: "no-store" });
+      if (!response.ok) throw new Error("TURN configuration is unavailable");
+      const result = (await response.json()) as { iceServers?: RTCIceServer[] };
+      if (Array.isArray(result.iceServers)) iceServers.current = [{ urls: STUN_SERVERS_LIST }, ...result.iceServers];
+    } catch (error) {
+      iceServers.current = [{ urls: STUN_SERVERS_LIST }];
+      console.warn("Using STUN-only ICE configuration", error instanceof Error ? error.message : "configuration unavailable");
     }
   };
 
@@ -510,7 +771,12 @@ export const useSocket = () => {
       guestUserId: guestId,
     };
 
-    sendWsMessage(payload);
+    if (!sendWsMessage(payload)) {
+      toast.error("Could not send the host decision", {
+        description: "The signaling server is unavailable. The guest request is still pending.",
+      });
+      return;
+    }
     removeJoinRequestFromStore(guestId);
   };
 
@@ -520,6 +786,7 @@ export const useSocket = () => {
     remoteUserName: string,
     remoteUserType: UserType = UserType.GUEST
   ) => {
+    setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState, phase: "waiting" });
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
         console.debug("Sending ICE candidate:", "to remote user:");
@@ -528,19 +795,38 @@ export const useSocket = () => {
           throw new Error("Room ID or User ID is not set");
         }
 
-        sendWsMessage({
+        if (!sendWsMessage({
           type: "ice-candidate",
           roomId,
           fromUserId: userId,
           toUserId: remoteUserId,
           candidate: event.candidate,
-        });
+        })) {
+          markPeerFailed(remoteUserId, remoteUserName, remoteUserType,
+            "The signaling server disconnected while sending network connection details.");
+        }
       }
     };
 
     pc.onconnectionstatechange = () => {
+      const phase = pc.connectionState === "connected"
+        ? "connected"
+        : pc.connectionState === "failed" || pc.connectionState === "disconnected"
+          ? "reconnecting"
+          : "connecting";
+      const issue = pc.connectionState === "disconnected"
+        ? "Connection interrupted. Trying to restore the network path…"
+        : pc.connectionState === "failed"
+          ? "The network path failed. Trying one recovery attempt…"
+          : undefined;
+      setPeerStatus(remoteUserId, { userName: remoteUserName, userType: remoteUserType, state: pc.connectionState, iceState: pc.iceConnectionState, phase, issue });
       switch (pc.connectionState) {
         case "connected":
+          clearPeerTimeout(remoteUserId);
+          delete iceRestartAttempts.current[remoteUserId];
+          addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
+          setIsConnected(true);
+          setStatus("Connected to peer(s)...");
           if (remoteUsers[remoteUserId]) return;
           console.debug(
             `Connection established with remote user ${remoteUserId}`
@@ -550,9 +836,6 @@ export const useSocket = () => {
             remoteUserId,
             remoteUserName
           );
-          addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
-          setIsConnected(true);
-          setStatus("Connected to peer(s)...");
           toast.success("New User Joined", {
             description: `A new user, ${remoteUserName}, with ID ${remoteUserId} joined the room.`,
           });
@@ -562,22 +845,21 @@ export const useSocket = () => {
             `Connection with remote user ${remoteUserId} disconnected. Reconnecting...`
           );
 
+          setStatus(`Reconnecting to ${remoteUserName}…`);
+          watchPeerConnection(remoteUserId, remoteUserName, remoteUserType, 15000,
+            `The connection to ${remoteUserName} stayed interrupted. Check whether they are still online.`);
           break;
         case "failed":
           console.warn(
             `Connection with remote user ${remoteUserId} lost. Attempting to reconnect...`
           );
 
-          toast.error("Connection lost with User", {
-            description: `Connection with user ${remoteUserName} lost.`,
-          });
-          handleRemoteUserLeft(remoteUserId);
+          watchPeerConnection(remoteUserId, remoteUserName, remoteUserType, 20000,
+            `Could not restore the connection to ${remoteUserName}. Check the network or TURN availability.`);
+          void restartPeerIce(remoteUserId, pc);
           break;
         case "closed":
           console.warn(`Connection with remote user ${remoteUserId} closed.`);
-          toast.info("Connection Closed", {
-            description: `Connection with user ${remoteUserName} has been closed.`,
-          });
           handleRemoteUserLeft(remoteUserId);
 
           break;
@@ -589,19 +871,32 @@ export const useSocket = () => {
     };
 
     pc.oniceconnectionstatechange = () => {
+      const prior = useConnectionStore.getState().peers[remoteUserId];
+      const iceInterrupted = pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed";
+      setPeerStatus(remoteUserId, {
+        userName: remoteUserName,
+        userType: remoteUserType,
+        state: pc.connectionState,
+        iceState: pc.iceConnectionState,
+        phase: iceInterrupted
+          ? "reconnecting"
+          : pc.connectionState === "connected" ? "connected" : prior?.phase ?? "connecting",
+        issue: iceInterrupted
+          ? `The network path to ${remoteUserName} was interrupted. Trying to restore it…`
+          : pc.connectionState === "connected" ? undefined : prior?.issue,
+      });
       console.debug(
         `ICE connection state with ${remoteUserId}: ${pc.iceConnectionState}`
       );
 
       switch (pc.iceConnectionState) {
         case "disconnected":
-          toast.warning("ICE Disconnected", {
-            description: `ICE connection with user ${remoteUserName} disconnected.`,
-          });
+          watchPeerConnection(remoteUserId, remoteUserName, remoteUserType, 15000,
+            `The network path to ${remoteUserName} stayed interrupted.`);
           break;
         case "failed":
-          console.error("ICE connection failed, attempting restart");
-          pc.restartIce();
+          console.warn("ICE connection failed, attempting one restart");
+          void restartPeerIce(remoteUserId, pc);
           break;
       }
     };
@@ -690,8 +985,11 @@ export const useSocket = () => {
     remoteUserId: string,
     remoteUserName: string,
     remoteUserType: UserType = UserType.GUEST
-  ) => {
+  ): RTCPeerConnection | undefined => {
     try {
+      const existing = peerConnections.current[remoteUserId];
+      if (existing) return existing;
+
       console.debug(
         "Creating new RTCPeerConnection with remote user ID:",
         remoteUserId,
@@ -703,12 +1001,17 @@ export const useSocket = () => {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [
-          {
-            urls: STUN_SERVERS_LIST,
-          },
-        ],
+        iceServers: iceServers.current,
         iceCandidatePoolSize: 10,
+      });
+      addRemoteUser(remoteUserId, remoteUserName, remoteUserType);
+      setPeerStatus(remoteUserId, {
+        userName: remoteUserName,
+        userType: remoteUserType,
+        state: pc.connectionState,
+        iceState: pc.iceConnectionState,
+        phase: "waiting",
+        issue: `Waiting for ${remoteUserName} to respond.`,
       });
 
       // registering peer connection event handlers
@@ -717,6 +1020,7 @@ export const useSocket = () => {
       registerPCEventHandlers(pc, remoteUserId, remoteUserName, remoteUserType);
 
       peerConnections.current[remoteUserId] = pc;
+      watchPeerConnection(remoteUserId, remoteUserName, remoteUserType);
 
       console.log(
         "adding local tracks to peer connection... with local stream:",
@@ -760,11 +1064,12 @@ export const useSocket = () => {
         "new peer connection created and added to records for user:",
         remoteUserId
       );
+      return pc;
     } catch (error) {
       console.error("Error creating peer connection:", error);
-      toast.error("Peer Connection Failed", {
-        description: "Failed to create WebRTC peer connection.",
-      });
+      markPeerFailed(remoteUserId, remoteUserName, remoteUserType,
+        "This browser could not create a peer connection.");
+      return undefined;
     }
   };
 
@@ -785,6 +1090,17 @@ export const useSocket = () => {
       }
 
       const pc = peerConnections.current[remoteUserId];
+      const peer = useConnectionStore.getState().peers[remoteUserId];
+      if (peer) {
+        setPeerStatus(remoteUserId, {
+          userName: peer.userName,
+          userType: peer.userType,
+          phase: "signaling",
+          issue: `Sending a connection offer to ${peer.userName}…`,
+        });
+        watchPeerConnection(remoteUserId, peer.userName, peer.userType, 25000,
+          `No response from ${peer.userName}. They may be offline or their network may block the call.`);
+      }
 
       // create data channel for file transfer, so that it is ready when offer is created
       // this ensures that the data channel is negotiated along with the offer/answer exchange
@@ -815,7 +1131,7 @@ export const useSocket = () => {
 
       await pc.setLocalDescription(offer);
 
-      sendWsMessage({
+      if (!sendWsMessage({
         type: "offer",
         fromUserId: userId,
         fromUserName: userName,
@@ -824,13 +1140,15 @@ export const useSocket = () => {
         // @ts-expect-error TS2322
         offer,
         roomId,
-      });
+      })) throw new Error("Signaling server is unavailable");
       console.debug("Offer sent to remote user:", remoteUserId);
     } catch (error) {
       console.error("Error creating offer:", error);
-      toast.error("Offer Creation Failed", {
-        description: "Failed to create WebRTC offer.",
-      });
+      const peer = useConnectionStore.getState().peers[remoteUserId];
+      if (peer) markPeerFailed(remoteUserId, peer.userName, peer.userType,
+        error instanceof Error && error.message.includes("Signaling")
+          ? "The signaling server could not deliver the connection offer. Rejoin the room and try again."
+          : "This browser could not create a connection offer.");
     }
   };
 
@@ -863,6 +1181,18 @@ export const useSocket = () => {
       console.log("Received offer:", offer);
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const peer = useConnectionStore.getState().peers[fromUserId];
+      if (peer) {
+        setPeerStatus(fromUserId, {
+          userName: peer.userName,
+          userType: peer.userType,
+          phase: "connecting",
+          issue: "Offer received. Negotiating the media connection…",
+        });
+        watchPeerConnection(fromUserId, peer.userName, peer.userType, 25000,
+          `The call setup with ${peer.userName} timed out. Check the network or TURN availability.`);
+      }
+      await flushPendingIceCandidates(fromUserId, pc);
 
       console.log("Remote description set with offer:", offer);
 
@@ -875,7 +1205,7 @@ export const useSocket = () => {
       await pc.setLocalDescription(answer);
       console.log("Created answer:", answer);
 
-      sendWsMessage({
+      if (!sendWsMessage({
         type: "answer",
         roomId,
         fromUserId: userId,
@@ -884,12 +1214,12 @@ export const useSocket = () => {
         toUserId: fromUserId,
         // @ts-expect-error TS2322
         answer,
-      });
+      })) throw new Error("Signaling server is unavailable");
     } catch (error) {
       console.error("Error handling offer:", error);
-      toast.error("Offer Handling Failed", {
-        description: "Failed to handle WebRTC offer.",
-      });
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) markPeerFailed(msg.fromUserId, peer.userName, peer.userType,
+        "This browser could not complete the connection offer. Rejoin the room to try again.");
     }
   };
 
@@ -908,30 +1238,38 @@ export const useSocket = () => {
       console.debug("Received answer:", msg.answer);
 
       await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) {
+        setPeerStatus(msg.fromUserId, {
+          userName: peer.userName,
+          userType: peer.userType,
+          phase: "connecting",
+          issue: "Answer received. Checking available network routes…",
+        });
+        watchPeerConnection(msg.fromUserId, peer.userName, peer.userType, 25000,
+          `The network could not establish a media path to ${peer.userName}. Check the network or TURN availability.`);
+      }
+      await flushPendingIceCandidates(msg.fromUserId, pc);
 
       console.debug("Remote description set with answer:", msg.answer);
     } catch (error) {
       console.error("Error handling answer:", error);
-      toast.error("Answer Handling Failed", {
-        description: "Failed to handle WebRTC answer.",
-      });
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) markPeerFailed(msg.fromUserId, peer.userName, peer.userType,
+        "The connection answer could not be applied. Rejoin the room to try again.");
     }
   };
 
   const handleIceCandidate = async (msg: IceCandidateMessage) => {
     try {
-      if (!peerConnections.current[msg.fromUserId]) {
-        throw new Error(
-          `Peer connection not found for user: ${msg.fromUserId}`
-        );
-      }
-
       const pc = peerConnections.current[msg.fromUserId];
-
-      if (!pc.remoteDescription) {
-        console.warn(
-          "Remote description not set yet, waiting for offer/answer"
-        );
+      if (!pc || !pc.remoteDescription) {
+        const queued = pendingIceCandidates.current[msg.fromUserId] ?? [];
+        if (queued.length >= 128) {
+          throw new Error("Too many ICE candidates arrived before negotiation");
+        }
+        queued.push(msg.candidate);
+        pendingIceCandidates.current[msg.fromUserId] = queued;
         return;
       }
 
@@ -940,9 +1278,9 @@ export const useSocket = () => {
       console.debug("ICE candidate added to peer connection");
     } catch (error) {
       console.error("Error handling ICE candidate:", error);
-      toast.error("ICE Candidate Handling Failed", {
-        description: "Failed to handle WebRTC ICE candidate.",
-      });
+      const peer = useConnectionStore.getState().peers[msg.fromUserId];
+      if (peer) markPeerFailed(msg.fromUserId, peer.userName, peer.userType,
+        "A network route from this participant could not be applied. Rejoin the room to retry.");
     }
   };
 
@@ -952,8 +1290,19 @@ export const useSocket = () => {
       remoteUserId
     );
     try {
+      clearPeerTimeout(remoteUserId);
+      delete pendingIceCandidates.current[remoteUserId];
+      delete iceRestartAttempts.current[remoteUserId];
+      removePeerStatus(remoteUserId);
       // Cancel any active upload sessions for this peer
       uploadSessionRegistry.cancelSessionsForPeer(remoteUserId);
+      cancelIncomingTransfers(remoteUserId);
+
+      const ownedDownloads = Object.entries(useFileStore.getState().downloadProgress)
+        .filter(([, progress]) => progress.ownerId === remoteUserId)
+        .map(([fileId]) => fileId);
+      clearDownloadProgress(ownedDownloads);
+      ownedDownloads.forEach(clearDownloadDestination);
 
       peerConnections.current[remoteUserId]?.close();
       delete peerConnections.current[remoteUserId];
@@ -961,10 +1310,12 @@ export const useSocket = () => {
       delete audioSendersRef.current[remoteUserId];
       delete videoSendersRef.current[remoteUserId];
 
-      if (Object.keys(peerConnections.current).length === 0) {
+      const anotherPeerConnected = Object.values(peerConnections.current).some(
+        (connection) => connection.connectionState === "connected"
+      );
+      setIsConnected(anotherPeerConnected);
+      if (!anotherPeerConnected && Object.keys(peerConnections.current).length === 0) {
         setStatus("Waiting for other users...");
-      } else if (Object.keys(peerConnections.current).length === 1) {
-        setIsConnected(false);
       }
 
       removeRemoteUser(remoteUserId);
@@ -981,7 +1332,41 @@ export const useSocket = () => {
     }
   };
 
-  const handleIncomingChatMessage = (incoming: ChatMessage) => {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+  const isValidChatMessage = (value: unknown, senderId: string): value is ChatMessage => {
+    if (!isRecord(value)) return false;
+    const { id, userId: messageUserId, userName: messageUserName, message, timestamp, attachments } = value;
+    if (
+      typeof id !== "string" || id.length > 128 ||
+      messageUserId !== senderId ||
+      typeof messageUserName !== "string" || messageUserName.length > 80 ||
+      typeof message !== "string" || message.length > MAX_CHAT_MESSAGE_LENGTH ||
+      typeof timestamp !== "number" || !Number.isFinite(timestamp)
+    ) return false;
+    if (value.recipients !== undefined && (!Array.isArray(value.recipients) || value.recipients.length === 0 || value.recipients.length > 100 ||
+      !value.recipients.every((recipient) => isRecord(recipient) && typeof recipient.userId === "string" && recipient.userId.length <= 128 && typeof recipient.userName === "string" && recipient.userName.length <= 80))) return false;
+    if (attachments === undefined) return true;
+    return Array.isArray(attachments) && attachments.length <= MAX_QUEUED_FILES &&
+      attachments.every((item) => isRecord(item) &&
+        typeof item.id === "string" && item.id.length <= 128 &&
+        item.ownerId === senderId &&
+        typeof item.name === "string" && item.name.length > 0 && item.name.length <= 255 &&
+        typeof item.type === "string" && item.type.length <= 128 &&
+        typeof item.size === "number" && Number.isSafeInteger(item.size) && item.size >= 0 && item.size <= 50 * 1024 * 1024);
+  };
+
+  const isValidFileRequest = (value: unknown, senderId: string): value is FileDownloadRequest =>
+    isRecord(value) && value.requesterId === senderId &&
+    typeof value.ownerId === "string" && value.ownerId.length <= 128 &&
+    (value.requestId === undefined || (typeof value.requestId === "string" && value.requestId.length <= 128)) &&
+    (value.checkAvailability === undefined || typeof value.checkAvailability === "boolean") &&
+    Array.isArray(value.fileIds) && value.fileIds.length > 0 && value.fileIds.length <= MAX_QUEUED_FILES &&
+    value.fileIds.every((id) => typeof id === "string" && id.length <= 128);
+
+  const handleIncomingChatMessage = (incoming: ChatMessage, senderId: string) => {
+    if (!isValidChatMessage(incoming, senderId)) return;
     addChatMessage(incoming);
 
     const isLocalMessage = incoming.userId === userId;
@@ -992,8 +1377,8 @@ export const useSocket = () => {
     }
   };
 
-  const handleDownloadRequest = async (payload: FileDownloadRequest) => {
-    if (!userId || payload.ownerId !== userId) {
+  const handleDownloadRequest = async (payload: FileDownloadRequest, senderId: string) => {
+    if (!userId || payload.ownerId !== userId || payload.requesterId !== senderId) {
       return;
     }
 
@@ -1002,6 +1387,26 @@ export const useSocket = () => {
 
       // check whether the file is still available locally
       const entries = payload.fileIds.map(getLocalFileEntry).filter(Boolean);
+      const availableFileIds = entries.map((entry) => entry!.id);
+      if (payload.checkAvailability) {
+        sendEnvelope({ kind: "file-download-response", payload: {
+          ...payload,
+          status: "availability",
+          availableFileIds,
+        } }, senderId);
+        return;
+      }
+
+      if (entries.length !== payload.fileIds.length) {
+        sendEnvelope({ kind: "file-download-response", payload: {
+          ...payload,
+          status: "unavailable",
+          availableFileIds,
+          reason: "One or more files are no longer available. Please check availability and try again.",
+        } }, senderId);
+        return;
+      }
+
       if (entries.length === 0) {
         console.log(
           "requested files are no longer available locally:",
@@ -1016,7 +1421,7 @@ export const useSocket = () => {
               reason: "File is no longer available.",
             },
           },
-          payload.requesterId
+          senderId
         );
         return;
       }
@@ -1034,12 +1439,12 @@ export const useSocket = () => {
                 : "accepted(partial)",
           },
         },
-        payload.requesterId
+        senderId
       );
 
       // initiate file transfer
       console.log("sending file to requester:", payload.requesterId);
-      await sendFilesToUser(payload.requesterId, payload.fileIds);
+      await sendFilesToUser(senderId, payload.fileIds);
     } catch (error) {
       console.error("Failed to fulfill download request", error);
       sendEnvelope(
@@ -1051,13 +1456,28 @@ export const useSocket = () => {
             reason: "Failed to send the requested file.",
           },
         },
-        payload.requesterId
+        senderId
       );
     }
   };
 
-  const handleDownloadResponse = (payload: FileDownloadResponse) => {
-    if (!userId || payload.requesterId !== userId) {
+  const handleDownloadResponse = (payload: FileDownloadResponse, senderId: string) => {
+    if (!userId || payload.requesterId !== userId || payload.ownerId !== senderId ||
+      !Array.isArray(payload.fileIds) || payload.fileIds.length > MAX_QUEUED_FILES) {
+      return;
+    }
+
+    if (payload.status === "availability" && payload.requestId) {
+      const resolve = pendingAvailability.current.get(payload.requestId);
+      if (!resolve) return;
+      pendingAvailability.current.delete(payload.requestId);
+      const availableFileIds = Array.isArray(payload.availableFileIds)
+        ? payload.availableFileIds.filter((id) => payload.fileIds.includes(id))
+        : [];
+      resolve({
+        availableFileIds,
+        unavailableFileIds: payload.fileIds.filter((id) => !availableFileIds.includes(id)),
+      });
       return;
     }
 
@@ -1076,6 +1496,18 @@ export const useSocket = () => {
     }
 
     clearDownloadProgress(payload.fileIds);
+    if (payload.status === "unavailable" && typeof window !== "undefined") {
+      const availableFileIds = Array.isArray(payload.availableFileIds)
+        ? payload.availableFileIds.filter((id) => payload.fileIds.includes(id))
+        : [];
+      const available = new Set(availableFileIds);
+      payload.fileIds.filter((id) => !available.has(id)).forEach(clearDownloadDestination);
+      window.dispatchEvent(new CustomEvent("file-download-unavailable", {
+        detail: { fileIds: payload.fileIds, availableFileIds, ownerId: payload.ownerId },
+      }));
+      return;
+    }
+    payload.fileIds.forEach(clearDownloadDestination);
 
     const reason =
       payload.reason ||
@@ -1115,22 +1547,30 @@ export const useSocket = () => {
       }
 
       try {
-        const parsed = JSON.parse(event.data) as ChatDataEnvelope | ChatMessage;
+        const parsed: unknown = JSON.parse(event.data);
 
         // check whether the parsed data is an envelope or a direct chat message
-        if ((parsed as ChatDataEnvelope)?.kind) {
-          const envelope = parsed as ChatDataEnvelope;
+        if (isRecord(parsed) && typeof parsed.kind === "string" && isRecord(parsed.payload)) {
+          const envelope = parsed as unknown as ChatDataEnvelope;
 
           // the parsed data is an envelope; handle based on its kind
           switch (envelope.kind) {
             case "chat-message":
-              handleIncomingChatMessage(envelope.payload);
+              handleIncomingChatMessage(envelope.payload, remoteUserId ?? "");
               break;
             case "file-download-request":
-              handleDownloadRequest(envelope.payload);
+              if (remoteUserId && isValidFileRequest(envelope.payload, remoteUserId)) {
+                handleDownloadRequest(envelope.payload, remoteUserId);
+              }
               break;
             case "file-download-response":
-              handleDownloadResponse(envelope.payload);
+              if (remoteUserId && isRecord(envelope.payload) &&
+                envelope.payload.ownerId === remoteUserId && envelope.payload.requesterId === userId &&
+                Array.isArray(envelope.payload.fileIds) && envelope.payload.fileIds.length <= MAX_QUEUED_FILES &&
+                envelope.payload.fileIds.every((id) => typeof id === "string" && id.length <= 128) &&
+                ["accepted(all)", "accepted(partial)", "rejected", "unavailable", "availability"].includes(String(envelope.payload.status))) {
+                handleDownloadResponse(envelope.payload, remoteUserId);
+              }
               break;
             case "system":
               // future system notices
@@ -1140,14 +1580,14 @@ export const useSocket = () => {
         }
 
         // the parsed data is a direct chat message
-        handleIncomingChatMessage(parsed as ChatMessage);
+        handleIncomingChatMessage(parsed as ChatMessage, remoteUserId ?? "");
       } catch (error) {
         console.error("Error parsing chat payload:", error);
       }
     };
   };
 
-  const sendChatMessage = (chatText: string) => {
+  const sendChatMessage = (chatText: string, recipientIds?: string[]) => {
     if (!chatText) {
       return false;
     }
@@ -1155,6 +1595,12 @@ export const useSocket = () => {
     const trimmedMessage = chatText.trim();
 
     if (!trimmedMessage) {
+      return false;
+    }
+    if (trimmedMessage.length > MAX_CHAT_MESSAGE_LENGTH) {
+      toast.error("Message is too long", {
+        description: `Keep messages under ${MAX_CHAT_MESSAGE_LENGTH} characters.`,
+      });
       return false;
     }
 
@@ -1174,20 +1620,43 @@ export const useSocket = () => {
       type: entry.file.type,
     }));
 
+    const selectedRecipients = recipientIds?.length
+      ? recipientIds.map((id) => ({ userId: id, userName: useUserStore.getState().remoteUsers[id]?.name ?? "Participant" }))
+      : undefined;
+    if (selectedRecipients?.some(({ userId: id }) => !useConnectionStore.getState().peers[id] || useConnectionStore.getState().peers[id].phase !== "connected")) {
+      toast.error("Message delivery failed", { description: "A selected participant is no longer connected. Update your selection and try again." });
+      return false;
+    }
+
     const localMessage: ChatMessage = {
       id: `${userId}-${timestamp}`,
       userId,
       userName,
       message: trimmedMessage,
       timestamp,
+      recipients: selectedRecipients,
       attachments: attachments.length ? attachments : undefined,
     };
 
+    const envelope: ChatDataEnvelope = { kind: "chat-message", payload: localMessage };
+    if (selectedRecipients) {
+      const channels = selectedRecipients.map(({ userId: id }) => dataChannelMap.current[id]);
+      if (channels.some((channel) => channel?.readyState !== "open")) {
+        toast.error("Message delivery failed", { description: "A selected participant is no longer reachable. Update your selection and try again." });
+        return false;
+      }
+      const payload = JSON.stringify(envelope);
+      try { channels.forEach((channel) => channel!.send(payload)); }
+      catch (error) {
+        console.error("Failed to deliver selected chat message", error);
+        toast.error("Message delivery failed", { description: "Unable to reach every selected participant." });
+        return false;
+      }
+    } else if (!sendEnvelope(envelope)) return false;
     addChatMessage(localMessage);
 
-    sendEnvelope({ kind: "chat-message", payload: localMessage });
-
     if (attachments.length) {
+      markFilesShared(attachments.map((file) => file.id), timestamp);
       clearFilesToBeSent();
     }
 
@@ -1209,7 +1678,10 @@ export const useSocket = () => {
       return false;
     }
 
-    markDownloadRequested(fileIds);
+    if (!fileIds.length || fileIds.length > MAX_QUEUED_FILES ||
+      fileIds.some((id) => typeof id !== "string" || id.length > 128)) return false;
+
+    markDownloadRequested(fileIds, ownerId);
 
     console.log("sending file download request for file:", fileIds);
 
@@ -1232,32 +1704,99 @@ export const useSocket = () => {
     return delivered;
   };
 
-  const cleanUp = () => {
-    try {
-      Object.values(peerConnections.current).forEach((pc) => pc.close());
-
-      console.log("leaving room:", roomId);
-
-      socketRef.current?.send(
-        JSON.stringify({
-          type: "leave-room",
-          roomId,
-          userId,
-        } as LeaveRoomMessage)
-      );
-      socketRef.current?.close();
-      localStream.current?.getTracks().forEach((track) => track.stop());
-      localStream.current = null;
-      cleanUpMediaDevices();
-      clearChatMessages();
-      resetUnreadCount();
-      resetFileStore();
-      leaveRoom();
-      clearMediaStreams();
-      clearJoinRequests();
-    } catch (error) {
-      console.error("Error cleaning up WebSocket connection:", error);
+  const requestFileAvailability = (fileIds: string[], ownerId: string) => new Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>((resolve) => {
+    if (!userId || ownerId === userId || !fileIds.length || fileIds.length > MAX_QUEUED_FILES) {
+      resolve(null);
+      return;
     }
+    const requestId = uuidv4();
+    const timeout = setTimeout(() => {
+      pendingAvailability.current.delete(requestId);
+      resolve(null);
+    }, 12000);
+    pendingAvailability.current.set(requestId, (result) => {
+      clearTimeout(timeout);
+      resolve(result);
+    });
+    const delivered = sendEnvelope({ kind: "file-download-request", payload: {
+      fileIds, ownerId, requesterId: userId, requestId, checkAvailability: true,
+    } }, ownerId);
+    if (!delivered) {
+      clearTimeout(timeout);
+      pendingAvailability.current.delete(requestId);
+      resolve(null);
+    }
+  });
+
+  const requestFileReupload = (fileIds: string[], ownerId: string, names: string[]) => {
+    if (!userId || !userName || !fileIds.length) return false;
+    const message: ChatMessage = {
+      id: `${userId}-${Date.now()}-${uuidv4()}`,
+      userId,
+      userName,
+      timestamp: Date.now(),
+      message: `Could you upload these files again? They are no longer available to download: ${names.join(", ")}`.slice(0, MAX_CHAT_MESSAGE_LENGTH),
+    };
+    if (!sendEnvelope({ kind: "chat-message", payload: message }, ownerId)) return false;
+    addChatMessage(message);
+    return true;
+  };
+
+  const cleanUp = () => {
+    if (roomCleanupComplete.current) return;
+    roomCleanupComplete.current = true;
+    roomLifecycleGeneration.current += 1;
+    connectAttempt.current = null;
+    intentionalSocketClose.current = true;
+
+    const runCleanupStep = (label: string, action: () => void) => {
+      try {
+        action();
+      } catch (error) {
+        console.error(`Cleanup step failed (${label})`, error);
+      }
+    };
+
+    pendingAvailability.current.forEach((resolve) => resolve(null));
+    pendingAvailability.current.clear();
+    if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
+    admissionRosterTimeout.current = null;
+    Object.keys(peerTimeouts.current).forEach(clearPeerTimeout);
+    pendingIceCandidates.current = {};
+    iceRestartAttempts.current = {};
+
+    runCleanupStep("cancel file uploads", () => uploadSessionRegistry.cancelAll());
+    runCleanupStep("cancel incoming file transfers", () => cancelIncomingTransfers());
+    const peersToClose = Object.values(peerConnections.current);
+    peerConnections.current = {};
+    dataChannelMap.current = {};
+    runCleanupStep("close peer connections", () => peersToClose.forEach((pc) => pc.close()));
+
+    console.log("leaving room:", roomId);
+    const socket = socketRef.current;
+    socketRef.current = null;
+    if (socket?.readyState === WebSocket.OPEN && roomId && userId) {
+      runCleanupStep("send room leave", () => socket.send(JSON.stringify({
+        type: "leave-room",
+        roomId,
+        userId,
+      } as LeaveRoomMessage)));
+    }
+    if (socket && socket.readyState < WebSocket.CLOSING) {
+      runCleanupStep("close signaling socket", () => socket.close());
+    }
+
+    activeRoomId.current = null;
+    runCleanupStep("stop local media", cleanUpMediaDevices);
+    runCleanupStep("clear download destinations", clearAllDownloadDestinations);
+    runCleanupStep("clear chat messages", clearChatMessages);
+    runCleanupStep("clear unread count", resetUnreadCount);
+    runCleanupStep("reset file store", resetFileStore);
+    runCleanupStep("leave room store", leaveRoom);
+    runCleanupStep("clear remote media", clearMediaStreams);
+    runCleanupStep("clear join requests", clearJoinRequests);
+    runCleanupStep("clear peer statuses", clearPeerStatuses);
+    setIsConnected(false);
   };
 
   return {
@@ -1277,6 +1816,8 @@ export const useSocket = () => {
     sendFile,
     sendChatMessage,
     requestFileDownload,
+    requestFileAvailability,
+    requestFileReupload,
     createPeerConnection,
     createOffer,
     handleSignalingMessage,

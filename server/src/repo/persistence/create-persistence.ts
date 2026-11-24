@@ -10,14 +10,16 @@ export async function createPersistenceClient(): Promise<PersistenceClient> {
     return new InMemoryPersistenceClient();
   }
 
-  console.log("Using Redis persistence at", redisUrl);
+  console.log("Using Redis persistence");
 
   const client = new RedisPersistenceClient(redisUrl, {
     keyPrefix: "pockets",
-    roomTtlSeconds: Number(process.env.ROOM_TTL_SECONDS ?? 0) || undefined,
+    roomTtlSeconds: Number(process.env.ROOM_TTL_SECONDS ?? 3600) || 3600,
   });
 
   await client.connect();
+  // A process restart ends all live sockets; old Redis room membership cannot be resumed.
+  await client.resetEphemeralState();
   console.log("Connected to Redis");
   return client;
 }

@@ -10,20 +10,32 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Download, Paperclip } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
 import DownloadIndicator from "../downloadIndicator";
+import { clearDownloadDestination, describeSaveError, pickFileDestination, pickFolderDestinations, saveBlobToHandle, setDownloadDestination } from "@/lib/utils/fileSaving";
+import { toast } from "sonner";
+import type { SaveFileHandle } from "@/lib/utils/fileSaving";
+
+const groupByOwner = <T extends { ownerId: string }>(files: T[]) => {
+  const grouped = new Map<string, T[]>();
+  for (const file of files) grouped.set(file.ownerId, [...(grouped.get(file.ownerId) ?? []), file]);
+  return grouped;
+};
 
 type MessagesContainerProps = {
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
+  onCheckAvailability: (fileIds: string[], ownerId: string) => Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>;
+  onRequestReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
+  onPromptReupload: (files: Array<{ id: string; name: string }>, onFinish: (request: boolean) => void) => void;
 };
 
-const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
+const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReupload, onPromptReupload }: MessagesContainerProps) => {
   const { chatMessages } = useChatStore();
 
   const { userId } = useUserStore();
 
-  const { getReceivedFile, downloadProgress, getLocalFile, hasLocalFile } =
-    useFileStore();
+  const { downloadProgress, getLocalFile, hasLocalFile } = useFileStore();
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const actionBusyRef = useRef(false);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -32,83 +44,158 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
     }
   }, [chatMessages]);
 
-  const downloadBlob = (url: string, name: string) => {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = name;
-    anchor.click();
-  };
-
-  const triggerLocalDownload = useCallback((file: File, name: string) => {
-    const localUrl = URL.createObjectURL(file);
-    downloadBlob(localUrl, name);
-    URL.revokeObjectURL(localUrl);
-  }, []);
-
   const deriveAttachmentState = useCallback(
     (attachment: FileAttachment): AttachmentState => {
-      if (attachment.ownerId === userId || hasLocalFile(attachment.id)) {
+      if (hasLocalFile(attachment.id)) {
         return AttachmentState.LOCAL;
-      }
-
-      const received = getReceivedFile(attachment.id);
-      if (received?.url) {
-        return AttachmentState.READY;
       }
 
       return AttachmentState.REMOTE;
     },
-    [getReceivedFile, hasLocalFile, userId]
+    [hasLocalFile]
   );
 
-  const downloadAllLocalFiles = useCallback(
-    (attachments: FileAttachment[]) => {
-      attachments.forEach((attachment) => {
+  const saveAttachment = useCallback(async (attachment: FileAttachment) => {
+    try {
+      if (attachment.ownerId === userId && !getLocalFile(attachment.id)) {
+        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        return;
+      }
+      const handle = await pickFileDestination(attachment.name);
+      const state = deriveAttachmentState(attachment);
+      const localFile = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
+      if (localFile) await saveBlobToHandle(localFile, handle);
+      else if (attachment.ownerId === userId) {
+        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        return;
+      }
+      else {
+        setDownloadDestination(attachment.id, handle);
+        const availability = await onCheckAvailability([attachment.id], attachment.ownerId);
+        if (!availability) {
+          clearDownloadDestination(attachment.id);
+          throw new Error("The sender did not respond. Try again when they are available.");
+        }
+        if (availability.unavailableFileIds.length) {
+          onPromptReupload([{ id: attachment.id, name: attachment.name }], (request) => {
+            clearDownloadDestination(attachment.id);
+            if (request) onRequestReupload([attachment.id], attachment.ownerId, [attachment.name]);
+          });
+          return;
+        }
+        if (!onRequestFile([attachment.id], attachment.ownerId)) {
+          clearDownloadDestination(attachment.id);
+          throw new Error("Could not send the download request to the peer.");
+        }
+        return;
+      }
+      toast.success(`Saved ${attachment.name}`);
+    } catch (error) {
+      toast.error("Could not save download", { description: describeSaveError(error) });
+    }
+  }, [deriveAttachmentState, getLocalFile, onRequestFile, onCheckAvailability, onPromptReupload, onRequestReupload, userId]);
+
+  const handleAttachmentAction = useCallback(async (attachments: FileAttachment[]) => {
+    if (actionBusyRef.current) return;
+    const uniqueAttachments = Array.from(new Map(attachments.map((attachment) => [attachment.id, attachment])).values());
+    if (uniqueAttachments.some((attachment) => downloadProgress[attachment.id])) return;
+    actionBusyRef.current = true;
+    if (uniqueAttachments.length === 1) {
+      try {
+        await saveAttachment(uniqueAttachments[0]);
+      } finally {
+        actionBusyRef.current = false;
+      }
+      return;
+    }
+    try {
+      const destinations = await pickFolderDestinations(uniqueAttachments.map(({ id, name }) => ({ id, name })));
+      const remoteByOwner = new Map<string, string[]>();
+      const direct: Array<{ attachment: FileAttachment; handle: SaveFileHandle }> = [];
+      const unavailable: Array<{ id: string; name: string; ownerId: string }> = [];
+      for (const attachment of uniqueAttachments) {
+        const handle = destinations.get(attachment.id);
+        if (!handle) continue;
         const state = deriveAttachmentState(attachment);
-        if (state === AttachmentState.LOCAL) {
-          const file = getLocalFile(attachment.id);
-          if (file) {
-            triggerLocalDownload(file, attachment.name);
+        if (state === AttachmentState.REMOTE) {
+          if (attachment.ownerId === userId) {
+            unavailable.push({ id: attachment.id, name: attachment.name, ownerId: attachment.ownerId });
+            continue;
           }
-        } else if (state === AttachmentState.READY) {
-          const received = getReceivedFile(attachment.id);
-          if (received?.url) {
-            downloadBlob(received.url, attachment.name);
+          setDownloadDestination(attachment.id, handle);
+          remoteByOwner.set(attachment.ownerId, [...(remoteByOwner.get(attachment.ownerId) ?? []), attachment.id]);
+          continue;
+        }
+        const file = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
+        if (file) direct.push({ attachment, handle });
+      }
+
+      const availabilityEntries = await Promise.all(Array.from(remoteByOwner, async ([ownerId, fileIds]) => [ownerId, fileIds, await onCheckAvailability(fileIds, ownerId)] as const));
+      if (availabilityEntries.some(([, , result]) => !result)) {
+        remoteByOwner.forEach((fileIds) => fileIds.forEach(clearDownloadDestination));
+        throw new Error("A sender did not respond. No files were saved; try again when everyone is available.");
+      }
+      const availableByOwner = new Map<string, string[]>();
+      for (const [ownerId, fileIds, result] of availabilityEntries) {
+        if (!result) continue;
+        availableByOwner.set(ownerId, result.availableFileIds);
+        const missing = new Set(result.unavailableFileIds);
+        uniqueAttachments.filter((file) => fileIds.includes(file.id) && missing.has(file.id)).forEach((file) => unavailable.push({ id: file.id, name: file.name, ownerId }));
+      }
+
+      const finish = async (askToReupload: boolean) => {
+        if (askToReupload) {
+          const requestable = unavailable.filter((file) => file.ownerId !== userId);
+          for (const [ownerId, files] of groupByOwner(requestable)) {
+            if (!onRequestReupload(files.map((file) => file.id), ownerId, files.map((file) => file.name))) {
+              toast.error("Could not request files again", { description: "The request could not be sent to the file owner." });
+            }
           }
         }
-      });
-    },
-    [deriveAttachmentState, getLocalFile, getReceivedFile, triggerLocalDownload]
-  );
+        if (unavailable.some((file) => file.ownerId === userId)) toast.info("Attach expired files again", { description: "Your own shared copy expired from room memory and must be selected again." });
+        unavailable.forEach(({ id }) => clearDownloadDestination(id));
+        const failedSaves: string[] = [];
+        const expiredLocalFiles: string[] = [];
+        for (const { attachment, handle } of direct) {
+          const file = getLocalFile(attachment.id);
+          if (!file) {
+            expiredLocalFiles.push(attachment.name);
+            continue;
+          }
+          try {
+            await saveBlobToHandle(file, handle);
+          } catch (error) {
+            failedSaves.push(attachment.name);
+            console.error(`Could not save ${attachment.name}`, error);
+          }
+        }
+        if (expiredLocalFiles.length) toast.info("Attach expired files again", { description: expiredLocalFiles.join(", ") });
+        if (failedSaves.length) toast.error("Some files could not be saved", { description: failedSaves.join(", ") });
+        for (const [ownerId, fileIds] of availableByOwner) {
+          fileIds.forEach((id) => { const handle = destinations.get(id); if (handle) setDownloadDestination(id, handle); });
+          if (!onRequestFile(fileIds, ownerId)) {
+            fileIds.forEach(clearDownloadDestination);
+            toast.error("Could not request some files", { description: "The request could not be sent to a peer." });
+          }
+        }
+        if (!availableByOwner.size && direct.length && !failedSaves.length) toast.success("Files saved to the selected folder");
+      };
 
-  const handleAttachmentAction = useCallback(
-    (attachments: FileAttachment[]) => {
-      const attachmentsToReceive = attachments.filter((attachment) => {
-        const state = deriveAttachmentState(attachment);
-        return state === AttachmentState.REMOTE;
-      });
-
-      const attachmentsToOpen = attachments.filter((attachment) => {
-        const state = deriveAttachmentState(attachment);
-        return state !== AttachmentState.REMOTE;
-      });
-
-      console.log("attachements total:", {
-        attachmentsToOpen,
-        attachmentsToReceive,
-      });
-
-      if (attachmentsToReceive.length === 0) {
-        downloadAllLocalFiles(attachmentsToOpen);
-      } else {
-        onRequestFile(
-          attachmentsToReceive.map((a) => a.id),
-          attachmentsToReceive[0].ownerId
-        );
+      const requestableUnavailable = unavailable.filter((file) => file.ownerId !== userId);
+      if (requestableUnavailable.length) {
+        const request = await new Promise<boolean>((resolve) => {
+          onPromptReupload(requestableUnavailable.map(({ id, name }) => ({ id, name })), resolve);
+        });
+        await finish(request);
+        return;
       }
-    },
-    [deriveAttachmentState, downloadAllLocalFiles, onRequestFile]
-  );
+      await finish(false);
+    } catch (error) {
+      toast.error("Could not save files", { description: describeSaveError(error) });
+    } finally {
+      actionBusyRef.current = false;
+    }
+  }, [deriveAttachmentState, downloadProgress, getLocalFile, onRequestFile, onCheckAvailability, onRequestReupload, onPromptReupload, saveAttachment, userId]);
 
   const renderDownloadIndicator = useCallback(
     (attachmentId: string) => {
@@ -172,6 +259,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                     userId || ""
                   )}
                 </div>
+                {msg.recipients?.length ? <span className="mb-1 inline-flex cursor-help items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[10px]" title={`Visible to: ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`} aria-label={`Private message visible to ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`}><span aria-hidden="true">◉</span> {msg.recipients.length === 1 ? "Private" : `${msg.recipients.length} recipients`}</span> : null}
                 <div className="text-sm wrap-break-word whitespace-pre-wrap">
                   {msg.message}
                 </div>
@@ -181,11 +269,12 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                       const state = deriveAttachmentState(attachment);
                       const tracker = downloadProgress[attachment.id];
                       const isDownloading = Boolean(tracker);
+                      const expired = attachment.ownerId === userId && state === AttachmentState.REMOTE;
                       const label =
                         state === AttachmentState.LOCAL
                           ? "Open"
-                          : state === AttachmentState.READY
-                          ? "Download"
+                          : expired
+                          ? "Expired"
                           : isDownloading
                           ? "Downloading"
                           : "Request";
@@ -207,7 +296,7 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                           type="button"
                           onClick={() => handleAttachmentAction([attachment])}
                           disabled={
-                            state === AttachmentState.REMOTE && isDownloading
+                            state === AttachmentState.REMOTE && (isDownloading || expired)
                           }
                           className={cn(
                             "w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
@@ -244,7 +333,8 @@ const MessagesContainer = ({ onRequestFile }: MessagesContainerProps) => {
                       <button
                         type="button"
                         onClick={() => handleAttachmentAction(msg.attachments!)}
-                        className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs font-medium backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                        disabled={msg.attachments.some((attachment) => Boolean(downloadProgress[attachment.id]))}
+                        className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs font-medium backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/10"
                       >
                         <Download className="h-3.5 w-3.5 opacity-80 transition-opacity group-hover:opacity-100" />
                         <span>Download All</span>

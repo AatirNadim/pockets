@@ -7,7 +7,6 @@ import {
   Mic,
   MicOff,
   PhoneOff,
-  Settings,
   Video,
   VideoOff,
   Volume2,
@@ -151,8 +150,8 @@ const MediaControl = ({
   const { showChat, toggleShowChat } = useChatStore();
 
   return (
-    <div className="w-full glass border-t border-stone-200/50 dark:border-stone-700/50">
-      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto px-4 py-4 sm:flex-wrap sm:justify-center sm:gap-4 sm:p-6">
+    <div className="w-full shrink-0 border-t border-stone-200/70 bg-white/80 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-stone-700/50 dark:bg-stone-900/85">
+      <div aria-label="Call controls" className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain px-3 py-3 [scrollbar-width:thin] sm:flex-wrap sm:justify-center sm:gap-4 sm:px-6 sm:py-5">
         <Button
           onClick={() => {
             onToggleMute(!isMicrophoneMuted).then(() => {
@@ -161,6 +160,9 @@ const MediaControl = ({
           }}
           variant="ghost"
           size="lg"
+          aria-label={isMicrophoneMuted ? "Turn microphone on" : "Turn microphone off"}
+          aria-pressed={!isMicrophoneMuted}
+          disabled={!microphones.length}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isMicrophoneMuted
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -182,6 +184,9 @@ const MediaControl = ({
           }}
           variant="ghost"
           size="lg"
+          aria-label={isVideoOff ? "Turn camera on" : "Turn camera off"}
+          aria-pressed={!isVideoOff}
+          disabled={!cameras.length}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isVideoOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -199,6 +204,8 @@ const MediaControl = ({
           onClick={toggleSpeakerOff}
           variant="ghost"
           size="lg"
+          aria-label={isSpeakerOff ? "Turn speaker on" : "Turn speaker off"}
+          aria-pressed={!isSpeakerOff}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isSpeakerOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"
@@ -232,6 +239,8 @@ const MediaControl = ({
           onClick={toggleShowChat}
           variant="ghost"
           size="lg"
+          aria-label={showChat ? "Close chat and files" : "Open chat and files"}
+          aria-pressed={showChat}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             showChat
               ? "bg-amber-500 hover:bg-amber-600 text-white"
@@ -241,20 +250,13 @@ const MediaControl = ({
           <MessageSquare className="w-5 h-5" />
         </Button>
 
-        <Button
-          variant="ghost"
-          size="lg"
-          className="w-12 h-12 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 transition-all duration-200 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
-        >
-          <Settings className="w-5 h-5" />
-        </Button>
-
         <div className="w-px h-8 bg-stone-300 dark:bg-stone-600 mx-2"></div>
 
         <Button
           onClick={onLeave}
           variant="ghost"
           size="lg"
+          aria-label="Leave room"
           className="w-12 h-12 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white transition-all duration-200 transform hover:scale-105"
         >
           <PhoneOff className="w-5 h-5" />

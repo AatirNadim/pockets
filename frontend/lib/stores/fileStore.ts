@@ -1,24 +1,23 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 
-import type { FileAttachment } from "@pockets/shared";
 import { MAX_QUEUED_FILES } from "../constants";
 
 export type QueuedFile = {
   id: string;
   file: File;
+  sharedAt?: number;
 };
 
-export type ReceivedFileRecord = FileAttachment & {
-  url: string | null;
-  receivedAt: number;
-};
+export const SHARED_FILE_TTL_MS = 10 * 60 * 1000;
 
 export type DownloadProgressRecord = {
   status: "requested" | "in-progress";
   receivedBytes: number;
   totalBytes: number | null;
   startedAt: number;
+  lastActivityAt: number;
+  ownerId?: string;
 };
 
 /**
@@ -37,7 +36,6 @@ export type UploadSessionInfo = {
 interface FileState {
   filesToBeSent: QueuedFile[];
   fileCatalog: Record<string, QueuedFile>;
-  receivedFiles: Record<string, ReceivedFileRecord>;
   downloadProgress: Record<string, DownloadProgressRecord>;
   /** @deprecated Use activeUploadSessions for per-session tracking */
   sendingFile: File | null;
@@ -59,12 +57,12 @@ interface FileActions {
   setTransferProgress: (progress: number) => void;
   /** @deprecated Use session-based tracking */
   setIsSending: (isSending: boolean) => void;
-  registerReceivedFile: (file: ReceivedFileRecord) => void;
   getLocalFileEntry: (fileId: string) => QueuedFile | undefined;
+  markFilesShared: (fileIds: string[], sharedAt?: number) => void;
+  expireSharedFiles: (now?: number) => void;
   getLocalFile: (fileId: string) => File | undefined;
   hasLocalFile: (fileId: string) => boolean;
-  getReceivedFile: (fileId: string) => ReceivedFileRecord | undefined;
-  markDownloadRequested: (fileIds: string[]) => void;
+  markDownloadRequested: (fileIds: string[], ownerId?: string) => void;
   beginDownload: (fileId: string, totalBytes: number) => void;
   updateDownloadProgress: (fileId: string, receivedBytes: number) => void;
   clearDownloadProgress: (fileIds: string[]) => void;
@@ -80,19 +78,13 @@ interface FileActions {
   hasActiveUploads: () => boolean;
 }
 
-const revokeUrl = (url?: string | null) => {
-  if (typeof window === "undefined" || !url) {
-    return;
-  }
-  URL.revokeObjectURL(url);
-};
+const fileExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export type { FileState };
 
 export const useFileStore = create<FileState & FileActions>()((set, get) => ({
   filesToBeSent: [],
   fileCatalog: {},
-  receivedFiles: {},
   downloadProgress: {},
   sendingFile: null,
   transferProgress: 0,
@@ -181,22 +173,7 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
   setSendingFile: (file) => set({ sendingFile: file }),
   setTransferProgress: (progress) => set({ transferProgress: progress }),
   setIsSending: (isSending) => set({ isSending }),
-  registerReceivedFile: (file) =>
-    set((state) => {
-      const prevRecord = state.receivedFiles[file.id];
-      if (prevRecord?.url && prevRecord.url !== file.url) {
-        revokeUrl(prevRecord.url);
-      }
-
-      return {
-        ...state,
-        receivedFiles: {
-          ...state.receivedFiles,
-          [file.id]: file,
-        },
-      };
-    }),
-  markDownloadRequested: (fileIds) =>
+  markDownloadRequested: (fileIds, ownerId) =>
     set((state) => ({
       ...state,
       downloadProgress: {
@@ -205,11 +182,14 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
           if (state.downloadProgress[fileId]) {
             return acc;
           }
+          const now = Date.now();
           acc[fileId] = {
             status: "requested",
             receivedBytes: 0,
             totalBytes: null,
-            startedAt: Date.now(),
+            startedAt: now,
+            lastActivityAt: now,
+            ownerId,
           };
           return acc;
         }, {} as Record<string, DownloadProgressRecord>),
@@ -227,6 +207,8 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
             receivedBytes: existing?.receivedBytes ?? 0,
             totalBytes,
             startedAt: existing?.startedAt ?? Date.now(),
+            lastActivityAt: Date.now(),
+            ownerId: existing?.ownerId,
           },
         },
       };
@@ -245,6 +227,7 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
           [fileId]: {
             ...tracker,
             receivedBytes,
+            lastActivityAt: Date.now(),
           },
         },
       };
@@ -253,7 +236,8 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
     set((state) => {
       let newState = { ...state };
       fileIds.forEach((fileId) => {
-        const { [fileId]: _removed, ...rest } = newState.downloadProgress;
+        const rest = { ...newState.downloadProgress };
+        delete rest[fileId];
         newState = {
           ...newState,
           downloadProgress: rest,
@@ -261,20 +245,63 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
       });
       return newState;
     }),
-  getLocalFileEntry: (fileId) => get().fileCatalog[fileId],
-  getLocalFile: (fileId) => get().fileCatalog[fileId]?.file,
-  hasLocalFile: (fileId) => Boolean(get().fileCatalog[fileId]),
-  getReceivedFile: (fileId) => get().receivedFiles[fileId],
+  getLocalFileEntry: (fileId) => {
+    const entry = get().fileCatalog[fileId];
+    if (!entry || entry.sharedAt === undefined || Date.now() - entry.sharedAt >= SHARED_FILE_TTL_MS) return undefined;
+    return entry;
+  },
+  markFilesShared: (fileIds, sharedAt = Date.now()) => {
+    set((state) => {
+      const fileCatalog = { ...state.fileCatalog };
+      for (const fileId of fileIds) {
+        const entry = fileCatalog[fileId];
+        if (entry) fileCatalog[fileId] = { ...entry, sharedAt };
+      }
+      return { ...state, fileCatalog };
+    });
+    for (const fileId of fileIds) {
+      const previous = fileExpiryTimers.get(fileId);
+      if (previous) clearTimeout(previous);
+      fileExpiryTimers.set(fileId, setTimeout(() => {
+        useFileStore.getState().expireSharedFiles();
+        fileExpiryTimers.delete(fileId);
+      }, Math.max(0, sharedAt + SHARED_FILE_TTL_MS - Date.now())));
+    }
+  },
+  expireSharedFiles: (now = Date.now()) => set((state) => {
+    const fileCatalog = { ...state.fileCatalog };
+    let changed = false;
+    for (const [fileId, entry] of Object.entries(fileCatalog)) {
+      if (entry.sharedAt !== undefined && now - entry.sharedAt >= SHARED_FILE_TTL_MS) {
+        delete fileCatalog[fileId];
+        changed = true;
+      }
+    }
+    if (!changed) return state;
+    for (const [fileId, entry] of Object.entries(state.fileCatalog)) {
+      if (entry.sharedAt !== undefined && now - entry.sharedAt >= SHARED_FILE_TTL_MS) {
+        const timer = fileExpiryTimers.get(fileId);
+        if (timer) clearTimeout(timer);
+        fileExpiryTimers.delete(fileId);
+      }
+    }
+    return { ...state, fileCatalog };
+  }),
+  getLocalFile: (fileId) => {
+    const entry = get().fileCatalog[fileId];
+    return entry && (entry.sharedAt === undefined || Date.now() - entry.sharedAt < SHARED_FILE_TTL_MS) ? entry.file : undefined;
+  },
+  hasLocalFile: (fileId) => {
+    const entry = get().fileCatalog[fileId];
+    return Boolean(entry && (entry.sharedAt === undefined || Date.now() - entry.sharedAt < SHARED_FILE_TTL_MS));
+  },
   resetFileStore: () => {
-    const state = get();
-    Object.values(state.receivedFiles).forEach((record) =>
-      revokeUrl(record.url)
-    );
+    fileExpiryTimers.forEach(clearTimeout);
+    fileExpiryTimers.clear();
 
     set({
       filesToBeSent: [],
       fileCatalog: {},
-      receivedFiles: {},
       downloadProgress: {},
       sendingFile: null,
       transferProgress: 0,
@@ -313,7 +340,8 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
       if (!state.activeUploadSessions[sessionId]) {
         return state;
       }
-      const { [sessionId]: _removed, ...rest } = state.activeUploadSessions;
+      const rest = { ...state.activeUploadSessions };
+      delete rest[sessionId];
       return {
         ...state,
         activeUploadSessions: rest,

@@ -1,16 +1,18 @@
 "use client";
 
-import type React from "react";
-
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { useMediaStore } from "@/lib/stores/mediaStore";
 import { useSocket } from "@/lib/hooks/socketHook";
 import { useUserStore } from "@/lib/stores/userStore";
 import { useJoinRequestStore } from "@/lib/stores/joinRequestStore";
+import { useChatStore } from "@/lib/stores/chatStore";
+import type { Shortcut } from "@/components/custom/keyboardShortcuts";
 import { UserType } from "@/lib/constants";
 import { cn, isValidUUID } from "@/lib/utils";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
 
 const Header = dynamic(() => import("./header"), { ssr: false });
@@ -38,10 +40,14 @@ const JoinRequestList = dynamic(
   { ssr: false }
 );
 
-const RoomIdDisplay = dynamic(
-  () => import("@/components/custom/roomIdDisplay"),
-  { ssr: false }
-);
+const ROOM_SHORTCUTS: Shortcut[] = [
+  { key: "m", label: "Toggle microphone" },
+  { key: "v", label: "Toggle camera" },
+  { key: "s", label: "Toggle speaker audio" },
+  { key: "c", label: "Open or close chat and files" },
+  { key: "i", label: "Copy room invite" },
+  { key: "l", label: "Open leave room confirmation" },
+];
 
 export default function Room() {
   const {
@@ -49,7 +55,13 @@ export default function Room() {
     availableMicrophones,
     selectedCameraId,
     selectedMicrophoneId,
+    mediaError,
+    setMediaError,
+    isMicrophoneMuted,
+    isVideoOff,
+    toggleSpeakerOff,
   } = useMediaStore();
+  const toggleShowChat = useChatStore((state) => state.toggleShowChat);
   const { userType, userId } = useUserStore();
 
   const router = useRouter();
@@ -70,22 +82,30 @@ export default function Room() {
     respondToJoinRequest,
     sendChatMessage,
     requestFileDownload,
+    requestFileAvailability,
+    requestFileReupload,
   } = useSocket();
   const { requests } = useJoinRequestStore();
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const didValidateEntry = useRef(false);
   const isHost = userType === UserType.HOST;
 
   const cleanUpRef = useRef(cleanUp);
+  const connectToRoomRef = useRef(connectToRoom);
 
   useEffect(() => {
+    if (didValidateEntry.current) return;
+    didValidateEntry.current = true;
     if (!isValidUUID(roomId)) {
-      alert("Invalid Room ID. Redirecting to home page.");
+      toast.error("This room link is not valid.");
       router.push("/");
+      return;
     }
     if (!userId) {
-      alert("User not initialized. Redirecting to home page.");
+      toast.error("Your room session is missing. Please rejoin from the home page.");
       router.push("/");
     }
-  }, [router]);
+  }, [router, roomId, userId]);
 
   // cleanupref will always have latest cleanUp function
   useEffect(() => {
@@ -93,37 +113,25 @@ export default function Room() {
   }, [cleanUp]);
 
   useEffect(() => {
-    connectToRoom();
-  }, []);
-
-  const handlePopState = useCallback(
-    (event: PopStateEvent) => {
-      event.preventDefault();
-      const shouldLeave = window.confirm(
-        "Leaving the room will end your session. Do you want to proceed?"
-      );
-
-      if (shouldLeave) {
-        window.removeEventListener("popstate", handlePopState);
-        cleanUpRef.current();
-        router.back();
-      } else {
-        window.history.pushState(null, "", window.location.href);
-      }
-    },
-    [router]
-  );
+    connectToRoomRef.current = connectToRoom;
+  }, [connectToRoom]);
 
   useEffect(() => {
-    // prevent accidental back navigation without warning
-
-    window.history.pushState(null, "", window.location.href);
-    window.addEventListener("popstate", handlePopState);
-
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
+    if (!leaveDialogOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setLeaveDialogOpen(false);
+        window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus());
+      }
     };
-  }, [router]);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [leaveDialogOpen]);
+
+  useEffect(() => {
+    if (!isValidUUID(roomId) || !userId) return;
+    void connectToRoomRef.current();
+  }, [roomId, userId]);
 
   useEffect(() => {
     // 1. Handler to prompt the user before reloading/closing
@@ -154,15 +162,28 @@ export default function Room() {
   }, []);
 
   const onLeave = useCallback(() => {
-    console.log("cleanup being called on leave...");
     cleanUpRef.current();
     router.push("/");
   }, [router]);
 
+  const handleShortcut = useCallback((key: string) => {
+    if (key === "m" && availableMicrophones.length) {
+      void updateAudioSendStateForPeers(!isMicrophoneMuted);
+    } else if (key === "v" && availableCameras.length) {
+      void updateVideoSendStateForPeers(!isVideoOff);
+    } else if (key === "s") {
+      toggleSpeakerOff();
+    } else if (key === "c") {
+      toggleShowChat();
+    } else if (key === "i") {
+      window.dispatchEvent(new CustomEvent("pockets:copy-invite"));
+    } else if (key === "l") {
+      setLeaveDialogOpen(true);
+    }
+  }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, toggleSpeakerOff, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
+
   return (
-    <div className="relative flex h-dvh sm:h-screen w-screen flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
-      {/* Subtle ambient gradient */}
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-amber-50/30 via-transparent to-rose-50/20 dark:from-amber-900/10 dark:via-transparent dark:to-rose-900/5" />
+    <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
 
       {/* Header */}
       <Header
@@ -170,19 +191,26 @@ export default function Room() {
         status={status}
         isConnected={isConnected}
         isRoomFull={isRoomFull}
+        shortcuts={ROOM_SHORTCUTS}
+        onShortcut={handleShortcut}
       />
+      {mediaError && <div role="status" className="z-10 flex items-center justify-between gap-3 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"><span>{mediaError}</span><Button variant="ghost" size="sm" onClick={() => setMediaError(null)} aria-label="Dismiss media notice">Dismiss</Button></div>}
 
       {/* Main Content */}
-      <div className="w-full flex-1 min-h-0 flex flex-col sm:flex-row">
+      <div className="w-full flex-1 min-h-0 flex flex-col lg:flex-row">
         {/* Video Area */}
         <div
           className={cn(
-            "relative transition-all duration-300 w-full min-h-0",
-            "flex-1 flex flex-col-reverse"
+            "relative transition-all duration-300 w-full min-h-0 flex-1",
+            "flex flex-col"
             // "flex-1"
             // showChat ? "sm:mr-80" : ""
           )}
         >
+          {/* Remote Video Grid */}
+          <RemoteVideoGrid status={status} isConnected={isConnected} />
+
+          <LocalVideoTile localVideoRef={localVideoRef} />
           <MediaControl
             cameras={availableCameras}
             microphones={availableMicrophones}
@@ -192,35 +220,40 @@ export default function Room() {
             onMicrophoneChange={switchMicrophone}
             onToggleMute={updateAudioSendStateForPeers}
             onToggleVideo={updateVideoSendStateForPeers}
-            onLeave={onLeave}
+            onLeave={() => setLeaveDialogOpen(true)}
           />
-          {/* Remote Video Grid */}
-          <RemoteVideoGrid />
-
-          <LocalVideoTile localVideoRef={localVideoRef} />
         </div>
         {/* Chat Sidebar */}
         <ChatSidebar
           sendChatMessage={sendChatMessage}
           requestFileDownload={requestFileDownload}
+          requestFileAvailability={requestFileAvailability}
+          requestFileReupload={requestFileReupload}
         />
       </div>
 
       {isHost && requests.length > 0 && (
-        <div
-          className={cn([
-            "fixed left-4 right-4 sm:left-auto sm:right-6 bottom-28 sm:bottom-40 md:bottom-65 z-40 flex sm:w-80 flex-col gap-3 overflow-auto max-h-[40vh] p-2 md:p-4",
-            "glass-strong rounded-3xl",
-          ])}
-        >
+        <section aria-label="Pending guest requests" className="fixed left-3 right-3 top-20 z-40 max-h-[35dvh] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-3 shadow-xl dark:border-stone-700 dark:bg-stone-900 sm:left-auto sm:right-4 sm:w-80">
           <div className="flex flex-col gap-3">
             <JoinRequestList respondToJoinRequest={respondToJoinRequest} />
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Room ID Display */}
-      <RoomIdDisplay roomId={roomId} />
+      {leaveDialogOpen && <div className="fixed inset-0 z-[70] grid place-items-center bg-stone-950/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLeaveDialogOpen(false); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="leave-title" onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+          const first = buttons[0];
+          const last = buttons[buttons.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }} className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl dark:border-stone-700 dark:bg-stone-900">
+          <h2 id="leave-title" className="text-lg font-semibold">Leave this room?</h2>
+          <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">You’ll disconnect from this session. You can join again with the room ID.</p>
+          <div className="mt-6 flex justify-end gap-3"><Button autoFocus variant="secondary" onClick={() => { setLeaveDialogOpen(false); window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus()); }}>Stay</Button><Button className="bg-rose-600 text-white hover:bg-rose-700" onClick={onLeave}>Leave room</Button></div>
+        </section>
+      </div>}
     </div>
   );
 }
