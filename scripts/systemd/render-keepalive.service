@@ -1,0 +1,15 @@
+[Unit]
+Description=Render Keep-Alive Ping Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/local_dev/pockets/scripts/render-keepalive.sh
+Environment="HEALTH_URL=https://pockets-kyb4.onrender.com/health"
+Environment="MAX_RETRIES=3"
+Environment="MAX_TIME=75"
+Environment="CONNECT_TIMEOUT=20"
+Environment="BACKOFF_BASE=5"
+StandardOutput=journal
+StandardError=journal
