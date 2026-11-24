@@ -10,6 +10,8 @@ The package entry point re-exports `src/constants.ts` and `src/types.ts`.
 
 - **Signaling:** join/leave, join approval, roster, participant lifecycle, audio state, SDP offer/answer, ICE candidate, errors, and room-full messages.
 - **Peer data channels:** chat envelopes, file request/response envelopes, file metadata, transfer setup, and incoming transfer state shapes.
+- **Selective chat:** chat messages may include recipient IDs and display names. The frontend uses those recipients to send over only the selected peers' data channels; room-wide messages omit the recipient list.
+- **File transfer protocol:** transfer setup declares a protocol version, session, channel label, file count, and expected byte count. The receiver validates metadata, ordering, and declared sizes before finalizing files.
 - **Shared domain types:** participant, room, role (`UserType`), attachment, chat message, and transfer status.
 - **Common rule:** `MAX_USERS_PER_ROOM` is six, including the host and pending guests in admission accounting.
 

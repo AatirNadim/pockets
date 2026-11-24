@@ -28,7 +28,7 @@ This is a pnpm workspace with three packages:
 
 ## Quick start
 
-Requirements: Node.js 20+, Corepack with pnpm 9.15.0, and a browser with camera/microphone support.
+Requirements: Node.js 20+, Corepack with pnpm 9.15.0, and a browser with WebRTC, WebSocket, and data-channel support. Camera and microphone access is optional for joining; browsers require HTTPS (or localhost in development) to grant those permissions.
 
 ```bash
 corepack enable pnpm
@@ -65,6 +65,10 @@ Run from the repository root:
 - Media uses a full mesh of browser peer connections; connection count and network load grow as rooms get larger.
 - The signaling server is designed as a single instance. Redis does not route WebSocket messages between replicas.
 - ICE defaults to public STUN servers. Some networks require a separately operated TURN provider; Pockets can fetch short lived TURN credentials from a configured server side endpoint.
+- In deployed environments, serve the app over HTTPS and configure its browser reachable signaling endpoint over WSS. HTTPS does not guarantee a direct peer route; TURN may be needed on restrictive networks.
+- If camera or microphone access is denied or unavailable, the UI explains the issue and allows joining without the unavailable media. Chat and file sharing still require connected peer data channels.
+- Chat can be sent to the whole room or selected connected participants. File transfer remains peer-to-peer and requested by recipients.
+- The landing page has generated browser/app icons and generated Open Graph and Twitter preview images. Set `NEXT_PUBLIC_SITE_URL` to the canonical public origin for production metadata.
 - WebRTC encrypts transport, but Pockets does not provide account identity verification or an additional application level end to end security layer.
 
 For implementation details by package, start with the [architecture guide](docs/README.md), then follow its links to the frontend, server, and shared protocol READMEs.

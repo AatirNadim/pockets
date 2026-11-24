@@ -4,6 +4,33 @@ Set `NEXT_PUBLIC_SITE_URL` to the canonical public origin for sitemap and social
 
 The frontend is a Next.js 15 App Router application using React 19. It provides the landing and room experiences, obtains browser media, establishes WebRTC connections, and manages room chat and file transfers.
 
+## Browser behavior and media permissions
+
+The client needs browser support for WebRTC peer connections and data channels, plus WebSocket for signaling. Camera and microphone access is optional: the room UI reports denied permissions, missing devices, and unavailable media APIs, and the client can continue without available media. Users can change browser permissions and rejoin to enable those tracks. Deployed pages should use HTTPS and connect to the signaling service over WSS; a secure page alone cannot overcome restrictive NAT or firewall rules.
+
+```mermaid
+flowchart TD
+    Open[Open room in a WebRTC-capable browser] --> Media{Camera and microphone available and allowed?}
+    Media -->|Yes| Capture[Capture available media]
+    Media -->|No| Notice[Show media notice; continue without unavailable tracks]
+    Capture --> Signal[Connect to signaling service over WebSocket or WSS]
+    Notice --> Signal
+    Signal --> Admit{Host admits guest?}
+    Admit -->|No| Wait[Wait for admission or show rejection]
+    Admit -->|Yes| Peer[Connect peers using ICE and WebRTC]
+    Peer --> Data[Chat and file data channels]
+```
+
+The app uses public STUN by default. Configure `TURN_CREDENTIALS_URL` on the Next.js server to fetch an `{ "iceServers": [...] }` response containing TURN configuration and short lived credentials; optionally set `TURN_CREDENTIALS_TOKEN` for server-to-server authentication. Pockets does not operate a TURN service. See the [deployment guide](../LOCAL_DEVELOPMENT.md) for network limitations and HTTPS proxy setup.
+
+## Room features
+
+- Guests request to join by room ID; the host approves or rejects them. Rooms allow up to six active and pending participants combined.
+- Chat messages can go to everyone or to a selected set of connected peers. Selecting recipients sends directly to those peers' data channels; the signaling server does not receive the message.
+- Keyboard help is available with `?`. On the landing page, `Enter` creates/joins the selected room, `N` creates a room, and `J` selects join. In a room, `M` toggles the microphone, `V` toggles the camera, `S` toggles speaker audio, `C` opens/closes chat and files, `I` copies the invite, and `L` opens the leave confirmation. `T` switches theme. Shortcuts pause while an editable control is focused.
+
+The root layout generates the favicon, Apple touch icon, Open Graph card, and Twitter large-image card. Set `NEXT_PUBLIC_SITE_URL` to the canonical public site URL; Vercel's deployment hostname is used when unset, and local development falls back to `http://localhost:3000`. Room pages are excluded from indexing.
+
 Start with the [root README](../README.md) for the workspace overview and quick start. See [architecture and feature flows](../docs/README.md) for the complete room and peer connection diagrams, [the server README](../server/README.md) for signaling behavior, and [local development and deployment](../LOCAL_DEVELOPMENT.md) for setup and HTTPS.
 
 ## Main paths
@@ -47,6 +74,7 @@ Copy `frontend/.env.example` to `frontend/.env.local` for development.
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_SERVER_PATH` | Browser-reachable signaling hostname and port. The client selects `ws://` or `wss://` from the page protocol; a `ws://` or `wss://` prefix can override this. Defaults to `localhost:8080`. |
+| `NEXT_PUBLIC_SITE_URL` | Canonical public site origin used for sitemap and social metadata. On Vercel, `VERCEL_URL` is used if this is unset. |
 | `TURN_CREDENTIALS_URL` | Optional URL fetched by the Next.js server for short lived ICE/TURN credentials. It must return `{ "iceServers": [...] }`. |
 | `TURN_CREDENTIALS_TOKEN` | Optional bearer token sent server-to-server to the credential endpoint. Keep it private; do not rename it with `NEXT_PUBLIC_`. |
 

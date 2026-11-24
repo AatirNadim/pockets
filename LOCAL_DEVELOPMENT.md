@@ -13,7 +13,10 @@ This guide covers three ways to let another device reach a development instance:
 - Node.js 20 or later
 - Corepack and pnpm 9.15.0 (`corepack enable pnpm`)
 - Docker Compose only for the optional Redis or production-like Compose paths
-- HTTPS for camera and microphone access from another device
+- A browser with WebRTC peer connection, data channel, and WebSocket support
+- HTTPS for camera and microphone access from another device; camera/microphone permissions themselves remain under browser and device control
+
+Any device type can try the app if its browser provides these capabilities, but “has a browser” alone is not enough. Camera and microphone access is optional; the room UI reports permission or device failures and continues without unavailable tracks. A device such as a car display may have a restricted browser or no usable camera/microphone, so test the specific browser before relying on it.
 
 ## Start the development services
 
@@ -53,6 +56,8 @@ Use this when both devices are on the same reachable Wi-Fi or wired network and 
 The Next.js development script already binds to `0.0.0.0`; the signaling server also listens on the host's network interfaces. `localhost` or `127.0.0.1` on the other device would point back to that device, so use the development computer's address for both the page and signaling setting.
 
 **Camera and microphone:** HTTPS is not required for ordinary local development. Browsers allow camera and microphone access from `http://localhost` on the same device. When opening the app from another device, browsers require a secure context for those media features, so use Method 2. For HTTP development, point `NEXT_PUBLIC_SERVER_PATH` at the signaling server's HTTP endpoint (for example, `localhost:8080`); for HTTPS, use its HTTPS/WSS endpoint (for example, `yourhostname.local:8443`).
+
+If access is denied, users can change the site permission in browser settings and rejoin to enable media. Without media, they can still use chat or files once peer data channels connect. The browser still needs network access to the signaling service and the other peers' WebRTC routes.
 
 ## Method 2: Use an mDNS name, optionally with a Caddy HTTPS proxy
 
@@ -108,7 +113,7 @@ Check the tunnel provider's instructions for WebSocket support and hostname/port
 - **Connection refused or times out:** check that both services are running, ports/host firewall rules are correct, and Wi-Fi client isolation or a VPN is not blocking peer-to-host traffic.
 - **`.local` does not resolve:** confirm the host advertises that name, both devices are on the same multicast-enabled LAN, and try the LAN IP to isolate an mDNS issue.
 - **Camera/microphone unavailable:** use HTTPS on remote devices and trust the local Caddy CA, or use an HTTPS tunnel. The browser still requires the user to grant device permission.
-- **Peers join but media does not connect:** WebRTC tries direct network paths and uses the configured public STUN servers by default. Some NAT/firewall combinations require TURN; this project does not provide a TURN service. See operating limits below.
+- **Peers join but media does not connect:** WebRTC tries direct network paths and uses the configured public STUN servers by default. Some NAT/firewall combinations require an external TURN service. Configure `TURN_CREDENTIALS_URL` and, if needed, `TURN_CREDENTIALS_TOKEN` on the Next.js server; this project does not provide a TURN service. See operating limits below.
 
 ## Optional Redis
 
@@ -145,6 +150,7 @@ pnpm build:frontend
 | `REDIS_URL` | Server | Optional Redis URL for room metadata; connection failure stops startup. Unset uses in-memory metadata. |
 | `ROOM_TTL_SECONDS` | Server | Redis room metadata expiry; defaults to one hour and is refreshed while a room has live sessions. |
 | `NEXT_PUBLIC_SERVER_PATH` | Frontend | Browser-visible signaling host and port; may include `ws://` or `wss://` to select the protocol explicitly. Compiled into the frontend. |
+| `NEXT_PUBLIC_SITE_URL` | Frontend | Canonical public origin for generated sitemap and social metadata. Vercel's `VERCEL_URL` is used if this is unset. |
 | `TURN_CREDENTIALS_URL` | Frontend server | Optional private credential endpoint returning `{ "iceServers": [...] }` with short-lived TURN credentials. |
 | `TURN_CREDENTIALS_TOKEN` | Frontend server | Optional bearer token sent only from the Next.js server to the credential endpoint; never use a `NEXT_PUBLIC_` name. |
 

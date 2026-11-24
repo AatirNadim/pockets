@@ -31,6 +31,8 @@ flowchart TB
 
 The browser owns media capture, peer connections, chat/file data channels, and most visible room state. The server owns room admission and relays negotiation messages. It does not proxy media, chat messages, or file bytes. Shared types keep the WebSocket envelopes and common limits aligned across the two runtimes.
 
+The browser needs WebRTC and WebSocket support. Camera and microphone permissions are optional: if access is denied or a device/API is unavailable, the frontend reports it and can join with the available tracks (or no tracks). HTTPS is required for remote camera/microphone capture, and an HTTPS page must reach signaling over WSS. The app's UI cannot bypass device policy, browser permission settings, or network restrictions.
+
 ## Room lifecycle
 
 ```mermaid
@@ -77,13 +79,26 @@ sequenceDiagram
     Note over A,B: Direct peer connection carries audio/video and data channels
 ```
 
-The client starts with public STUN servers. STUN can discover a route through many NATs but does not relay traffic. For stricter networks, configure `TURN_CREDENTIALS_URL` and optionally `TURN_CREDENTIALS_TOKEN` on the Next.js server; the endpoint must return short lived credentials in `{ "iceServers": [...] }` form. See [frontend configuration](../frontend/README.md#configuration) and [deployment setup](../LOCAL_DEVELOPMENT.md#environment-variables).
+The client starts with public STUN servers. STUN can discover a route through many NATs but does not relay traffic. For stricter networks, configure `TURN_CREDENTIALS_URL` and optionally `TURN_CREDENTIALS_TOKEN` on the Next.js server; the endpoint must return short lived credentials in `{ "iceServers": [...] }` form. TURN is a separately operated service; Pockets fetches its ICE configuration but does not host or relay through a built-in TURN server. If credential retrieval fails, the browser falls back to STUN only. See [frontend configuration](../frontend/README.md#configuration) and [deployment setup](../LOCAL_DEVELOPMENT.md#environment-variables).
+
+```mermaid
+flowchart LR
+    A[Browser A] --> ICE[ICE connectivity checks]
+    B[Browser B] --> ICE
+    ICE -->|Direct route succeeds| P2P[Direct WebRTC connection]
+    ICE -->|Direct route blocked and TURN configured| Relay[External TURN relay]
+    ICE -->|Direct route blocked and no usable TURN| Fail[Peer remains disconnected]
+    P2P --> Traffic[Media, chat, and file channels]
+    Relay --> Traffic
+```
 
 Each participant connects directly to every other participant. This full mesh is appropriate only for small rooms; the six-person cap is a product and resource boundary, not a guarantee that every device/network can support six simultaneous media peers.
 
 ## Chat and file exchange
 
 Chat and file control messages share a peer data channel, not the signaling WebSocket. Chat is session scoped in browser state and is not persisted by the server. File attachments are advertised in chat but their bytes remain on the owner's device until requested or otherwise sent through the current transfer action.
+
+Chat can be sent to the room or to selected connected participants. A selected-recipient message is sent only on those peer data channels; an attachment in that message is advertised to the same recipients. The local sender sees the message in their own chat state. There is no server-side message history or moderation layer.
 
 ```mermaid
 sequenceDiagram
