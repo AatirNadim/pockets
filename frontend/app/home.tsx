@@ -15,6 +15,10 @@ import { StudioPreview } from "@/components/custom/landing/studioPreview";
 import { FeatureBento } from "@/components/custom/landing/featureBento";
 import { TechnicalFaq } from "@/components/custom/landing/technicalFaq";
 import { LandingFooter } from "@/components/custom/landing/landingFooter";
+import {
+  DemoBackgroundSilhouettes,
+  PhilosophyBackgroundSilhouettes,
+} from "@/components/custom/landing/roomBackgroundSilhouettes";
 
 export default function Home() {
   const router = useRouter();
@@ -78,7 +82,7 @@ export default function Home() {
 
   return (
     <div className="relative isolate min-h-dvh overflow-x-hidden bg-stone-50 font-sans text-stone-900 selection:bg-amber-200 selection:text-amber-900 dark:bg-stone-950 dark:text-stone-100 dark:selection:bg-amber-900 dark:selection:text-amber-100">
-      <StaticBackground />
+      <StaticBackground variant="landing" />
 
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-50 flex h-20 items-center justify-between border-b border-stone-200/60 bg-stone-50/80 px-5 backdrop-blur-md transition-colors dark:border-stone-800/60 dark:bg-stone-950/80 sm:px-10">
@@ -154,13 +158,13 @@ export default function Home() {
         <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-5rem)] w-full max-w-6xl content-center items-start gap-12 px-5 py-12 lg:grid-cols-[1.1fr_430px] lg:px-10 lg:py-20">
           {/* Left Column: Brand Statement & Value Pillars */}
           <section className="max-w-xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-300/80 bg-amber-100/60 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-stone-800 backdrop-blur-sm dark:border-stone-700 dark:bg-stone-900/80 dark:text-stone-200">
+            {/* <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-300/80 bg-amber-100/60 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-stone-800 backdrop-blur-sm dark:border-stone-700 dark:bg-stone-900/80 dark:text-stone-200">
               <span className="relative flex h-2 w-2" aria-hidden="true">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
               <span>A small room for your people</span>
-            </div>
+            </div> */}
 
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl">
               Meet, talk, and share in a{" "}
@@ -312,38 +316,44 @@ export default function Home() {
         </div>
 
         {/* Interactive Studio Preview Section */}
-        <section
-          id="demo"
-          aria-labelledby="showcase-title"
-          className="relative mx-auto w-full max-w-6xl px-5 py-20 lg:px-10"
-        >
-          <div className="mx-auto mb-12 max-w-2xl text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-stone-600 dark:border-stone-800 dark:bg-stone-900/70 dark:text-stone-300">
-              <Sparkles size={12} className="text-amber-600 dark:text-amber-400" />
-              Inside a Pocket Studio
-            </span>
-            <h2
-              id="showcase-title"
-              className="mt-4 text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
-            >
-              Feel the tactile rhythm of collaboration.
-            </h2>
-            <p className="mt-4 text-base leading-relaxed text-stone-600 dark:text-stone-300 sm:text-lg">
-              Test out the mock studio below: toggle camera and mic states, copy the invite link, and simulate a
-              30 KiB chunk WebRTC file transfer.
-            </p>
-          </div>
+        <div className="relative">
+          <DemoBackgroundSilhouettes />
+          <section
+            id="demo"
+            aria-labelledby="showcase-title"
+            className="relative z-10 mx-auto w-full max-w-6xl px-5 py-20 lg:px-10"
+          >
+            <div className="mx-auto mb-12 max-w-2xl text-center">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-stone-600 dark:border-stone-800 dark:bg-stone-900/70 dark:text-stone-300">
+                <Sparkles size={12} className="text-amber-600 dark:text-amber-400" />
+                Inside a Pocket Studio
+              </span>
+              <h2
+                id="showcase-title"
+                className="mt-4 text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
+              >
+                Feel the tactile rhythm of collaboration.
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-stone-600 dark:text-stone-300 sm:text-lg">
+                Test out the mock studio below: toggle camera and mic states, copy the invite link, and simulate a
+                30 KiB chunk WebRTC file transfer.
+              </p>
+            </div>
 
-          <StudioPreview />
-        </section>
+            <StudioPreview />
+          </section>
+        </div>
 
         {/* Philosophy & Capabilities Asymmetric Bento Grid */}
-        <div id="philosophy">
-          <FeatureBento />
+        <div id="philosophy" className="relative">
+          <PhilosophyBackgroundSilhouettes />
+          <div className="relative z-10">
+            <FeatureBento />
+          </div>
         </div>
 
         {/* Technical Specs & FAQ Accordion */}
-        <div id="specs">
+        <div id="specs" className="relative z-10">
           <TechnicalFaq />
         </div>
       </main>
