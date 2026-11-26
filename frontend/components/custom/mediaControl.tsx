@@ -131,6 +131,7 @@ type MediaControlProps = {
   onMicrophoneChange: (deviceId: string) => void | Promise<void>;
   onToggleMute: (nextMuted: boolean) => Promise<void>;
   onToggleVideo: (disabled: boolean) => Promise<void>;
+  onToggleSpeaker: () => void;
   onLeave: () => void;
 };
 
@@ -143,9 +144,10 @@ const MediaControl = ({
   onMicrophoneChange,
   onToggleMute,
   onToggleVideo,
+  onToggleSpeaker,
   onLeave,
 }: MediaControlProps) => {
-  const { isVideoOff, isSpeakerOff, isMicrophoneMuted, toggleSpeakerOff } =
+  const { isVideoOff, isSpeakerOff, isMicrophoneMuted } =
     useMediaStore();
   const { showChat, toggleShowChat } = useChatStore();
 
@@ -201,7 +203,7 @@ const MediaControl = ({
         </Button>
 
         <Button
-          onClick={toggleSpeakerOff}
+          onClick={onToggleSpeaker}
           variant="ghost"
           size="lg"
           aria-label={isSpeakerOff ? "Turn speaker on" : "Turn speaker off"}

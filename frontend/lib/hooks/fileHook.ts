@@ -172,15 +172,13 @@ export const useFile = ({
         if (validationError) throw new Error(validationError);
         await createAndStartSession(pc, remoteUserId, currentBatch, ownerId);
       }
-      toast.success("File transfer started", {
-        description: "Sending requested file to peer.",
-      });
+      if (peerConnections.current[remoteUserId] === pc) toast.success("File transfer complete");
       return true;
     } catch (error) {
       console.error("Targeted file send failed", error);
-      toast.error("File transfer failed", {
-        description: "Could not send the requested file.",
-      });
+      if (peerConnections.current[remoteUserId] === pc) {
+        toast.error("File transfer failed", { description: "Could not send all requested files." });
+      }
       return false;
     }
   };
@@ -503,13 +501,14 @@ export const useFile = ({
             void writer?.abort?.(new Error("Transfer interrupted")).catch(() => undefined);
             clearDownloadProgress([current.currentFile.metadata.fileId]);
             clearDownloadDestination(current.currentFile.metadata.fileId);
+            if (!current.failed) toast.error("Download interrupted", { description: "The transfer ended before the entire file arrived." });
             current.failed = true;
             current.currentFile = undefined;
           }
         }
         finalizeAllCompletedFiles(channel.label);
         if (!current.failed && current.expectedFileCount !== undefined && (current.receivedFileCount !== current.expectedFileCount || current.totalReceivedBytes !== current.expectedTotalBytes || current.declaredBytes !== current.expectedTotalBytes)) {
-          toast.error("Download interrupted", { description: "The sender closed before all declared files arrived." });
+          toast.error("Download interrupted", { description: "The transfer ended before all files arrived." });
         }
         delete incomingTransfersRef.current[channel.label];
       };

@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/custom/themeToggle";
 import { Button } from "@/components/ui/button";
 import { useUserStore } from "@/lib/stores/userStore";
 import { Check, Copy, Users, Video } from "lucide-react";
+import { toast } from "sonner";
 import React, { useCallback, useEffect, useState } from "react";
 import { KeyboardShortcuts, type Shortcut } from "@/components/custom/keyboardShortcuts";
 
@@ -15,15 +16,18 @@ const Header = ({ roomId, status, isConnected, isRoomFull, shortcuts, onShortcut
   const copyInvite = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
+      toast.success("Invite link copied", { id: "room-invite" });
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
       try {
         await navigator.clipboard.writeText(roomId);
+        toast.success("Room ID copied", { id: "room-invite" });
         setCopied(true);
         window.setTimeout(() => setCopied(false), 2200);
       } catch {
         setCopied(false);
+        toast.error("Could not copy the invite", { id: "room-invite", description: "Copy the room link from your address bar." });
       }
     }
   }, [roomId]);

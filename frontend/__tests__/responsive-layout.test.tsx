@@ -139,6 +139,7 @@ describe("Variable Screen Size & Responsive Layout Verification", () => {
         onMicrophoneChange: () => {},
         onToggleMute: async () => {},
         onToggleVideo: async () => {},
+        onToggleSpeaker: () => {},
         onLeave: () => {},
       })
     );

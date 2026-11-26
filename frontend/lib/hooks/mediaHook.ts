@@ -282,6 +282,11 @@ const useMedia = () => {
         throw new Error(`Error creating new track for tracktype ${kind}`);
       }
 
+      if (deviceId) {
+        const { isVideoOff, isMicrophoneMuted } = useMediaStore.getState();
+        newTrack.enabled = kind === "video" ? !isVideoOff : !isMicrophoneMuted;
+      }
+
       // attach the new track to local stream
       await attachTrackToLocalStream(newTrack, kind);
 
@@ -306,8 +311,9 @@ const useMedia = () => {
       return true;
     } catch (error) {
       console.error(`Failed to switch ${kind} device:`, error);
-      toast.error("Device Switch Failed", {
-        description: `Unable to switch ${kind} source. Please try again.`,
+      const device = kind === "video" ? "camera" : "microphone";
+      toast.error(deviceId ? `Could not switch ${device}` : `Could not turn on the ${device}`, {
+        description: "Check that the device is connected and that browser permissions are enabled.",
       });
       return false;
     }
@@ -327,7 +333,9 @@ const useMedia = () => {
       return;
     }
 
-    await replaceLocalTrackForPeers("video", peerConnections, deviceId);
+    if (await replaceLocalTrackForPeers("video", peerConnections, deviceId)) {
+      toast.success("Camera switched", { id: "room-camera-device" });
+    }
     if (currentVideoDeviceId.current) {
       setSelectedCameraId(currentVideoDeviceId.current);
     }
@@ -348,7 +356,9 @@ const useMedia = () => {
       return;
     }
 
-    await replaceLocalTrackForPeers("audio", peerConnections, deviceId);
+    if (await replaceLocalTrackForPeers("audio", peerConnections, deviceId)) {
+      toast.success("Microphone switched", { id: "room-microphone-device" });
+    }
     if (currentAudioDeviceId.current) {
       setSelectedMicrophoneId(currentAudioDeviceId.current);
     }

@@ -184,8 +184,14 @@ export default function Room() {
 
   const onLeave = useCallback(() => {
     cleanUpRef.current();
+    toast.info("You left the room");
     router.push("/");
   }, [router]);
+
+  const onToggleSpeaker = useCallback(() => {
+    toggleSpeakerOff();
+    toast.info(useMediaStore.getState().isSpeakerOff ? "Room audio muted" : "Room audio unmuted", { id: "room-speaker" });
+  }, [toggleSpeakerOff]);
 
   const handleShortcut = useCallback((key: string) => {
     if (key === "m" && availableMicrophones.length) {
@@ -193,7 +199,7 @@ export default function Room() {
     } else if (key === "v" && availableCameras.length) {
       void updateVideoSendStateForPeers(!isVideoOff);
     } else if (key === "s") {
-      toggleSpeakerOff();
+      onToggleSpeaker();
     } else if (key === "c") {
       toggleShowChat();
     } else if (key === "i") {
@@ -201,7 +207,7 @@ export default function Room() {
     } else if (key === "l") {
       setLeaveDialogOpen(true);
     }
-  }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, toggleSpeakerOff, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
+  }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, onToggleSpeaker, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
@@ -242,6 +248,7 @@ export default function Room() {
             onMicrophoneChange={switchMicrophone}
             onToggleMute={updateAudioSendStateForPeers}
             onToggleVideo={updateVideoSendStateForPeers}
+            onToggleSpeaker={onToggleSpeaker}
             onLeave={() => setLeaveDialogOpen(true)}
           />
         </div>
@@ -272,7 +279,7 @@ export default function Room() {
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         }} className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl dark:border-stone-700 dark:bg-stone-900 sm:p-6">
           <h2 id="leave-title" className="text-lg font-semibold tracking-tight">Leave this room?</h2>
-          <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">You’ll disconnect from this session. You can join again with the room ID.</p>
+          <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">{isHost ? "Leaving as host ends the room for everyone." : "You can request to join again while the host keeps the room open."}</p>
           <div className="mt-6 flex flex-wrap justify-end gap-3"><Button autoFocus size="lg" variant="secondary" onClick={() => { setLeaveDialogOpen(false); window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus()); }}>Stay</Button><Button size="lg" className="bg-rose-600 text-white hover:bg-rose-700" onClick={onLeave}>Leave room</Button></div>
         </section>
       </div>}

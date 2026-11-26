@@ -90,8 +90,8 @@ export class SocketService {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   }
 
-  private sendError(socket: WebSocket, message: string) {
-    this.send(socket, { type: "error", message } satisfies ErrorMessage);
+  private sendError(socket: WebSocket, message: string, details?: Omit<ErrorMessage, "type" | "message">) {
+    this.send(socket, { type: "error", message, ...details } satisfies ErrorMessage);
   }
 
   async handleMessage(socket: WebSocket, rawMessage: unknown) {
@@ -155,7 +155,10 @@ export class SocketService {
       }
     } catch (error) {
       console.error("Signaling operation failed:", error instanceof Error ? error.message : "unknown error");
-      this.sendError(socket, "The room operation could not be completed. Please retry.");
+      const details = message.type === "join-request-accepted" || message.type === "join-request-rejected"
+        ? { code: "join-request-failed" as const, guestUserId: message.guestUserId }
+        : undefined;
+      this.sendError(socket, "The room operation could not be completed. Please retry.", details);
     }
   }
 
@@ -181,6 +184,7 @@ export class SocketService {
         throw error;
       }
       this.attachSession(socket, user, message.roomId, "active");
+      this.send(socket, { type: "room-roster", roomId: message.roomId, users: [] });
       return;
     }
 
@@ -202,6 +206,7 @@ export class SocketService {
     this.attachSession(socket, user, message.roomId, "pending");
     const request: JoinRequestMessage = { type: "join-request", roomId: message.roomId, guest: user };
     this.send(host.socket, request);
+    this.send(socket, request);
     } finally {
       this.joiningUserIds.delete(message.userId);
     }
@@ -214,37 +219,41 @@ export class SocketService {
   }
 
   private async decideAdmission(host: Session, message: JoinRequestDecisionMessage) {
+    const decisionDetails = { code: "join-request-failed" as const, guestUserId: message.guestUserId };
     if (host.userType !== UserType.HOST) {
-      this.sendError(host.socket, "Only the room host can admit guests.");
+      this.sendError(host.socket, "Only the room host can admit guests.", decisionDetails);
       return;
     }
     const room = await this.roomService.getRoomDetails(host.roomId);
     if (!room || room.hostId !== host.userId) {
-      this.sendError(host.socket, "This connection is not the active host.");
+      this.sendError(host.socket, "This connection is not the active host.", decisionDetails);
       return;
     }
     const guest = this.sessionByUser.get(message.guestUserId);
     if (!guest || guest.roomId !== host.roomId || guest.state !== "pending" || guest.closing) {
-      this.sendError(host.socket, "That guest request is no longer pending.");
+      this.sendError(host.socket, "That guest request is no longer pending.", { ...decisionDetails, requestNoLongerPending: true });
       return;
     }
     if (message.type === "join-request-rejected") {
       await this.roomService.removePendingGuestForRoom(host.roomId, guest.userId);
       this.sendError(guest.socket, "Your request to join the room was declined by the host.");
       await this.removeSession(guest, true);
+      this.send(host.socket, { ...message, hostUserId: host.userId, guestName: guest.userName });
       return;
     }
     const result = await this.roomService.admitPendingGuest(host.roomId, guest.userId, MAX_USERS_PER_ROOM);
     if (result === "full") {
       this.send(guest.socket, { type: "room-full", roomId: host.roomId } satisfies RoomFullMessage);
+      this.sendError(host.socket, "The room is full.", decisionDetails);
       return;
     }
     if (result !== "accepted") {
-      this.sendError(host.socket, "That guest request is no longer pending.");
+      this.sendError(host.socket, "That guest request is no longer pending.", { ...decisionDetails, requestNoLongerPending: true });
       return;
     }
     if (this.sessionByUser.get(guest.userId) !== guest || guest.closing) {
       await this.roomService.removeUserFromRoom(host.roomId, guest.userId);
+      this.sendError(host.socket, "This guest is no longer waiting to join.", { ...decisionDetails, requestNoLongerPending: true });
       return;
     }
     guest.state = "active";
@@ -254,13 +263,14 @@ export class SocketService {
       .map((session) => ({ id: session.userId, name: session.userName, type: session.userType }));
     this.send(guest.socket, { type: "room-roster", roomId: host.roomId, users: roster });
     const joined: UserJoinedMessage = { type: "user-joined", roomId: host.roomId, userId: guest.userId, userName: guest.userName, userType: guest.userType };
+    this.send(host.socket, { ...message, hostUserId: host.userId, guestName: guest.userName });
     await this.broadcast(host.roomId, joined, guest.userId);
   }
 
   private forwardSignal(session: Session, message: OfferMessage | AnswerMessage | IceCandidateMessage) {
     const target = this.sessionByUser.get(message.toUserId);
     if (!target || target.roomId !== session.roomId || target.state !== "active" || target.closing || target.socket.readyState !== WebSocket.OPEN) {
-      this.sendError(session.socket, "That participant is not available in this room.");
+      this.sendError(session.socket, "That participant is not available in this room.", { code: "participant-unavailable" });
       return;
     }
     if (message.type === "offer") this.send(target.socket, { ...message, roomId: session.roomId, fromUserId: session.userId, fromUserName: session.userName, fromUserType: session.userType });

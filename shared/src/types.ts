@@ -123,6 +123,9 @@ export type UserLeftMessage = {
 export type ErrorMessage = {
   type: "error";
   message: string;
+  code?: "participant-unavailable" | "join-request-failed";
+  guestUserId?: string;
+  requestNoLongerPending?: boolean;
 };
 
 export type RoomFullMessage = {

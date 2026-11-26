@@ -34,16 +34,13 @@ export function StudioPreview() {
 
   const handleCopyInvite = async () => {
     try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(mockInviteUrl);
-      }
+      await navigator.clipboard.writeText(mockInviteUrl);
       setCopied(true);
-      toast.success("Studio invite link copied to clipboard!");
+      toast.success("Sample invite link copied");
       setTimeout(() => setCopied(false), 2200);
     } catch {
-      setCopied(true);
-      toast.success("Copied mock invite!");
-      setTimeout(() => setCopied(false), 2200);
+      setCopied(false);
+      toast.error("Could not copy the sample invite link");
     }
   };
 
@@ -62,7 +59,7 @@ export function StudioPreview() {
         setTransferProgress(100);
         setTransferStatus("completed");
         if (transferIntervalRef.current) clearInterval(transferIntervalRef.current);
-        toast.success("File transfer completed via WebRTC data channel (140 chunks)");
+        toast.success("Preview transfer complete");
       } else {
         setTransferProgress(progress);
       }
@@ -370,7 +367,7 @@ export function StudioPreview() {
             type="button"
             onClick={() => {
               setScreenSharing(!screenSharing);
-              toast.info(screenSharing ? "Screen sharing stopped" : "Screen sharing simulated");
+              toast.info(screenSharing ? "Screen sharing stopped in the preview" : "Screen sharing started in the preview");
             }}
             title="Screen share preview"
             aria-label="Screen share preview"

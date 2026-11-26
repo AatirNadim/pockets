@@ -64,12 +64,12 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
         .filter((file) => unavailable.includes(file.id))
         .map((file) => ({ id: file.id, name: file.name }));
       if (!files.length) {
-        if (detail.availableFileIds?.length) onRequestFile(detail.availableFileIds, detail.ownerId);
+        if (detail.availableFileIds?.length && !onRequestFile(detail.availableFileIds, detail.ownerId)) toast.error("Could not request the remaining files");
         return;
       }
       promptForReupload(files, (request) => {
         if (request) onRequestReupload(files.map((file) => file.id), detail.ownerId, files.map((file) => file.name));
-        if (detail.availableFileIds.length) onRequestFile(detail.availableFileIds, detail.ownerId);
+        if (detail.availableFileIds.length && !onRequestFile(detail.availableFileIds, detail.ownerId)) toast.error("Could not request the remaining files");
       });
     };
     window.addEventListener("file-download-unavailable", handleUnavailable);
@@ -91,8 +91,11 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       ? `When sharing multiple files, each file must be ${MAX_FILE_SIZE_MB_MULTIPLE_SEND} MB or smaller.`
       : null;
     if (error) toast.error("File cannot be queued", { description: error });
-    else if (accepted.length) addFiles(accepted);
-    if (selected.length > accepted.length && !error) toast.warning("Queue limit reached", { description: `The queue holds up to ${MAX_QUEUED_FILES} files. Added the available files.` });
+    else if (accepted.length) {
+      addFiles(accepted);
+      if (accepted.length === selected.length) toast.info(accepted.length === 1 ? "File attached" : `${accepted.length} files attached`);
+    }
+    if (selected.length > accepted.length && !error) toast.warning("Queue limit reached", { description: accepted.length ? `Attached ${accepted.length} of ${selected.length} files.` : `Remove an attachment before adding more. The queue holds up to ${MAX_QUEUED_FILES} files.` });
     if (!selected.length && (event.target.files?.length ?? 0) > 0) toast.info("Those files are already queued.");
     event.target.value = "";
   }, [addFiles, filesToBeSent]);
@@ -134,7 +137,8 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       }
       toast.success(`Saved ${name}`);
     } catch (error) {
-      toast.error("Could not save download", { description: describeSaveError(error) });
+      if (error instanceof DOMException && error.name === "AbortError") toast.info("Download cancelled");
+      else toast.error("Could not save download", { description: describeSaveError(error) });
     } finally {
       fileActionBusyRef.current = false;
     }
