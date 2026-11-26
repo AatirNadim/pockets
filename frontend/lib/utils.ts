@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { ChatMessage } from "@pockets/shared";
+import { generateRandomUsername } from "./stores/userStore";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -50,4 +51,10 @@ const resolveSender = (
   return "Guest";
 };
 
-export { isValidUUID, formatBytes, formatTimestamp, resolveSender };
+export {
+  isValidUUID,
+  formatBytes,
+  formatTimestamp,
+  resolveSender,
+  generateRandomUsername,
+};

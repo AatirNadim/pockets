@@ -23,27 +23,27 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
               <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                 {request.guestName}
               </p>
-              <p className="text-xs text-stone-500 dark:text-stone-400">
+              <p className="text-xs text-stone-600 dark:text-stone-400">
                 wants to join this room
               </p>
             </div>
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:bg-stone-800 dark:text-stone-300">
+            <span className="rounded-full bg-stone-200/80 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-600 dark:bg-stone-800 dark:text-stone-300">
               Guest
             </span>
           </div>
 
           <div className="mt-4 flex gap-2">
             <Button
-              size="sm"
-              className="flex-1 bg-amber-500 text-white hover:bg-amber-600 rounded-xl"
+              size="lg"
+              className="flex-1 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300"
               onClick={() => respondToJoinRequest(request.guestId, "accept")}
             >
               Admit
             </Button>
             <Button
-              size="sm"
+              size="lg"
               variant="secondary"
-              className="flex-1 bg-stone-100 text-stone-700 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700 rounded-xl"
+              className="flex-1 rounded-xl"
               onClick={() => respondToJoinRequest(request.guestId, "reject")}
             >
               Decline

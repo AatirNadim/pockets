@@ -62,7 +62,13 @@ export default function Room() {
     toggleSpeakerOff,
   } = useMediaStore();
   const toggleShowChat = useChatStore((state) => state.toggleShowChat);
-  const { userType, userId } = useUserStore();
+  const {
+    userType,
+    userId,
+    initializeUserAsHost,
+    initializeUserAsGuest,
+    setRoomId,
+  } = useUserStore();
 
   const router = useRouter();
   const params = useParams();
@@ -102,10 +108,25 @@ export default function Room() {
       return;
     }
     if (!userId) {
-      toast.error("Your room session is missing. Please rejoin from the home page.");
-      router.push("/");
+      const searchParams = new URLSearchParams(window.location.search);
+      const name = searchParams.get("name") || undefined;
+      const isHostParam = searchParams.get("host") === "true";
+      setRoomId(roomId);
+      if (isHostParam) {
+        initializeUserAsHost(name);
+      } else {
+        initializeUserAsGuest(name);
+      }
+      return;
     }
-  }, [router, roomId, userId]);
+  }, [
+    router,
+    roomId,
+    userId,
+    initializeUserAsHost,
+    initializeUserAsGuest,
+    setRoomId,
+  ]);
 
   // cleanupref will always have latest cleanUp function
   useEffect(() => {
@@ -183,7 +204,7 @@ export default function Room() {
   }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, toggleSpeakerOff, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
 
   return (
-    <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+    <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
 
       {/* Header */}
       <Header
@@ -249,9 +270,9 @@ export default function Room() {
           if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         }} className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl dark:border-stone-700 dark:bg-stone-900">
-          <h2 id="leave-title" className="text-lg font-semibold">Leave this room?</h2>
+          <h2 id="leave-title" className="text-lg font-semibold tracking-tight">Leave this room?</h2>
           <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">You’ll disconnect from this session. You can join again with the room ID.</p>
-          <div className="mt-6 flex justify-end gap-3"><Button autoFocus variant="secondary" onClick={() => { setLeaveDialogOpen(false); window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus()); }}>Stay</Button><Button className="bg-rose-600 text-white hover:bg-rose-700" onClick={onLeave}>Leave room</Button></div>
+          <div className="mt-6 flex justify-end gap-3"><Button autoFocus size="lg" variant="secondary" onClick={() => { setLeaveDialogOpen(false); window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus()); }}>Stay</Button><Button size="lg" className="bg-rose-600 text-white hover:bg-rose-700" onClick={onLeave}>Leave room</Button></div>
         </section>
       </div>}
     </div>

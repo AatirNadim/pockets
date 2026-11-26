@@ -8,6 +8,7 @@
     "build": "rm -rf .next && next build",
     "start": "next start",
     "lint": "eslint app components lib next.config.ts",
+    "test": "tsx --tsconfig tsconfig.json --test __tests__/*.test.ts __tests__/*.test.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

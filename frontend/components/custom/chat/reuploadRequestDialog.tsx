@@ -52,8 +52,8 @@ export function ReuploadRequestDialog({ files, open, onConfirm, onCancel }: Reup
           {files.map((file) => <li key={file.id} className="break-all">{file.name}</li>)}
         </ul>
         <div className="mt-6 flex flex-wrap justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onCancel}>No, thanks</Button>
-          <Button type="button" onClick={onConfirm}>Send request</Button>
+          <Button type="button" size="lg" variant="secondary" onClick={onCancel}>No, thanks</Button>
+          <Button type="button" size="lg" onClick={onConfirm}>Send request</Button>
         </div>
       </section>
     </div>

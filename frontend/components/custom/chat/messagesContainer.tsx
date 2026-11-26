@@ -249,17 +249,17 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                 className={cn(
                   "max-w-[85%] rounded-2xl px-4 py-2 shadow-sm",
                   isOwnMessage
-                    ? "bg-amber-500 text-white rounded-br-sm"
-                    : "bg-stone-100 text-stone-800 dark:bg-stone-800 dark:text-stone-100 rounded-bl-sm"
+                    ? "bg-amber-600 text-white rounded-br-sm"
+                    : "bg-stone-200/80 text-stone-900 dark:bg-stone-800 dark:text-stone-100 rounded-bl-sm"
                 )}
               >
-                <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                <div className="text-xs font-semibold uppercase tracking-wide opacity-75">
                   {resolveSender(
                     msg as ChatMessage & { user?: string },
                     userId || ""
                   )}
                 </div>
-                {msg.recipients?.length ? <span className="mb-1 inline-flex cursor-help items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[10px]" title={`Visible to: ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`} aria-label={`Private message visible to ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`}><span aria-hidden="true">◉</span> {msg.recipients.length === 1 ? "Private" : `${msg.recipients.length} recipients`}</span> : null}
+                {msg.recipients?.length ? <span className={cn("mb-1 inline-flex cursor-help items-center gap-1 rounded-full px-2 py-0.5 text-[10px]", isOwnMessage ? "bg-white/15 text-white" : "bg-stone-300/70 text-stone-800 dark:bg-stone-700/70 dark:text-stone-100")} title={`Visible to: ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`} aria-label={`Private message visible to ${msg.recipients.map((recipient) => recipient.userName).join(", ")}`}><span aria-hidden="true">◉</span> {msg.recipients.length === 1 ? "Private" : `${msg.recipients.length} recipients`}</span> : null}
                 <div className="text-sm wrap-break-word whitespace-pre-wrap">
                   {msg.message}
                 </div>
@@ -299,7 +299,10 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                             state === AttachmentState.REMOTE && (isDownloading || expired)
                           }
                           className={cn(
-                            "w-full rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-left text-xs backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+                            "w-full rounded-xl border px-3 py-2 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2",
+                            isOwnMessage
+                              ? "border-white/30 bg-white/15 hover:bg-white/25 focus-visible:ring-white/60"
+                              : "border-stone-300/80 bg-white/80 text-stone-900 hover:bg-white focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-100 dark:hover:bg-stone-900 dark:focus-visible:ring-amber-400",
                             state === AttachmentState.REMOTE &&
                               isDownloading &&
                               "cursor-not-allowed opacity-80"
@@ -334,7 +337,12 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                         type="button"
                         onClick={() => handleAttachmentAction(msg.attachments!)}
                         disabled={msg.attachments.some((attachment) => Boolean(downloadProgress[attachment.id]))}
-                        className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs font-medium backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/10"
+                        className={cn(
+                          "group flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50",
+                          isOwnMessage
+                            ? "border-white/30 bg-white/15 hover:bg-white/25 focus-visible:ring-white/60 disabled:hover:bg-white/15"
+                            : "border-stone-300/80 bg-white/80 text-stone-900 hover:bg-white focus-visible:ring-amber-600 disabled:hover:bg-white/80 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-100 dark:hover:bg-stone-900 dark:focus-visible:ring-amber-400 dark:disabled:hover:bg-stone-900/70"
+                        )}
                       >
                         <Download className="h-3.5 w-3.5 opacity-80 transition-opacity group-hover:opacity-100" />
                         <span>Download All</span>

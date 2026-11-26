@@ -73,14 +73,14 @@ const RemoteVideoTile = ({
     <div
       className={`relative rounded-2xl overflow-hidden border border-stone-200/50 bg-stone-900/60 shadow-xl transition-all duration-200 dark:border-stone-700/50 ${
         isSpeaking
-          ? "ring-2 ring-amber-400 drop-shadow-[0_0_18px_rgba(251,191,36,0.35)]"
+          ? "ring-2 ring-amber-400 drop-shadow-[0_0_18px_rgba(255,141,104,0.35)]"
           : ""
       }`}
       style={
         isSpeaking
           ? {
-              boxShadow: `0 0 ${18 + normalizedLevel * 20}px rgba(251,191,36,${
-                0.2 + normalizedLevel * 0.4
+              boxShadow: `0 0 ${18 + normalizedLevel * 20}px rgba(255,141,104,${
+                0.22 + normalizedLevel * 0.38
               })`,
             }
           : undefined
@@ -101,7 +101,7 @@ const RemoteVideoTile = ({
       </div>
       {isHost && (
         <div className="absolute bottom-3 right-3 group">
-          <div className="flex items-center gap-1 rounded-full bg-linear-to-r from-amber-400 via-orange-500 to-rose-500 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
+          <div className="flex items-center gap-1 rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105 dark:bg-amber-400 dark:text-stone-950">
             <Crown className="w-3 h-3" />
             Host
           </div>
@@ -118,7 +118,7 @@ const RemoteVideoTile = ({
         aria-pressed={isLocallyMuted}
         title={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
         onClick={() => setIsLocallyMuted((muted) => !muted)}
-        className="absolute right-3 top-3 z-10 size-10 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
+        className="absolute right-3 top-3 z-10 size-11 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
       >
         {isLocallyMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
       </Button>
@@ -131,7 +131,7 @@ const RemoteVideoTile = ({
         aria-pressed={isVideoHiddenForMe}
         title={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
         onClick={() => setIsVideoHiddenForMe((hidden) => !hidden)}
-        className="absolute right-3 top-14 z-10 size-10 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
+        className="absolute right-3 top-16 z-10 size-11 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
       >
         {isVideoHiddenForMe ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
       </Button>
@@ -140,8 +140,8 @@ const RemoteVideoTile = ({
           audioEnabled ? "opacity-100" : "opacity-30"
         }`}
         style={{
-          backgroundColor: isSpeaking ? "rgba(251,191,36,0.9)" : "rgba(0,0,0,0.45)",
-          color: isSpeaking ? "#451a03" : undefined,
+          backgroundColor: isSpeaking ? "rgba(255,141,104,0.95)" : "rgba(0,23,53,0.65)",
+          color: isSpeaking ? "#001735" : undefined,
         }}
       >
         <span
@@ -167,7 +167,7 @@ const RemoteVideoTile = ({
         </div>
       )}
       {!audioEnabled && (
-        <div className="absolute right-3 top-28 rounded-full bg-stone-900/80 p-2 text-white" title="Their microphone is muted">
+        <div className="absolute right-3 top-[7.5rem] rounded-full bg-stone-900/80 p-2 text-white" title="Their microphone is muted">
           <MicOff className="w-4 h-4" />
         </div>
       )}

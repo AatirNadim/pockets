@@ -32,7 +32,7 @@ interface UserAction {
 
 export type { UserState };
 
-const generateRandomUsername = (): string => {
+export const generateRandomUsername = (): string => {
   const adjectives = [
     "Swift",
     "Bright",
