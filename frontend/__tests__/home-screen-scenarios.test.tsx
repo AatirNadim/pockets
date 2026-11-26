@@ -190,11 +190,13 @@ describe("Home Screen & User Onboarding Scenarios", () => {
       assert.match(html, /aria-labelledby="entry-title"/);
     });
 
-    it("renders quick hotkey cues ('N', 'J', '↵')", () => {
+    it("renders quick hotkey cues ('N', 'J', '↵') and shortcut button keybinding ('K')", () => {
       const html = renderHomeScreen();
       assert.match(html, />N<\/kbd>/);
       assert.match(html, />J<\/kbd>/);
       assert.match(html, />↵<\/kbd>/);
+      assert.match(html, /aria-label="Show keyboard shortcuts"[\s\S]*?>K<\/kbd>/);
+      assert.match(html, /aria-keyshortcuts="k \?"/);
     });
 
     it("applies minimum touch target classes (min-h-11, h-12, min-h-12)", () => {

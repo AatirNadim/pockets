@@ -137,6 +137,16 @@ describe("Room Screen & Active Session Scenarios", () => {
       assert.match(html, /aria-label="3 participants"/);
       assert.match(html, /<span>3<\/span>/);
     });
+
+    it("renders the keyboard shortcuts button with its K keybinding cue", () => {
+      const html = renderHeader({
+        status: "Connected",
+        isConnected: true,
+        isRoomFull: false,
+      });
+      assert.match(html, /aria-label="Show keyboard shortcuts"[\s\S]*?>K<\/kbd>/);
+      assert.match(html, /aria-keyshortcuts="k \?"/);
+    });
   });
 
   describe("Scenario 2: Doorbell / Join Request Flow", () => {

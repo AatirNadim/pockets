@@ -63,13 +63,13 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
       }
       if (isTypingTarget(event.target)) return;
 
-      if (event.key === "?") {
+      const key = event.key.toLowerCase();
+      if (event.key === "?" || key === "k") {
         event.preventDefault();
         setOpen((current) => !current);
         return;
       }
 
-      const key = event.key.toLowerCase();
       if (key === "t") {
         event.preventDefault();
         setTheme(resolvedTheme === "dark" ? "light" : "dark");
@@ -90,13 +90,19 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
       <Button
         type="button"
         variant="ghost"
-        size="icon"
         aria-label="Show keyboard shortcuts"
-        title="Keyboard shortcuts (?)"
+        aria-keyshortcuts="k ?"
+        title="Keyboard shortcuts (K or ?)"
         onClick={() => setOpen(true)}
-        className="size-11 shrink-0"
+        className="h-11 shrink-0 gap-1.5 px-2.5 has-[>svg]:px-2.5"
       >
-        <Keyboard size={18} />
+        <Keyboard size={18} aria-hidden="true" />
+        <kbd
+          aria-hidden="true"
+          className="rounded border border-stone-300 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-stone-700 shadow-2xs dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"
+        >
+          K
+        </kbd>
       </Button>
       {open && mounted && createPortal(
         <div
@@ -136,10 +142,22 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
               </Button>
             </div>
             <dl className="space-y-2">
-              {[...shortcuts, { key: "t", label: "Toggle light or dark theme" }, { key: "?", label: "Show or hide this cheat sheet" }].map(({ key, label }) => (
+              {[
+                ...shortcuts.map(({ key, label }) => ({
+                  key,
+                  keys: [key === "?" ? "?" : key === "enter" ? "Enter" : key.toUpperCase()],
+                  label,
+                })),
+                { key: "t", keys: ["T"], label: "Toggle light or dark theme" },
+                { key: "k", keys: ["K", "?"], label: "Show or hide this cheat sheet" },
+              ].map(({ key, keys, label }) => (
                 <div key={key} className="flex items-center justify-between gap-4 rounded-xl border border-stone-200/70 bg-stone-50 px-3 py-2.5 dark:border-stone-700/60 dark:bg-stone-800">
                   <dt className="text-sm text-stone-700 dark:text-stone-200">{label}</dt>
-                  <dd><kbd className="min-w-8 rounded-md border border-stone-300 bg-white px-2 py-1 text-center font-mono text-xs font-semibold text-stone-700 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200">{key === "?" ? "?" : key === "enter" ? "Enter" : key.toUpperCase()}</kbd></dd>
+                  <dd className="flex items-center gap-1.5">
+                    {keys.map((k) => (
+                      <kbd key={k} className="min-w-8 rounded-md border border-stone-300 bg-white px-2 py-1 text-center font-mono text-xs font-semibold text-stone-700 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200">{k}</kbd>
+                    ))}
+                  </dd>
                 </div>
               ))}
             </dl>

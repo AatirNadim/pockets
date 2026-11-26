@@ -212,6 +212,8 @@ describe("Design System & Styling Tokens", () => {
 
       assert.match(layoutContent, /@\/components\/ui\/sonner/);
       assert.match(shortcutsContent, /createPortal/);
+      assert.match(shortcutsContent, /key === "k"/);
+      assert.match(shortcutsContent, /event\.key === "\?"/);
     });
   });
 });

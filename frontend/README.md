@@ -27,7 +27,7 @@ The app uses public STUN by default. Configure `TURN_CREDENTIALS_URL` on the Nex
 
 - Guests request to join by room ID; the host approves or rejects them. Rooms allow up to six active and pending participants combined.
 - Chat messages can go to everyone or to a selected set of connected peers. Selecting recipients sends directly to those peers' data channels; the signaling server does not receive the message.
-- Keyboard help is available with `?`. On the landing page, `Enter` creates/joins the selected room, `N` creates a room, and `J` selects join. In a room, `M` toggles the microphone, `V` toggles the camera, `S` toggles speaker audio, `C` opens/closes chat and files, `I` copies the invite, and `L` opens the leave confirmation. `T` switches theme. Shortcuts pause while an editable control is focused.
+- Keyboard help is available with `K` or `?`. On the landing page, `Enter` creates/joins the selected room, `N` creates a room, and `J` selects join. In a room, `M` toggles the microphone, `V` toggles the camera, `S` toggles speaker audio, `C` opens/closes chat and files, `I` copies the invite, and `L` opens the leave confirmation. `T` switches theme. Shortcuts pause while an editable control is focused.
 
 The root layout generates the favicon, Apple touch icon, Open Graph card, and Twitter large-image card. Set `NEXT_PUBLIC_SITE_URL` to the canonical public site URL; Vercel's deployment hostname is used when unset, and local development falls back to `http://localhost:3000`. Room pages are excluded from indexing.
 
