@@ -58,10 +58,10 @@ const DeviceDropdown = ({
           size="lg"
           aria-label={buttonLabel}
           className={cn(
-            "min-w-12 sm:min-w-40 justify-center sm:justify-between rounded-2xl px-3 sm:px-4 text-sm font-medium",
+            "h-12 min-w-12 sm:min-w-40 justify-center sm:justify-between rounded-2xl px-3 sm:px-4 text-sm font-medium",
             isDisabled
-              ? "cursor-not-allowed bg-stone-200 text-stone-500 opacity-50 dark:bg-stone-800 dark:text-stone-500"
-              : "bg-stone-100 text-stone-700 hover:bg-stone-200 hover:text-stone-900 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-white"
+              ? "cursor-not-allowed bg-stone-200 text-stone-600 opacity-50 dark:bg-stone-800 dark:text-stone-400"
+              : "bg-stone-200/80 text-stone-800 hover:bg-stone-200 hover:text-stone-900 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700 dark:hover:text-white"
           )}
           disabled={isDisabled}
         >
@@ -166,7 +166,7 @@ const MediaControl = ({
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isMicrophoneMuted
               ? "bg-rose-500 hover:bg-rose-600 text-white"
-              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
+              : "bg-stone-200/80 hover:bg-stone-200 text-stone-800 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-200 dark:hover:text-white"
           }`}
         >
           {isMicrophoneMuted ? (
@@ -190,7 +190,7 @@ const MediaControl = ({
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isVideoOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"
-              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
+              : "bg-stone-200/80 hover:bg-stone-200 text-stone-800 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-200 dark:hover:text-white"
           }`}
         >
           {isVideoOff ? (
@@ -209,7 +209,7 @@ const MediaControl = ({
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             isSpeakerOff
               ? "bg-rose-500 hover:bg-rose-600 text-white"
-              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
+              : "bg-stone-200/80 hover:bg-stone-200 text-stone-800 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-200 dark:hover:text-white"
           }`}
         >
           {isSpeakerOff ? (
@@ -243,14 +243,14 @@ const MediaControl = ({
           aria-pressed={showChat}
           className={`w-12 h-12 rounded-2xl transition-all duration-200 ${
             showChat
-              ? "bg-amber-500 hover:bg-amber-600 text-white"
-              : "bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 dark:hover:text-white"
+              ? "bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300"
+              : "bg-stone-200/80 hover:bg-stone-200 text-stone-800 hover:text-stone-900 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-200 dark:hover:text-white"
           }`}
         >
           <MessageSquare className="w-5 h-5" />
         </Button>
 
-        <div className="w-px h-8 bg-stone-300 dark:bg-stone-600 mx-2"></div>
+        <div className="w-px h-8 bg-stone-300 dark:bg-stone-700 mx-2"></div>
 
         <Button
           onClick={onLeave}

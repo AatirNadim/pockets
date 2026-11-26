@@ -7,7 +7,7 @@ const ChatComponent = dynamic(() => import("./chatComponent"), {
   ssr: false,
   loading: () => (
     <div className="flex-1 flex items-center justify-center">
-      <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-amber-600 dark:border-amber-400 border-t-transparent rounded-full animate-spin" />
     </div>
   ),
 });
@@ -40,7 +40,7 @@ const ChatSidebar = ({
     <div
       className={cn(
         !showChat && "hidden",
-        "fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 h-[min(68dvh,38rem)] max-h-[calc(100dvh-8rem-env(safe-area-inset-top))] w-full rounded-3xl lg:static lg:z-auto lg:h-full lg:max-h-none lg:w-[22rem] lg:shrink-0 lg:rounded-none",
+        "fixed inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 h-[min(68dvh,38rem)] max-h-[calc(100dvh-8rem-env(safe-area-inset-top))] rounded-3xl sm:inset-x-4 lg:static lg:inset-auto lg:z-auto lg:h-full lg:max-h-none lg:w-[22rem] lg:shrink-0 lg:rounded-none",
         "border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900 transition-transform duration-200 lg:border-y-0 lg:border-r-0 lg:shadow-none",
         "shadow-2xl overflow-hidden opacity-100 pointer-events-auto"
       )}

@@ -86,7 +86,7 @@ export function StudioPreview() {
       {/* Studio Header Bar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4 dark:border-stone-800">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-stone-200 bg-stone-100/80 px-3 py-1 dark:border-stone-700 dark:bg-stone-800">
+          <div className="flex min-h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-200/75 px-3.5 py-1 dark:border-stone-700 dark:bg-stone-800">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -99,7 +99,7 @@ export function StudioPreview() {
           <button
             type="button"
             onClick={handleCopyInvite}
-            className="group flex min-h-[32px] items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-700 transition hover:border-amber-600 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-amber-400 dark:hover:text-stone-100"
+            className="group flex min-h-11 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 py-1 text-xs font-medium text-stone-700 transition hover:border-amber-600 hover:bg-stone-200/50 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-amber-400 dark:hover:bg-stone-700 dark:hover:text-stone-100 dark:focus-visible:ring-amber-400"
             aria-label="Copy mock room invite link"
           >
             {copied ? (
@@ -109,7 +109,7 @@ export function StudioPreview() {
               </>
             ) : (
               <>
-                <Copy size={13} className="text-stone-400 group-hover:text-stone-600 dark:group-hover:text-stone-200" />
+                <Copy size={13} className="text-stone-600 group-hover:text-stone-900 dark:text-stone-400 dark:group-hover:text-stone-200" />
                 <span>Copy invite</span>
               </>
             )}
@@ -117,11 +117,11 @@ export function StudioPreview() {
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-stone-100 px-2.5 py-1 font-medium text-stone-600 dark:bg-stone-800/80 dark:text-stone-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-stone-200/75 px-2.5 py-1.5 font-medium text-stone-700 dark:bg-stone-800/80 dark:text-stone-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-400" />
             Maya (Host)
           </span>
-          <span className="rounded-md border border-stone-200 px-2.5 py-1 font-mono text-stone-500 dark:border-stone-800 dark:text-stone-400">
+          <span className="rounded-md border border-stone-200 px-2.5 py-1.5 font-mono text-stone-600 dark:border-stone-800 dark:text-stone-400">
             3/6 connected
           </span>
         </div>
@@ -149,10 +149,10 @@ export function StudioPreview() {
             </div>
           </div>
 
-          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-stone-900/60 px-3 py-1.5 text-xs text-white backdrop-blur-md">
+          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-stone-900/80 px-3 py-1.5 text-xs text-white backdrop-blur-md">
             <span className="flex items-center gap-1.5 font-medium">
               <span>Maya</span>
-              <span className="rounded bg-amber-600/80 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white">
+              <span className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white">
                 Host
               </span>
             </span>
@@ -169,10 +169,10 @@ export function StudioPreview() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-stone-300 text-xl font-semibold text-stone-700 shadow-sm ring-1 ring-inset ring-black/5 dark:bg-stone-700 dark:text-stone-200 dark:ring-white/10">
               A
             </div>
-            <p className="mt-3 text-xs text-stone-500 dark:text-stone-400">Listening</p>
+            <p className="mt-3 text-xs text-stone-600 dark:text-stone-400">Listening</p>
           </div>
 
-          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-stone-900/60 px-3 py-1.5 text-xs text-white backdrop-blur-md">
+          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-stone-900/80 px-3 py-1.5 text-xs text-white backdrop-blur-md">
             <span className="font-medium">Alex</span>
             <div className="flex items-center gap-1.5">
               <MicOff size={13} className="text-rose-400" />
@@ -205,17 +205,17 @@ export function StudioPreview() {
               </div>
             ) : (
               <div className="flex flex-col items-center text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-stone-200 text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400">
                   <VideoOff size={22} />
                 </div>
-                <span className="mt-2 text-xs font-medium text-stone-500 dark:text-stone-400">
+                <span className="mt-2 text-xs font-medium text-stone-600 dark:text-stone-400">
                   Camera disabled
                 </span>
               </div>
             )}
           </div>
 
-          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-stone-900/60 px-3 py-1.5 text-xs text-white backdrop-blur-md">
+          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-stone-900/80 px-3 py-1.5 text-xs text-white backdrop-blur-md">
             <span className="flex items-center gap-1.5 font-medium">
               <span>You</span>
               <span className="text-[10px] text-stone-300">(Local)</span>
@@ -252,7 +252,7 @@ export function StudioPreview() {
                   4.2 MB
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">
+              <p className="mt-0.5 text-xs text-stone-600 dark:text-stone-400">
                 Shared by Maya • WebRTC DataChannel (30 KiB chunks)
               </p>
             </div>
@@ -263,7 +263,7 @@ export function StudioPreview() {
               <button
                 type="button"
                 onClick={startTransferSimulation}
-                className="flex min-h-[38px] items-center gap-2 rounded-xl bg-amber-700 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-800 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400"
+                className="flex min-h-11 items-center gap-2 rounded-xl bg-amber-700 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-800 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300 dark:focus-visible:ring-amber-400"
               >
                 <Download size={14} />
                 <span>Simulate Download</span>
@@ -279,7 +279,8 @@ export function StudioPreview() {
                   type="button"
                   onClick={resetTransfer}
                   title="Cancel transfer"
-                  className="rounded-lg p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
+                  aria-label="Cancel transfer"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-200/75 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
                 >
                   <RefreshCw size={14} className="animate-spin" />
                 </button>
@@ -294,7 +295,7 @@ export function StudioPreview() {
                 <button
                   type="button"
                   onClick={resetTransfer}
-                  className="rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                  className="min-h-11 rounded-xl border border-stone-200 bg-white px-3.5 text-xs font-medium text-stone-700 transition hover:bg-stone-200/75 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
                 >
                   Reset
                 </button>
@@ -308,11 +309,11 @@ export function StudioPreview() {
           <div className="mt-3">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-200 dark:bg-stone-800">
               <div
-                className="h-full bg-gradient-to-r from-amber-600 to-orange-500 transition-all duration-150 ease-out dark:from-amber-500 dark:to-orange-400"
+                className="h-full bg-gradient-to-r from-amber-600 to-orange-500 transition-all duration-150 ease-out dark:from-amber-400 dark:to-orange-500"
                 style={{ width: `${transferProgress}%` }}
               />
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
+            <div className="mt-1 flex items-center justify-between text-[11px] text-stone-600 dark:text-stone-400">
               <span>Direct peer-to-peer slice transfer</span>
               <span className="font-mono">Chunk size: 30,720 bytes</span>
             </div>
@@ -322,7 +323,7 @@ export function StudioPreview() {
 
       {/* Dock Toolbar (Tactile Media Dock) */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200/80 pt-4 dark:border-stone-800">
-        <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+        <div className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-400">
           <Sliders size={14} />
           <span>Tactile Controls Preview</span>
         </div>
@@ -337,9 +338,9 @@ export function StudioPreview() {
             }}
             title={micActive ? "Mute microphone" : "Unmute microphone"}
             aria-label={micActive ? "Mute microphone" : "Unmute microphone"}
-            className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 ${
+            className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
               micActive
-                ? "border-stone-300 bg-white text-stone-800 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                ? "border-stone-300 bg-white text-stone-800 hover:bg-stone-200/75 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
                 : "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300"
             }`}
           >
@@ -355,9 +356,9 @@ export function StudioPreview() {
             }}
             title={cameraActive ? "Disable camera" : "Enable camera"}
             aria-label={cameraActive ? "Disable camera" : "Enable camera"}
-            className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 ${
+            className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
               cameraActive
-                ? "border-stone-300 bg-white text-stone-800 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                ? "border-stone-300 bg-white text-stone-800 hover:bg-stone-200/75 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
                 : "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300"
             }`}
           >
@@ -373,10 +374,10 @@ export function StudioPreview() {
             }}
             title="Screen share preview"
             aria-label="Screen share preview"
-            className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 ${
+            className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
               screenSharing
-                ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-300"
-                : "border-stone-300 bg-white text-stone-800 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                ? "border-amber-400 bg-amber-100/70 text-amber-800 dark:border-amber-400 dark:bg-amber-950/40 dark:text-amber-300"
+                : "border-stone-300 bg-white text-stone-800 hover:bg-stone-200/75 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
             }`}
           >
             <Monitor size={18} />
@@ -391,7 +392,7 @@ export function StudioPreview() {
             }}
             title="Device settings preview"
             aria-label="Device settings preview"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stone-300 bg-white text-stone-800 transition-all hover:bg-stone-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stone-300 bg-white text-stone-800 transition-all hover:bg-stone-200/75 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700 dark:focus-visible:ring-amber-400"
           >
             <Settings size={18} />
           </button>

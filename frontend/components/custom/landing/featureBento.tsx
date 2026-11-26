@@ -35,7 +35,7 @@ export function FeatureBento() {
               <span className="font-mono text-xs font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400">
                 01 / Zero Footprint
               </span>
-              <span className="flex items-center gap-1.5 rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+              <span className="flex items-center gap-1.5 rounded-full bg-stone-200/75 px-2.5 py-1 text-xs text-stone-700 dark:bg-stone-800 dark:text-stone-300">
                 <Flame size={12} className="text-amber-600 dark:text-amber-400" />
                 Auto-dissolving
               </span>
@@ -57,15 +57,15 @@ export function FeatureBento() {
             </div>
             <div className="mt-2.5 grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-xl border border-stone-200 bg-white p-2.5 dark:border-stone-800 dark:bg-stone-900">
-                <span className="block text-[11px] text-stone-500">Database rows</span>
+                <span className="block text-[11px] text-stone-600 dark:text-stone-400">Database rows</span>
                 <span className="font-mono text-base font-semibold text-stone-900 dark:text-stone-100">0</span>
               </div>
               <div className="rounded-xl border border-stone-200 bg-white p-2.5 dark:border-stone-800 dark:bg-stone-900">
-                <span className="block text-[11px] text-stone-500">Server logs</span>
+                <span className="block text-[11px] text-stone-600 dark:text-stone-400">Server logs</span>
                 <span className="font-mono text-base font-semibold text-stone-900 dark:text-stone-100">None</span>
               </div>
               <div className="rounded-xl border border-stone-200 bg-white p-2.5 dark:border-stone-800 dark:bg-stone-900">
-                <span className="block text-[11px] text-stone-500">Persistence</span>
+                <span className="block text-[11px] text-stone-600 dark:text-stone-400">Persistence</span>
                 <span className="font-mono text-base font-semibold text-emerald-600 dark:text-emerald-400">0 ms</span>
               </div>
             </div>
@@ -91,15 +91,15 @@ export function FeatureBento() {
           </div>
 
           {/* Visual Artifact: Interactive Knock Card Preview */}
-          <div className="mt-8 rounded-2xl border border-amber-200/70 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <div className="mt-8 rounded-2xl border border-amber-200/70 bg-amber-100/35 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-600 text-xs font-bold text-white">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-600 text-xs font-bold text-white dark:bg-amber-400 dark:text-stone-950">
                   A
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">Alex is knocking</p>
-                  <p className="text-[11px] text-stone-500 dark:text-stone-400">Waiting in vestibule…</p>
+                  <p className="text-[11px] text-stone-600 dark:text-stone-400">Waiting in vestibule…</p>
                 </div>
               </div>
               <span className="relative flex h-2 w-2">
@@ -112,10 +112,10 @@ export function FeatureBento() {
               <button
                 type="button"
                 onClick={() => setMockAdmitted(true)}
-                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition ${
+                className={`min-h-11 flex-1 rounded-xl px-3 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
                   mockAdmitted === true
                     ? "bg-emerald-600 text-white"
-                    : "bg-amber-700 text-white hover:bg-amber-800 dark:bg-amber-500 dark:text-stone-950"
+                    : "bg-amber-700 text-white hover:bg-amber-800 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300"
                 }`}
               >
                 {mockAdmitted === true ? "Admitted ✓" : "Admit"}
@@ -123,10 +123,10 @@ export function FeatureBento() {
               <button
                 type="button"
                 onClick={() => setMockAdmitted(false)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                className={`min-h-11 rounded-xl border px-3.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
                   mockAdmitted === false
                     ? "border-rose-400 bg-rose-100 text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-300"
-                    : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"
+                    : "border-stone-200 bg-white text-stone-700 hover:bg-stone-200/80 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
                 }`}
               >
                 {mockAdmitted === false ? "Declined" : "Decline"}
@@ -197,7 +197,7 @@ export function FeatureBento() {
           <div className="mt-8 rounded-2xl border border-stone-200/80 bg-stone-50/90 p-4 dark:border-stone-800 dark:bg-stone-950/60">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="font-medium text-stone-800 dark:text-stone-200">Mesh Topology Matrix</span>
-              <span className="font-mono text-stone-500 dark:text-stone-400">Connections = N × (N - 1) / 2 = 15 channels</span>
+              <span className="font-mono text-stone-600 dark:text-stone-400">Connections = N × (N - 1) / 2 = 15 channels</span>
             </div>
             <div className="mt-3 flex items-center justify-between">
               {["P1", "P2", "P3", "P4", "P5", "P6"].map((peer, i) => (
@@ -205,13 +205,13 @@ export function FeatureBento() {
                   <div
                     className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-mono font-semibold ${
                       i === 0
-                        ? "bg-amber-600 text-white"
+                        ? "bg-amber-600 text-white dark:bg-amber-400 dark:text-stone-950"
                         : "border border-stone-300 bg-white text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"
                     }`}
                   >
                     {peer}
                   </div>
-                  <span className="mt-1 text-[10px] text-stone-500">
+                  <span className="mt-1 text-[10px] text-stone-600 dark:text-stone-400">
                     {i === 0 ? "Host" : `Peer ${i}`}
                   </span>
                 </div>

@@ -69,14 +69,15 @@ export default function Home() {
   const scrollToEntry = useCallback(() => {
     const el = document.getElementById("entry-title");
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
       const input = document.getElementById("display-name");
       input?.focus();
     }
   }, []);
 
   return (
-    <div className="relative min-h-dvh overflow-x-hidden bg-stone-50 font-sans text-stone-900 selection:bg-amber-200 selection:text-amber-900 dark:bg-stone-950 dark:text-stone-100 dark:selection:bg-amber-900 dark:selection:text-amber-100">
+    <div className="relative isolate min-h-dvh overflow-x-hidden bg-stone-50 font-sans text-stone-900 selection:bg-amber-200 selection:text-amber-900 dark:bg-stone-950 dark:text-stone-100 dark:selection:bg-amber-900 dark:selection:text-amber-100">
       <StaticBackground />
 
       {/* Top Navigation Bar */}
@@ -84,10 +85,10 @@ export default function Home() {
         <div className="flex items-center gap-6 lg:gap-8">
           <Link
             href="/"
-            className="flex items-center gap-3 font-semibold tracking-tight transition hover:opacity-90 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-950 rounded-xl"
+            className="flex items-center gap-3 font-semibold tracking-tight transition hover:opacity-90 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-amber-400 rounded-xl"
             aria-label="Pockets home"
           >
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-600 text-white shadow-sm dark:bg-amber-500 dark:text-stone-950">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-600 text-white shadow-sm dark:bg-amber-400 dark:text-stone-950">
               <Video size={19} />
             </span>
             <span className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
@@ -96,30 +97,30 @@ export default function Home() {
           </Link>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden items-center gap-6 text-sm font-medium text-stone-600 dark:text-stone-400 md:flex">
+          <nav className="hidden items-center gap-4 text-sm font-medium text-stone-600 dark:text-stone-400 md:flex">
             <a
               href="#demo"
-              className="transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 rounded px-1 dark:hover:text-stone-100"
+              className="inline-flex min-h-11 items-center rounded-lg px-2 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:hover:text-stone-100 dark:focus-visible:ring-amber-400"
             >
               Studio Demo
             </a>
             <a
               href="#philosophy"
-              className="transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 rounded px-1 dark:hover:text-stone-100"
+              className="inline-flex min-h-11 items-center rounded-lg px-2 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:hover:text-stone-100 dark:focus-visible:ring-amber-400"
             >
               Capabilities
             </a>
             <a
               href="#specs"
-              className="transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 rounded px-1 dark:hover:text-stone-100"
+              className="inline-flex min-h-11 items-center rounded-lg px-2 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:hover:text-stone-100 dark:focus-visible:ring-amber-400"
             >
               Architecture
             </a>
             <a
-              href="https://github.com"
+              href="https://github.com/AatirNadim/pockets"
               target="_blank"
               rel="noreferrer"
-              className="transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 rounded px-1 dark:hover:text-stone-100"
+              className="inline-flex min-h-11 items-center rounded-lg px-2 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:hover:text-stone-100 dark:focus-visible:ring-amber-400"
             >
               Docs
             </a>
@@ -131,7 +132,7 @@ export default function Home() {
           <button
             type="button"
             onClick={scrollToEntry}
-            className="hidden sm:inline-flex items-center justify-center rounded-xl bg-amber-700 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-amber-800 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300"
+            className="hidden sm:inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-700 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-amber-800 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300 dark:focus-visible:ring-amber-400"
           >
             Start Room
           </button>
@@ -154,7 +155,10 @@ export default function Home() {
           {/* Left Column: Brand Statement & Value Pillars */}
           <section className="max-w-xl">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-300/80 bg-amber-100/60 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-stone-800 backdrop-blur-sm dark:border-stone-700 dark:bg-stone-900/80 dark:text-stone-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="relative flex h-2 w-2" aria-hidden="true">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
               <span>A small room for your people</span>
             </div>
 
@@ -187,14 +191,14 @@ export default function Home() {
                     />
                     <span>{pillar.label}</span>
                   </div>
-                  <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                  <p className="mt-1 text-xs text-stone-600 dark:text-stone-400">
                     {pillar.desc}
                   </p>
                 </div>
               ))}
             </div>
 
-            <div className="mt-8 hidden items-center gap-3 text-xs text-stone-500 dark:text-stone-400 sm:flex">
+            <div className="mt-8 hidden items-center gap-3 text-xs text-stone-600 dark:text-stone-400 sm:flex">
               <span>Quick hotkeys:</span>
               <kbd className="rounded border border-stone-300 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-stone-700 shadow-2xs dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300">
                 N
@@ -221,9 +225,9 @@ export default function Home() {
             >
               <div className="mb-6">
                 <h2 id="entry-title" className="text-xl font-semibold tracking-tight">Come on in</h2>
-                <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">Choose how you want to enter the room.</p>
+                <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">Choose how you want to enter the room.</p>
               </div>
-              <div role="tablist" aria-label="Room entry" className="grid grid-cols-2 rounded-xl bg-stone-100 p-1 dark:bg-stone-800">
+              <div role="tablist" aria-label="Room entry" className="grid grid-cols-2 rounded-xl bg-stone-200/80 p-1 dark:bg-stone-800">
                 {(["create", "join"] as const).map((tab) => (
                   <button
                     key={tab}
@@ -231,10 +235,10 @@ export default function Home() {
                     role="tab"
                     aria-selected={activeTab === tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`min-h-11 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 ${
+                    className={`min-h-11 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
                       activeTab === tab
                         ? "bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-white"
-                        : "text-stone-600 dark:text-stone-300"
+                        : "text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white"
                     }`}
                   >
                     {tab === "create" ? "Create a room" : "Join a room"}
@@ -246,14 +250,14 @@ export default function Home() {
               <div className="mt-6">
                 <div className="flex items-center justify-between">
                   <label htmlFor="display-name" className="text-sm font-medium text-stone-800 dark:text-stone-200">
-                    Display name <span className="font-normal text-stone-500 dark:text-stone-400">(optional)</span>
+                    Display name <span className="font-normal text-stone-600 dark:text-stone-400">(optional)</span>
                   </label>
                   <button
                     type="button"
                     onClick={handleGenerateAlias}
                     title="Generate random alias"
                     aria-label="Generate random alias"
-                    className="flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 rounded px-1.5 py-0.5"
+                    className="inline-flex min-h-11 -my-2 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400"
                   >
                     <Dices size={14} className="transition-transform active:rotate-180" />
                     <span>Randomize</span>
@@ -268,10 +272,10 @@ export default function Home() {
                     autoComplete="nickname"
                     placeholder="e.g. Maya or SwiftFox429"
                     aria-describedby="display-name-help"
-                    className="h-12 w-full rounded-xl border border-stone-300 bg-white px-4 text-base outline-none placeholder:text-stone-400 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
+                    className="h-12 w-full rounded-xl border border-stone-300 bg-white px-4 text-base outline-none placeholder:text-stone-600 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-400 dark:focus-visible:ring-amber-400"
                   />
                 </div>
-                <p id="display-name-help" className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                <p id="display-name-help" className="mt-2 text-xs text-stone-600 dark:text-stone-400">
                   Seen by peers in the room. If empty, a friendly alias is assigned automatically.
                 </p>
               </div>
@@ -282,13 +286,13 @@ export default function Home() {
                     Room invite ID
                   </label>
                   <div className="relative mt-2">
-                    <Link2 size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 dark:text-stone-500" aria-hidden="true" />
+                    <Link2 size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-600 dark:text-stone-400" aria-hidden="true" />
                     <input
                       id="room-id"
                       value={roomId || ""}
                       onChange={(e) => setRoomId(e.target.value)}
                       placeholder="Paste the room ID"
-                      className="h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-4 font-mono text-sm outline-none placeholder:font-sans placeholder:text-stone-400 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
+                      className="h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-4 font-mono text-sm outline-none placeholder:font-sans placeholder:text-stone-600 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-400 dark:focus-visible:ring-amber-400"
                     />
                   </div>
                 </div>
@@ -298,11 +302,11 @@ export default function Home() {
                 type="button"
                 onClick={activeTab === "create" ? createRoom : joinRoom}
                 disabled={busy}
-                className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 font-semibold text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300"
+                className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 font-semibold text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300 dark:focus-visible:ring-amber-400"
               >
                 {busy ? "Opening room…" : activeTab === "create" ? <>Create room <ArrowRight size={18} /></> : <>Request to join <Users size={18} /></>}
               </button>
-              <p className="mt-4 text-center text-xs leading-5 text-stone-500 dark:text-stone-400">Room entry and peer connections depend on network availability. File downloads are requested by each recipient.</p>
+              <p className="mt-4 text-center text-xs leading-5 text-stone-600 dark:text-stone-400">Room entry and peer connections depend on network availability. File downloads are requested by each recipient.</p>
             </section>
           </div>
         </div>

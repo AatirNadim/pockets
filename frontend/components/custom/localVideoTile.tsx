@@ -90,7 +90,7 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
     >
       {isHost && !isMinimized && (
         <div className="absolute top-2 left-2 z-10 group">
-          <div className="flex items-center gap-1 rounded-full bg-linear-to-r from-amber-400 via-orange-500 to-rose-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105">
+          <div className="flex items-center gap-1 rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105 dark:bg-amber-400 dark:text-stone-950">
             <Crown className="w-3 h-3" />
           </div>
           <div className="pointer-events-none absolute -bottom-12 left-0 w-36 rounded-xl bg-stone-900/90 dark:bg-stone-800/90 px-2 py-1 text-[10px] text-center text-white opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
@@ -123,13 +123,17 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
       <Button
         onClick={() => setIsMinimized(!isMinimized)}
         variant="ghost"
-        size="sm"
-        className="absolute top-2 right-2 w-6 h-6 p-0 bg-white/80 text-stone-700 hover:bg-white dark:bg-stone-800/80 dark:hover:bg-stone-700 dark:text-white transition-colors rounded-lg"
+        size="icon"
+        aria-label={isMinimized ? "Expand self video" : "Minimize self video"}
+        title={isMinimized ? "Expand self video" : "Minimize self video"}
+        className={`absolute bg-white/85 text-stone-700 hover:bg-stone-200/80 dark:bg-stone-800/85 dark:hover:bg-stone-700 dark:text-white transition-colors rounded-xl ${
+          isMinimized ? "top-1.5 right-1.5 size-9" : "top-2 right-2 size-11"
+        }`}
       >
         {isMinimized ? (
-          <Maximize2 className="w-3 h-3" />
+          <Maximize2 className="w-3.5 h-3.5" />
         ) : (
-          <Minimize2 className="w-3 h-3" />
+          <Minimize2 className="w-4 h-4" />
         )}
       </Button>
     </div>

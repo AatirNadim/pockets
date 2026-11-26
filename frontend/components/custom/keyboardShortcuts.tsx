@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Keyboard, X } from "lucide-react";
 import { useTheme } from "@/components/custom/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,27 @@ function isTypingTarget(target: EventTarget | null) {
 
 export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsProps) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
   const { resolvedTheme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !mounted) return;
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeBtn = dialogRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    closeBtn?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus.current?.focus();
+    };
+  }, [open, mounted]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -73,43 +94,59 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
         aria-label="Show keyboard shortcuts"
         title="Keyboard shortcuts (?)"
         onClick={() => setOpen(true)}
-        className="size-10 shrink-0"
+        className="size-11 shrink-0"
       >
         <Keyboard size={18} />
       </Button>
-      {open && (
+      {open && mounted && createPortal(
         <div
           className="fixed inset-0 z-[80] grid place-items-center bg-stone-950/45 p-4"
+          role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setOpen(false);
           }}
         >
           <section
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="shortcut-title"
-            className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl dark:border-stone-700 dark:bg-stone-900 sm:p-6"
+            onKeyDown={(event) => {
+              if (event.key !== "Tab") return;
+              const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+              const first = buttons[0];
+              const last = buttons[buttons.length - 1];
+              if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last?.focus();
+              } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first?.focus();
+              }
+            }}
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl dark:border-stone-700 dark:bg-stone-900 sm:p-6"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 id="shortcut-title" className="text-lg font-semibold">Keyboard shortcuts</h2>
-                <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">Available when you are not typing.</p>
+                <h2 id="shortcut-title" className="text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100">Keyboard shortcuts</h2>
+                <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">Available when you are not typing.</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" aria-label="Close shortcuts" onClick={() => setOpen(false)}>
+              <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0" aria-label="Close shortcuts" onClick={() => setOpen(false)}>
                 <X size={18} />
               </Button>
             </div>
             <dl className="space-y-2">
               {[...shortcuts, { key: "t", label: "Toggle light or dark theme" }, { key: "?", label: "Show or hide this cheat sheet" }].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between gap-4 rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-stone-800">
+                <div key={key} className="flex items-center justify-between gap-4 rounded-xl border border-stone-200/70 bg-stone-50 px-3 py-2.5 dark:border-stone-700/60 dark:bg-stone-800">
                   <dt className="text-sm text-stone-700 dark:text-stone-200">{label}</dt>
                   <dd><kbd className="min-w-8 rounded-md border border-stone-300 bg-white px-2 py-1 text-center font-mono text-xs font-semibold text-stone-700 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200">{key === "?" ? "?" : key === "enter" ? "Enter" : key.toUpperCase()}</kbd></dd>
                 </div>
               ))}
             </dl>
-            <p className="mt-4 text-xs leading-5 text-stone-500 dark:text-stone-400">Shortcuts use single keys without Ctrl, Alt, or Command, so they avoid common browser key combinations. They pause while a text field or editable control is focused.</p>
+            <p className="mt-4 text-xs leading-5 text-stone-600 dark:text-stone-400">Shortcuts use single keys without Ctrl, Alt, or Command, so they avoid common browser key combinations. They pause while a text field or editable control is focused.</p>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

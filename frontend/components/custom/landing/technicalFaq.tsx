@@ -84,17 +84,17 @@ export function TechnicalFaq() {
           const isOpen = openId === faq.id;
           const Icon = faq.icon;
           return (
-            <div key={faq.id} className="transition-colors hover:bg-stone-50/50 dark:hover:bg-stone-800/30 first:rounded-t-3xl last:rounded-b-3xl">
+            <div key={faq.id} className="transition-colors hover:bg-stone-200/35 dark:hover:bg-stone-800/30 first:rounded-t-3xl last:rounded-b-3xl">
               <button
                 type="button"
                 onClick={() => toggle(faq.id)}
                 aria-expanded={isOpen}
                 aria-controls={`faq-answer-${faq.id}`}
                 id={`faq-question-${faq.id}`}
-                className="flex w-full items-start justify-between gap-4 p-6 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-inset sm:p-7"
+                className="flex w-full items-start justify-between gap-4 p-6 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-inset dark:focus-visible:ring-amber-400 sm:p-7"
               >
                 <div className="flex items-start gap-4">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-100/70 text-amber-700 dark:border-stone-700 dark:bg-stone-800 dark:text-amber-400">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-200/70 text-amber-700 dark:border-stone-700 dark:bg-stone-800 dark:text-amber-400">
                     <Icon size={18} />
                   </div>
                   <div>
@@ -108,8 +108,8 @@ export function TechnicalFaq() {
                 </div>
 
                 <div
-                  className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 transition-transform duration-200 dark:border-stone-700 dark:text-stone-400 ${
-                    isOpen ? "rotate-180 bg-stone-100 dark:bg-stone-800" : ""
+                  className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-600 transition-transform duration-200 dark:border-stone-700 dark:text-stone-400 ${
+                    isOpen ? "rotate-180 bg-stone-200/80 dark:bg-stone-800" : ""
                   }`}
                 >
                   <ChevronDown size={16} />

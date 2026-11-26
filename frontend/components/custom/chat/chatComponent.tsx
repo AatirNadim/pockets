@@ -142,12 +142,12 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
 
   return <div className="flex h-full min-h-0 flex-col text-stone-800 dark:text-stone-100">
     <div className="flex items-center justify-between border-b border-stone-200 p-4 dark:border-stone-800">
-      <div><h3 className="font-semibold">Room conversation</h3><p className="mt-0.5 text-xs text-stone-500">Messages and shared files</p></div>
-      {onClose && <Button type="button" variant="ghost" size="sm" onClick={onClose} className="h-10 w-10 rounded-xl lg:hidden" aria-label="Close chat and files"><X size={18} /></Button>}
+      <div><h2 className="font-semibold tracking-tight">Room conversation</h2><p className="mt-0.5 text-xs text-stone-600 dark:text-stone-400">Messages and shared files</p></div>
+      {onClose && <Button type="button" variant="ghost" size="icon" onClick={onClose} className="size-11 rounded-xl lg:hidden" aria-label="Close chat and files"><X size={18} /></Button>}
     </div>
     <div role="tablist" aria-label="Room conversation" className="grid grid-cols-2 gap-1 border-b border-stone-200 p-2 dark:border-stone-800">
-      <button type="button" role="tab" aria-selected={activeTab === "chat"} onClick={() => setActiveTab("chat")} className={`flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-medium ${activeTab === "chat" ? "bg-stone-100 text-stone-900 dark:bg-stone-800 dark:text-white" : "text-stone-500"}`}><MessageSquare size={16} />Chat</button>
-      <button type="button" role="tab" aria-selected={activeTab === "files"} onClick={() => setActiveTab("files")} className={`flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-medium ${activeTab === "files" ? "bg-stone-100 text-stone-900 dark:bg-stone-800 dark:text-white" : "text-stone-500"}`}><Files size={16} />Files <span className="text-xs">{sharedFiles.length}</span></button>
+      <button type="button" role="tab" aria-selected={activeTab === "chat"} onClick={() => setActiveTab("chat")} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${activeTab === "chat" ? "bg-stone-200/80 text-stone-900 dark:bg-stone-800 dark:text-white" : "text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"}`}><MessageSquare size={16} />Chat</button>
+      <button type="button" role="tab" aria-selected={activeTab === "files"} onClick={() => setActiveTab("files")} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${activeTab === "files" ? "bg-stone-200/80 text-stone-900 dark:bg-stone-800 dark:text-white" : "text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"}`}><Files size={16} />Files <span className="text-xs">{sharedFiles.length}</span></button>
     </div>
 
     <div className={activeTab === "chat" ? "flex min-h-0 flex-1 flex-col" : "hidden"} role="tabpanel" aria-label="Chat messages">
@@ -155,38 +155,38 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       <div className="border-t border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
         {filesToBeSent.length > 0 && <AttachementsToSend filesToBeSent={filesToBeSent} handleRemoveQueuedFile={removeFile} formatBytes={formatBytes} />}
         <details className="group mb-2">
-          <summary className="flex min-h-9 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800">
+          <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-xs font-medium text-stone-600 hover:bg-stone-200/70 dark:text-stone-300 dark:hover:bg-stone-800">
             <Users size={15} />
             {recipientIds.length ? `Only ${recipientIds.length} ${recipientIds.length === 1 ? "person" : "people"}` : "Everyone in the room"}
-            <span aria-hidden="true" className="text-stone-400">▾</span>
+            <span aria-hidden="true" className="text-stone-600 dark:text-stone-400">▾</span>
           </summary>
           <div className="mb-2 max-h-40 overflow-y-auto rounded-lg border border-stone-200 bg-white p-2 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-            {connectedPeople.length === 0 ? <p className="px-2 py-1 text-xs text-stone-500">No other connected participants.</p> : connectedPeople.map(([id, person]) => (
-              <label key={id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
+            {connectedPeople.length === 0 ? <p className="px-2 py-1 text-xs text-stone-600 dark:text-stone-400">No other connected participants.</p> : connectedPeople.map(([id, person]) => (
+              <label key={id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-stone-200/60 dark:hover:bg-stone-800">
                 <input type="checkbox" checked={recipientIds.includes(id)} onChange={(event) => setRecipientIds((current) => event.target.checked ? [...current, id] : current.filter((item) => item !== id))} className="accent-amber-600" />
                 <span>{person.name}</span>
               </label>
             ))}
-            <p className="px-2 pt-1 text-[11px] text-stone-500">No one selected sends to everyone.</p>
+            <p className="px-2 pt-1 text-[11px] text-stone-600 dark:text-stone-400">No one selected sends to everyone.</p>
           </div>
         </details>
         <div className="flex gap-2">
-          <Button type="button" onClick={() => fileInputRef.current?.click()} variant="ghost" size="sm" className="h-11 w-11 shrink-0 rounded-xl border border-stone-200 dark:border-stone-700" aria-label="Attach files"><Paperclip size={17} /></Button>
+          <Button type="button" onClick={() => fileInputRef.current?.click()} variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-xl border border-stone-200 dark:border-stone-700" aria-label="Attach files"><Paperclip size={17} /></Button>
           <Input value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message…" aria-label="Message" className="min-w-0 rounded-xl bg-white dark:bg-stone-800" />
-          <Button onClick={handleSend} disabled={!chatMessage.trim()} className="h-11 w-11 shrink-0 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-400 dark:text-stone-950" aria-label="Send message"><Send size={17} /></Button>
+          <Button onClick={handleSend} disabled={!chatMessage.trim()} className="h-11 w-11 shrink-0 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300" aria-label="Send message"><Send size={17} /></Button>
         </div>
       </div>
     </div>
 
     <section role="tabpanel" aria-label="Shared files" className={activeTab === "files" ? "flex-1 overflow-y-auto p-4" : "hidden"}>
-      <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">Shared files stay available for 10 minutes. Availability is checked before each download.</p>
-      {!sharedFiles.length ? <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500 dark:border-stone-700">No files shared yet.</div> : <ul className="space-y-2">{sharedFiles.map(({ file, sender }) => {
+      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">Shared files stay available for 10 minutes. Availability is checked before each download.</p>
+      {!sharedFiles.length ? <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-600 dark:border-stone-700 dark:text-stone-400">No files shared yet.</div> : <ul className="space-y-2">{sharedFiles.map(({ file, sender }) => {
         const local = Boolean(getLocalFile(file.id)) || filesToBeSent.some((entry) => entry.id === file.id);
         const progress = downloadProgress[file.id];
         const expired = file.ownerId === userId && !local;
         const status = local ? "Available to room" : expired ? "Expired · attach again" : progress?.status === "requested" ? "Request sent" : progress?.status === "in-progress" ? "Downloading" : "Available to request";
         const percent = progress?.status === "in-progress" && progress.totalBytes ? Math.min(100, Math.round(progress.receivedBytes / progress.totalBytes * 100)) : 0;
-        return <li key={file.id} className="rounded-xl border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-950"><div className="flex items-start gap-3"><FileIcon size={18} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" /><div className="min-w-0 flex-1"><p className="break-all text-sm font-medium">{file.name}</p><p className="mt-1 text-xs text-stone-500">{formatBytes(file.size)} · Shared by {sender || (local ? "You" : "participant")}</p><p className="mt-1 text-xs text-stone-500">{status}{progress?.status === "in-progress" ? ` · ${percent}%` : ""}</p>{progress?.status === "in-progress" && <progress className="mt-2 h-1.5 w-full accent-amber-600" max={100} value={percent} aria-label={`Downloading ${file.name}`} />}</div><Button size="sm" variant="secondary" className="min-h-10 shrink-0" disabled={expired || (!local && Boolean(progress))} onClick={() => handleFileAction(file.id, file.ownerId, file.name)} aria-label={`${expired ? "Expired" : local ? "Download" : progress ? "Download pending" : "Request"} ${file.name}`}>{local ? <><Download size={15} /><span className="ml-1">Download</span></> : expired ? "Expired" : progress ? "Pending" : "Request"}</Button></div></li>;
+        return <li key={file.id} className="rounded-xl border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-950"><div className="flex items-start gap-3"><FileIcon size={18} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" /><div className="min-w-0 flex-1"><p className="break-all text-sm font-medium">{file.name}</p><p className="mt-1 text-xs text-stone-600 dark:text-stone-400">{formatBytes(file.size)} · Shared by {sender || (local ? "You" : "participant")}</p><p className="mt-1 text-xs text-stone-600 dark:text-stone-400">{status}{progress?.status === "in-progress" ? ` · ${percent}%` : ""}</p>{progress?.status === "in-progress" && <progress className="mt-2 h-1.5 w-full accent-amber-600" max={100} value={percent} aria-label={`Downloading ${file.name}`} />}</div><Button size="lg" variant="secondary" className="min-h-11 shrink-0 px-3" disabled={expired || (!local && Boolean(progress))} onClick={() => handleFileAction(file.id, file.ownerId, file.name)} aria-label={`${expired ? "Expired" : local ? "Download" : progress ? "Download pending" : "Request"} ${file.name}`}>{local ? <><Download size={15} /><span className="ml-1">Download</span></> : expired ? "Expired" : progress ? "Pending" : "Request"}</Button></div></li>;
       })}</ul>}
     </section>
     <input ref={fileInputRef} type="file" className="hidden" multiple onChange={handleFileSelection} aria-label="Choose files to share" />

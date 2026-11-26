@@ -179,5 +179,39 @@ describe("Design System & Styling Tokens", () => {
       // Primary submit button must satisfy min-h-12 touch target
       assert.match(homeContent, /min-h-12\s+w-full\s+items-center\s+justify-center/);
     });
+
+    it("prevents dark-mode low-contrast navy text on dark magenta (dark:bg-amber-500 + dark:text-stone-950)", () => {
+      const uiFiles = [
+        "app/home.tsx",
+        "app/not-found.tsx",
+        "app/room/[room]/header.tsx",
+        "components/custom/landing/studioPreview.tsx",
+        "components/custom/landing/featureBento.tsx",
+        "components/custom/landing/landingFooter.tsx",
+        "components/custom/joinRequestList.tsx",
+        "components/custom/mediaControl.tsx",
+        "components/custom/chat/chatComponent.tsx",
+      ];
+
+      for (const relPath of uiFiles) {
+        const content = fs.readFileSync(path.resolve(__dirname, "..", relPath), "utf-8");
+        assert.strictEqual(
+          /dark:bg-amber-500[^"]*dark:text-stone-950|dark:text-stone-950[^"]*dark:bg-amber-500/.test(content),
+          false,
+          `Found low-contrast dark:bg-amber-500 with dark:text-stone-950 in ${relPath}`
+        );
+      }
+    });
+
+    it("uses the themed Toaster wrapper in root layout and portals KeyboardShortcuts modal", () => {
+      const layoutContent = fs.readFileSync(path.resolve(__dirname, "../app/layout.tsx"), "utf-8");
+      const shortcutsContent = fs.readFileSync(
+        path.resolve(__dirname, "../components/custom/keyboardShortcuts.tsx"),
+        "utf-8"
+      );
+
+      assert.match(layoutContent, /@\/components\/ui\/sonner/);
+      assert.match(shortcutsContent, /createPortal/);
+    });
   });
 });
