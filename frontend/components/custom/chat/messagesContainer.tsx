@@ -91,7 +91,8 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
       }
       toast.success(`Saved ${attachment.name}`);
     } catch (error) {
-      toast.error("Could not save download", { description: describeSaveError(error) });
+      if (error instanceof DOMException && error.name === "AbortError") toast.info("Download cancelled");
+      else toast.error("Could not save download", { description: describeSaveError(error) });
     }
   }, [deriveAttachmentState, getLocalFile, onRequestFile, onCheckAvailability, onPromptReupload, onRequestReupload, userId]);
 
@@ -137,7 +138,10 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
       }
       const availableByOwner = new Map<string, string[]>();
       for (const [ownerId, fileIds, result] of availabilityEntries) {
-        if (!result) continue;
+        if (!result) {
+          toast.error("Could not check file availability", { description: "The file owner did not respond." });
+          continue;
+        }
         availableByOwner.set(ownerId, result.availableFileIds);
         const missing = new Set(result.unavailableFileIds);
         uniqueAttachments.filter((file) => fileIds.includes(file.id) && missing.has(file.id)).forEach((file) => unavailable.push({ id: file.id, name: file.name, ownerId }));
@@ -147,9 +151,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
         if (askToReupload) {
           const requestable = unavailable.filter((file) => file.ownerId !== userId);
           for (const [ownerId, files] of groupByOwner(requestable)) {
-            if (!onRequestReupload(files.map((file) => file.id), ownerId, files.map((file) => file.name))) {
-              toast.error("Could not request files again", { description: "The request could not be sent to the file owner." });
-            }
+            onRequestReupload(files.map((file) => file.id), ownerId, files.map((file) => file.name));
           }
         }
         if (unavailable.some((file) => file.ownerId === userId)) toast.info("Attach expired files again", { description: "Your own shared copy expired from room memory and must be selected again." });
@@ -178,7 +180,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
             toast.error("Could not request some files", { description: "The request could not be sent to a peer." });
           }
         }
-        if (!availableByOwner.size && direct.length && !failedSaves.length) toast.success("Files saved to the selected folder");
+        if (direct.length > failedSaves.length + expiredLocalFiles.length) toast.success(failedSaves.length || expiredLocalFiles.length ? "Some files saved to the selected folder" : "Files saved to the selected folder");
       };
 
       const requestableUnavailable = unavailable.filter((file) => file.ownerId !== userId);
@@ -191,7 +193,8 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
       }
       await finish(false);
     } catch (error) {
-      toast.error("Could not save files", { description: describeSaveError(error) });
+      if (error instanceof DOMException && error.name === "AbortError") toast.info("Download cancelled");
+      else toast.error("Could not save files", { description: describeSaveError(error) });
     } finally {
       actionBusyRef.current = false;
     }

@@ -40,10 +40,14 @@ test("binds each socket identity and rejects forged signaling before delivery", 
   await service.handleMessage(guest as unknown as WebSocket, join(id(4), id(3), UserType.GUEST));
   assert.equal(guest.closeCode, 1008);
 
+  assert.deepEqual(host.take("room-roster"), [{ type: "room-roster", roomId, users: [] }]);
+
   const cleanGuest = new FakeSocket();
   await service.handleMessage(cleanGuest as unknown as WebSocket, join(roomId, id(5), UserType.GUEST));
   await service.handleMessage(host as unknown as WebSocket, { type: "join-request-accepted", roomId, hostUserId: id(2), guestUserId: id(5) });
+  assert.equal(cleanGuest.take("join-request").length, 1);
   assert.equal(cleanGuest.take("join-request-accepted").length, 1);
+  assert.equal(host.take("join-request-accepted").length, 1);
   const roster = cleanGuest.take("room-roster")[0] as { users: Array<{ id: string }> };
   assert.deepEqual(roster.users.map((user) => user.id), [id(2)]);
   await service.handleMessage(host as unknown as WebSocket, {
@@ -51,6 +55,15 @@ test("binds each socket identity and rejects forged signaling before delivery", 
     toUserId: id(5), offer: { type: "offer", sdp: "v=0" },
   });
   assert.equal(cleanGuest.take("offer").length, 1);
+
+  await service.disconnect(cleanGuest as unknown as WebSocket);
+  assert.deepEqual(host.take("user-left"), [{ type: "user-left", roomId, userId: id(5) }]);
+  await service.handleMessage(host as unknown as WebSocket, {
+    type: "ice-candidate", roomId, fromUserId: id(2), toUserId: id(5), candidate: { candidate: "candidate:test" },
+  });
+  assert.deepEqual(host.take("error").at(-1), {
+    type: "error", message: "That participant is not available in this room.", code: "participant-unavailable",
+  });
 
   const foreignService = new SocketService(persistence);
   await foreignService.handleMessage(outside as unknown as WebSocket, join(id(6), id(7), UserType.HOST));
