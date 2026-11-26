@@ -142,7 +142,7 @@ export default function LandingPage() {
         {/* Hero Section: Split Stage */}
         <section
           aria-labelledby="hero-title"
-          className="relative z-10 mx-auto grid min-h-[calc(100dvh-5rem)] w-full max-w-6xl items-center gap-12 px-5 py-12 lg:grid-cols-[1.1fr_420px] lg:px-10 lg:py-20"
+          className="relative z-10 mx-auto grid min-h-[calc(100dvh-5rem)] w-full max-w-6xl content-center items-start gap-12 px-5 py-12 lg:grid-cols-[1.1fr_420px] lg:px-10 lg:py-20"
         >
           {/* Left Column: Brand Statement & Value Pillars */}
           <div className="max-w-xl">
@@ -212,7 +212,7 @@ export default function LandingPage() {
           </div>
 
           {/* Right Column: Tactile Room Entry Console */}
-          <div className="w-full">
+          <div className="w-full self-start lg:min-h-[540px]">
             <RoomEntryConsole
               displayName={displayName}
               setDisplayName={setDisplayName}
