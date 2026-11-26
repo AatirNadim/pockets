@@ -19,15 +19,15 @@ const JoinRequestList = ({ respondToJoinRequest }: JoinRequestListProps) => {
           className="rounded-2xl border border-stone-200/50 bg-white/95 p-4 shadow-lg backdrop-blur-xl dark:border-stone-700/50 dark:bg-stone-900/90"
         >
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold text-stone-900 dark:text-stone-100">
                 {request.guestName}
               </p>
               <p className="text-xs text-stone-600 dark:text-stone-400">
                 wants to join this room
               </p>
             </div>
-            <span className="rounded-full bg-stone-200/80 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+            <span className="shrink-0 rounded-full bg-stone-200/80 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-600 dark:bg-stone-800 dark:text-stone-300">
               Guest
             </span>
           </div>

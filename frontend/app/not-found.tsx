@@ -12,7 +12,7 @@ const NotFound = () => {
     <div className="relative isolate flex min-h-dvh flex-col overflow-x-hidden bg-stone-50 font-sans text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       <StaticBackground />
 
-      <header className="sticky top-0 z-50 flex h-20 items-center justify-between border-b border-stone-200/60 bg-stone-50/80 px-5 backdrop-blur-md transition-colors dark:border-stone-800/60 dark:bg-stone-950/80 sm:px-10">
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-stone-200/60 bg-stone-50/80 px-4 backdrop-blur-md transition-colors dark:border-stone-800/60 dark:bg-stone-950/80 sm:h-20 sm:px-6 lg:px-10">
         <Link
           href="/"
           className="flex items-center gap-3 rounded-xl font-semibold tracking-tight transition hover:opacity-90 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-amber-400"

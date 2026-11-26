@@ -71,7 +71,7 @@ const RemoteVideoTile = ({
 
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden border border-stone-200/50 bg-stone-900/60 shadow-xl transition-all duration-200 dark:border-stone-700/50 ${
+      className={`relative min-h-44 rounded-2xl overflow-hidden border border-stone-200/50 bg-stone-900/60 shadow-xl transition-all duration-200 dark:border-stone-700/50 sm:min-h-52 ${
         isSpeaking
           ? "ring-2 ring-amber-400 drop-shadow-[0_0_18px_rgba(255,141,104,0.35)]"
           : ""
@@ -96,11 +96,11 @@ const RemoteVideoTile = ({
         }`}
       />
       <audio ref={audioRef} autoPlay className="hidden" />
-      <div className="absolute bottom-3 left-3 rounded-full bg-stone-900/80 dark:bg-stone-800/90 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+      <div className="absolute bottom-2.5 left-2.5 max-w-[calc(100%-6.5rem)] truncate rounded-full bg-stone-900/80 px-2.5 py-1 text-xs font-medium text-white shadow-lg backdrop-blur-sm dark:bg-stone-800/90 sm:bottom-3 sm:left-3 sm:px-3 sm:text-sm">
         {displayName}
       </div>
       {isHost && (
-        <div className="absolute bottom-3 right-3 group">
+        <div className="absolute bottom-2.5 right-2.5 group sm:bottom-3 sm:right-3">
           <div className="flex items-center gap-1 rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg transition-transform duration-150 group-hover:scale-105 dark:bg-amber-400 dark:text-stone-950">
             <Crown className="w-3 h-3" />
             Host
@@ -110,33 +110,40 @@ const RemoteVideoTile = ({
           </div>
         </div>
       )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
-        aria-pressed={isLocallyMuted}
-        title={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
-        onClick={() => setIsLocallyMuted((muted) => !muted)}
-        className="absolute right-3 top-3 z-10 size-11 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
-      >
-        {isLocallyMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        disabled={!videoEnabled}
-        aria-label={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
-        aria-pressed={isVideoHiddenForMe}
-        title={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
-        onClick={() => setIsVideoHiddenForMe((hidden) => !hidden)}
-        className="absolute right-3 top-16 z-10 size-11 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
-      >
-        {isVideoHiddenForMe ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-      </Button>
+      <div className="absolute right-2.5 top-2.5 z-10 flex flex-col items-end gap-1.5 sm:right-3 sm:top-3 sm:gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
+          aria-pressed={isLocallyMuted}
+          title={`${isLocallyMuted ? "Unmute" : "Mute"} ${displayName} for yourself`}
+          onClick={() => setIsLocallyMuted((muted) => !muted)}
+          className="size-11 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
+        >
+          {isLocallyMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={!videoEnabled}
+          aria-label={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
+          aria-pressed={isVideoHiddenForMe}
+          title={`${isVideoHiddenForMe ? "Show" : "Hide"} ${displayName}'s video for yourself`}
+          onClick={() => setIsVideoHiddenForMe((hidden) => !hidden)}
+          className="size-11 rounded-full bg-stone-900/80 text-white shadow-lg backdrop-blur-sm hover:bg-stone-800 focus-visible:ring-white"
+        >
+          {isVideoHiddenForMe ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        </Button>
+        {!audioEnabled && (
+          <div className="rounded-full bg-stone-900/80 p-2 text-white" title="Their microphone is muted">
+            <MicOff className="w-4 h-4" />
+          </div>
+        )}
+      </div>
       <div
-        className={`absolute top-3 left-3 flex items-center gap-2 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition-all duration-150 ${
+        className={`absolute top-2.5 left-2.5 flex items-center gap-2 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition-all duration-150 sm:top-3 sm:left-3 ${
           audioEnabled ? "opacity-100" : "opacity-30"
         }`}
         style={{
@@ -161,14 +168,9 @@ const RemoteVideoTile = ({
           : connectionPhase === "failed" ? "Unavailable" : "Connecting"}
       </div>
       {(!videoEnabled || isVideoHiddenForMe) && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-800/80 text-white">
-          {videoEnabled ? <EyeOff className="w-10 h-10" /> : <VideoOff className="w-10 h-10" />}
-          <span className="text-sm font-semibold">{videoEnabled ? "Video hidden for you" : "Video unavailable"}</span>
-        </div>
-      )}
-      {!audioEnabled && (
-        <div className="absolute right-3 top-[7.5rem] rounded-full bg-stone-900/80 p-2 text-white" title="Their microphone is muted">
-          <MicOff className="w-4 h-4" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-800/80 p-4 text-center text-white">
+          {videoEnabled ? <EyeOff className="w-9 h-9 sm:w-10 sm:h-10" /> : <VideoOff className="w-9 h-9 sm:w-10 sm:h-10" />}
+          <span className="text-xs font-semibold sm:text-sm">{videoEnabled ? "Video hidden for you" : "Video unavailable"}</span>
         </div>
       )}
       {connectionInterrupted && (

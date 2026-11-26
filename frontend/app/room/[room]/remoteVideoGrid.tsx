@@ -25,12 +25,18 @@ const RemoteVideoGrid = ({ status, isConnected }: { status: string; isConnected:
   const entries = Object.entries(mediaStreams);
   const waitingPeers = Object.entries(peers).filter(([id]) => !mediaStreams[id]);
   const tileCount = entries.length + waitingPeers.length;
+  const gridColumnsClass =
+    tileCount <= 1
+      ? "grid-cols-1 auto-rows-[minmax(0,1fr)]"
+      : tileCount <= 4
+        ? "grid-cols-1 sm:grid-cols-2 auto-rows-[minmax(11rem,1fr)]"
+        : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(11rem,1fr)]";
 
   return (
     <section aria-label="Video stage" className="relative m-2 mb-1 min-h-0 flex-1 overflow-hidden rounded-2xl border border-stone-200 bg-stone-200 dark:border-stone-800 dark:bg-stone-900 sm:m-4 sm:mb-2">
       {tileCount > 0 ? (
         <div className="absolute inset-0 overflow-y-auto p-2 sm:p-4">
-          <div className={`grid min-h-full gap-2 sm:gap-4 ${tileCount === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"}`}>
+          <div className={`grid min-h-full gap-2 sm:gap-4 ${gridColumnsClass}`}>
             {entries.map(([remoteId, stream]) => {
               const peer = peers[remoteId];
               const user = remoteUsers[remoteId];
@@ -56,7 +62,7 @@ const RemoteVideoGrid = ({ status, isConnected }: { status: string; isConnected:
                 <article
                   key={remoteId}
                   aria-label={`${peer.userName}, ${phaseLabels[peer.phase]}`}
-                  className={`flex min-h-52 flex-col items-center justify-center rounded-2xl border p-6 text-center shadow-sm ${failed
+                  className={`flex min-h-44 flex-col items-center justify-center rounded-2xl border p-4 text-center shadow-sm sm:min-h-52 sm:p-6 ${failed
                     ? "border-rose-300 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/40"
                     : "border-stone-300 bg-stone-100 dark:border-stone-700 dark:bg-stone-950"}`}
                 >
@@ -82,9 +88,9 @@ const RemoteVideoGrid = ({ status, isConnected }: { status: string; isConnected:
           </div>
         </div>
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center p-6">
+        <div className="absolute inset-0 flex items-center justify-center overflow-y-auto p-4 sm:p-6">
           <div className="max-w-sm text-center">
-            <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"><Users size={28} /></div>
+            <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 sm:mb-5 sm:h-16 sm:w-16"><Users size={26} /></div>
             <h2 className="text-lg font-semibold">{userType === UserType.GUEST && status.toLowerCase().includes("approv") ? "Waiting for the host" : userType === UserType.GUEST && !isConnected ? "Connecting to the room" : userType === UserType.GUEST ? "You’re in the room" : "Your room is ready"}</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600 dark:text-stone-300">{userType === UserType.GUEST && status.toLowerCase().includes("approv") ? "Your request has been sent. You can join the conversation after the host admits you." : userType === UserType.GUEST ? "No other participants are connected yet. Their tiles will appear as soon as they are announced, even while a call is still connecting." : "Copy the invite from the room header and send it to the people you want to meet."}</p>
           </div>

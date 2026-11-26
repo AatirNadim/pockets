@@ -84,9 +84,9 @@ export function StudioPreview() {
   return (
     <div className="relative mx-auto w-full max-w-5xl rounded-3xl border border-stone-200/90 bg-white/80 p-3 shadow-2xl shadow-stone-900/10 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-900/80 sm:p-6">
       {/* Studio Header Bar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4 dark:border-stone-800">
-        <div className="flex items-center gap-3">
-          <div className="flex min-h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-200/75 px-3.5 py-1 dark:border-stone-700 dark:bg-stone-800">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5 border-b border-stone-200/80 pb-4 dark:border-stone-800 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex min-h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-200/75 px-3 py-1 dark:border-stone-700 dark:bg-stone-800 sm:px-3.5">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -116,7 +116,7 @@ export function StudioPreview() {
           </button>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-md bg-stone-200/75 px-2.5 py-1.5 font-medium text-stone-700 dark:bg-stone-800/80 dark:text-stone-300">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-400" />
             Maya (Host)
@@ -128,7 +128,7 @@ export function StudioPreview() {
       </div>
 
       {/* Main Studio Viewport: Participant Tiles & File Tray */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
         {/* Participant 1: Maya (Host) */}
         <div className="relative aspect-4/3 overflow-hidden rounded-2xl border border-stone-200 bg-linear-to-b from-stone-100 to-stone-200/90 dark:border-stone-700/80 dark:from-stone-800 dark:to-stone-900">
           <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
@@ -183,7 +183,7 @@ export function StudioPreview() {
 
         {/* Participant 3: You (Interactive Tile) */}
         <div
-          className={`relative aspect-4/3 overflow-hidden rounded-2xl border transition-all ${
+          className={`relative aspect-4/3 overflow-hidden rounded-2xl border transition-all sm:col-span-2 sm:aspect-[2/1] lg:col-span-1 lg:aspect-4/3 ${
             cameraActive
               ? "border-amber-400/80 bg-linear-to-b from-amber-50/70 to-stone-100 dark:border-amber-500/40 dark:from-stone-800 dark:to-stone-900"
               : "border-stone-200 bg-stone-100/90 dark:border-stone-800 dark:bg-stone-950"
@@ -237,18 +237,18 @@ export function StudioPreview() {
       </div>
 
       {/* Drop Circle File Tray & Simulated Transfer */}
-      <div className="mt-4 rounded-2xl border border-stone-200/80 bg-stone-50/70 p-4 dark:border-stone-800 dark:bg-stone-950/60">
+      <div className="mt-4 rounded-2xl border border-stone-200/80 bg-stone-50/70 p-3.5 dark:border-stone-800 dark:bg-stone-950/60 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300">
               <FileArchive size={20} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="break-all font-mono text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-100">
                   brand-assets-v2.zip
                 </span>
-                <span className="rounded bg-stone-200/80 px-1.5 py-0.5 text-[10px] font-mono text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                <span className="shrink-0 rounded bg-stone-200/80 px-1.5 py-0.5 text-[10px] font-mono text-stone-600 dark:bg-stone-800 dark:text-stone-300">
                   4.2 MB
                 </span>
               </div>
@@ -313,7 +313,7 @@ export function StudioPreview() {
                 style={{ width: `${transferProgress}%` }}
               />
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-stone-600 dark:text-stone-400">
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-[11px] text-stone-600 dark:text-stone-400">
               <span>Direct peer-to-peer slice transfer</span>
               <span className="font-mono">Chunk size: 30,720 bytes</span>
             </div>
@@ -328,7 +328,7 @@ export function StudioPreview() {
           <span>Tactile Controls Preview</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Mic Toggle */}
           <button
             type="button"

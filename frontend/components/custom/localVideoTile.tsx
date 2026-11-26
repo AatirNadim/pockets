@@ -53,15 +53,14 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
       return;
     }
 
-    // Initialize a sane default that doesn't cover bottom controls.
-    // We compute from the parent bounds once the element is laid out.
+    // Initialize inside the video stage (which is already scoped above MediaControl).
     const id = window.requestAnimationFrame(() => {
       const tile = tileRef.current;
       const parent = tile?.parentElement as HTMLElement | null;
       if (!tile || !parent) return;
 
-      const padding = 16;
-      const topOffset = 96; // ~ top-24
+      const padding = 14;
+      const topOffset = 14;
 
       const initial = clampPosition(
         Math.max(padding, parent.clientWidth - tile.offsetWidth - padding),
@@ -79,14 +78,23 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
     setPosition((prev) => clampPosition(prev.x, prev.y));
   }, [clampPosition, isMinimized, isMobile]);
 
+  useEffect(() => {
+    if (!isMobile) return;
+    const handleResize = () => {
+      setPosition((prev) => clampPosition(prev.x, prev.y));
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [clampPosition, isMobile]);
+
   const tile = (
     <div
       ref={tileRef}
       className={`absolute z-30 bg-white/80 dark:bg-stone-900/80 rounded-2xl overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm transition-all duration-300 ${
         isMobile
           ? "top-0 left-0 touch-none cursor-grab active:cursor-grabbing"
-          : "bottom-24 right-8"
-      } ${isMinimized ? "w-16 h-12" : "w-48 h-36"}`}
+          : "bottom-5 right-6 lg:bottom-6 lg:right-8"
+      } ${isMinimized ? "w-16 h-12" : "w-36 h-28 sm:w-48 sm:h-36"}`}
     >
       {isHost && !isMinimized && (
         <div className="absolute top-2 left-2 z-10 group">
@@ -106,7 +114,7 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         className="w-full h-full object-cover"
       />
       {!isMinimized && (
-        <div className="absolute bottom-3 left-3 rounded-full bg-stone-900/80 dark:bg-stone-800/90 px-3 py-1 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+        <div className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-full bg-stone-900/80 px-2.5 py-0.5 text-xs font-medium text-white shadow-lg backdrop-blur-sm dark:bg-stone-800/90 sm:bottom-3 sm:left-3 sm:px-3 sm:py-1 sm:text-sm">
           {localDisplayName}
         </div>
       )}

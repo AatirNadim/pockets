@@ -62,7 +62,7 @@ export function TechnicalFaq() {
   };
 
   return (
-    <section aria-labelledby="faq-title" className="relative mx-auto w-full max-w-4xl px-5 py-20 lg:px-10">
+    <section aria-labelledby="faq-title" className="relative mx-auto w-full max-w-4xl px-4 py-14 sm:px-6 sm:py-20 lg:px-10">
       <div className="text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-stone-600 dark:border-stone-800 dark:bg-stone-900/70 dark:text-stone-300">
           <HelpCircle size={12} className="text-amber-600 dark:text-amber-400" />
@@ -70,7 +70,7 @@ export function TechnicalFaq() {
         </span>
         <h2
           id="faq-title"
-          className="mt-4 text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
+          className="mt-4 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
         >
           Clear, grounded answers to how Pockets works.
         </h2>
@@ -79,7 +79,7 @@ export function TechnicalFaq() {
         </p>
       </div>
 
-      <div className="mt-12 divide-y divide-stone-200/90 rounded-3xl border border-stone-200/90 bg-white/80 shadow-sm backdrop-blur-md dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900/80">
+      <div className="mt-10 divide-y divide-stone-200/90 rounded-3xl border border-stone-200/90 bg-white/80 shadow-sm backdrop-blur-md dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900/80 sm:mt-12">
         {FAQS.map((faq) => {
           const isOpen = openId === faq.id;
           const Icon = faq.icon;
@@ -91,13 +91,13 @@ export function TechnicalFaq() {
                 aria-expanded={isOpen}
                 aria-controls={`faq-answer-${faq.id}`}
                 id={`faq-question-${faq.id}`}
-                className="flex w-full items-start justify-between gap-4 p-6 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-inset dark:focus-visible:ring-amber-400 sm:p-7"
+                className="flex w-full items-start justify-between gap-3 p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-inset dark:focus-visible:ring-amber-400 sm:gap-4 sm:p-7"
               >
-                <div className="flex items-start gap-4">
+                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-200/70 text-amber-700 dark:border-stone-700 dark:bg-stone-800 dark:text-amber-400">
                     <Icon size={18} />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="font-mono text-xs font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400">
                       {faq.category}
                     </span>
@@ -121,7 +121,7 @@ export function TechnicalFaq() {
                   id={`faq-answer-${faq.id}`}
                   role="region"
                   aria-labelledby={`faq-question-${faq.id}`}
-                  className="px-6 pb-6 pt-0 sm:px-7 sm:pb-7 sm:pl-[4.5rem]"
+                  className="px-4 pb-5 pt-0 sm:px-7 sm:pb-7 sm:pl-[4.5rem]"
                 >
                   <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-300 sm:text-base">
                     {faq.answer}
