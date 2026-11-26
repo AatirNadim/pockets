@@ -75,8 +75,16 @@ Copy `frontend/.env.example` to `frontend/.env.local` for development.
 | --- | --- |
 | `NEXT_PUBLIC_SERVER_PATH` | Browser-reachable signaling hostname and port. The client selects `ws://` or `wss://` from the page protocol; a `ws://` or `wss://` prefix can override this. Defaults to `localhost:8080`. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical public site origin used for sitemap and social metadata. On Vercel, `VERCEL_URL` is used if this is unset. |
-| `TURN_CREDENTIALS_URL` | Optional URL fetched by the Next.js server for short lived ICE/TURN credentials. It must return `{ "iceServers": [...] }`. |
-| `TURN_CREDENTIALS_TOKEN` | Optional bearer token sent server-to-server to the credential endpoint. Keep it private; do not rename it with `NEXT_PUBLIC_`. |
+| `TURN_CREDENTIALS_URL` | Optional URL fetched by the Next.js server for short-lived ICE/TURN credentials. Accepts `{ "iceServers": [...] }` or `[...]`. |
+| `TURN_CREDENTIALS_TOKEN` | Optional bearer token sent server-to-server to `TURN_CREDENTIALS_URL`. Keep it private; do not rename it with `NEXT_PUBLIC_`. |
+| `TURN_CREDENTIALS_METHOD` | Optional HTTP method for `TURN_CREDENTIALS_URL` (`GET` by default, or `POST` for providers such as Cloudflare TURN). |
+| `TURN_CREDENTIALS_TTL_SECONDS` | Optional TTL sent in `{ "ttl": ... }` when `TURN_CREDENTIALS_METHOD=POST`. |
+| `TURN_URLS` | Optional comma-separated `turn:` / `turns:` / `stun:` URLs configured directly on the Next.js server. |
+| `TURN_SHARED_SECRET` | Optional coturn `use-auth-secret` value used with `TURN_URLS` to mint ephemeral HMAC-SHA1 credentials per `/api/ice` request. |
+| `TURN_CREDENTIAL_TTL_SECONDS` | Optional TTL in seconds (`60`–`86400`, default `3600`) for ephemeral credentials minted from `TURN_SHARED_SECRET`. |
+| `TURN_USERNAME` | Optional static TURN username paired with `TURN_CREDENTIAL` and `TURN_URLS`. |
+| `TURN_CREDENTIAL` | Optional static TURN credential paired with `TURN_USERNAME` and `TURN_URLS`. |
+| `TURN_ICE_SERVERS` | Optional JSON string of `RTCIceServer[]` (or `{ "iceServers": [...] }`) validated and returned by `/api/ice`. |
 
 The public STUN list is in `lib/constants.ts`. The `/api/ice` route returns an empty `iceServers` list when no credential endpoint is configured; the client then uses its built-in STUN list. More deployment detail is in [Local development and deployment](../LOCAL_DEVELOPMENT.md).
 
