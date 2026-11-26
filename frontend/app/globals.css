@@ -8,7 +8,7 @@
 @theme {
   --color-white: #FFFCF6;
   --color-black: #001735;
-  --color-stone-50: #FFF8EC;
+  --color-stone-50: #FFFAF2;
   --color-stone-100: #FFFCF6;
   --color-stone-200: #F2E8D8;
   --color-stone-300: #E1D3BD;
@@ -98,7 +98,7 @@
 
 :root {
   --radius: 0.75rem;
-  --background: #FFF8EC;
+  --background: var(--color-stone-50);
   --foreground: #001F52;
   --card: #FFFCF6;
   --card-foreground: #001F52;
