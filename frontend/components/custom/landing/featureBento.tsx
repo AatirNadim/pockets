@@ -7,7 +7,7 @@ export function FeatureBento() {
   const [mockAdmitted, setMockAdmitted] = useState<boolean | null>(null);
 
   return (
-    <section aria-labelledby="pillars-title" className="relative mx-auto w-full max-w-6xl px-5 py-20 lg:px-10">
+    <section aria-labelledby="pillars-title" className="relative mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-10">
       {/* Section Header */}
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-stone-600 dark:border-stone-800 dark:bg-stone-900/70 dark:text-stone-300">
@@ -16,7 +16,7 @@ export function FeatureBento() {
         </span>
         <h2
           id="pillars-title"
-          className="mt-4 text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
+          className="mt-4 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
         >
           Engineered for quiet craft and intimate collaboration.
         </h2>
@@ -27,11 +27,11 @@ export function FeatureBento() {
       </div>
 
       {/* Asymmetric Bento Grid */}
-      <div className="mt-14 grid gap-6 md:grid-cols-12">
+      <div className="mt-10 grid gap-5 sm:mt-14 sm:gap-6 md:grid-cols-12">
         {/* Card 01: Instant Ephemeral Rooms (Col span 7) */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-7 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-7 sm:p-9">
+        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-5 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-7 sm:p-8 lg:p-9">
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-xs font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400">
                 01 / Zero Footprint
               </span>
@@ -51,11 +51,11 @@ export function FeatureBento() {
 
           {/* Visual Artifact: Ephemeral Lifecycle Meter */}
           <div className="mt-8 rounded-2xl border border-stone-200/80 bg-stone-50/90 p-4 dark:border-stone-800 dark:bg-stone-950/60">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="font-medium text-stone-700 dark:text-stone-300">Active Room Lifespan</span>
               <span className="font-mono text-amber-700 dark:text-amber-400">In-Memory Only</span>
             </div>
-            <div className="mt-2.5 grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="mt-2.5 grid grid-cols-1 gap-2 text-center text-xs min-[360px]:grid-cols-3">
               <div className="rounded-xl border border-stone-200 bg-white p-2.5 dark:border-stone-800 dark:bg-stone-900">
                 <span className="block text-[11px] text-stone-600 dark:text-stone-400">Database rows</span>
                 <span className="font-mono text-base font-semibold text-stone-900 dark:text-stone-100">0</span>
@@ -73,7 +73,7 @@ export function FeatureBento() {
         </div>
 
         {/* Card 02: Doorbell Admission (Col span 5) */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-7 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-5 sm:p-9">
+        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-5 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-5 sm:p-8 lg:p-9">
           <div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400">
@@ -136,7 +136,7 @@ export function FeatureBento() {
         </div>
 
         {/* Card 03: Drop Circle P2P Transfers (Col span 5) */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-7 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-5 sm:p-9">
+        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-5 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-5 sm:p-8 lg:p-9">
           <div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400">
@@ -154,13 +154,13 @@ export function FeatureBento() {
           </div>
 
           {/* Visual Artifact: WebRTC Chunk Packet Visual */}
-          <div className="mt-8 rounded-2xl border border-stone-200/80 bg-stone-50/90 p-4 dark:border-stone-800 dark:bg-stone-950/60">
-            <div className="flex items-center justify-between text-xs">
+          <div className="mt-8 rounded-2xl border border-stone-200/80 bg-stone-50/90 p-3.5 dark:border-stone-800 dark:bg-stone-950/60 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] sm:text-xs">
               <span className="font-mono text-stone-600 dark:text-stone-400">Browser A (RAM)</span>
               <span className="font-mono text-amber-700 dark:text-amber-400">RTCDataChannel</span>
               <span className="font-mono text-stone-600 dark:text-stone-400">Browser B (RAM)</span>
             </div>
-            <div className="mt-3 flex items-center justify-between gap-1.5">
+            <div className="mt-3 grid grid-cols-5 gap-1 sm:gap-1.5">
               {[1, 2, 3, 4, 5].map((chunk) => (
                 <div
                   key={chunk}
@@ -175,7 +175,7 @@ export function FeatureBento() {
         </div>
 
         {/* Card 04: Mesh Network & Honest Boundaries (Col span 7) */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-7 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-7 sm:p-9">
+        <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-stone-200/90 bg-white/80 p-5 shadow-sm transition hover:shadow-md dark:border-stone-800 dark:bg-stone-900/80 md:col-span-7 sm:p-8 lg:p-9">
           <div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400">
@@ -199,7 +199,7 @@ export function FeatureBento() {
               <span className="font-medium text-stone-800 dark:text-stone-200">Mesh Topology Matrix</span>
               <span className="font-mono text-stone-600 dark:text-stone-400">Connections = N × (N - 1) / 2 = 15 channels</span>
             </div>
-            <div className="mt-3 flex items-center justify-between">
+            <div className="mt-3 grid grid-cols-3 gap-3 min-[420px]:flex min-[420px]:items-center min-[420px]:justify-between">
               {["P1", "P2", "P3", "P4", "P5", "P6"].map((peer, i) => (
                 <div key={peer} className="flex flex-col items-center">
                   <div

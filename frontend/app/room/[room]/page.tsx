@@ -215,7 +215,7 @@ export default function Room() {
         shortcuts={ROOM_SHORTCUTS}
         onShortcut={handleShortcut}
       />
-      {mediaError && <div role="status" className="z-10 flex items-center justify-between gap-3 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"><span>{mediaError}</span><Button variant="ghost" size="sm" onClick={() => setMediaError(null)} aria-label="Dismiss media notice">Dismiss</Button></div>}
+      {mediaError && <div role="status" className="z-10 flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100 sm:flex-nowrap sm:gap-3 sm:px-4"><span className="min-w-0 flex-1">{mediaError}</span><Button variant="ghost" size="sm" className="min-h-11 shrink-0" onClick={() => setMediaError(null)} aria-label="Dismiss media notice">Dismiss</Button></div>}
 
       {/* Main Content */}
       <div className="w-full flex-1 min-h-0 flex flex-col lg:flex-row">
@@ -224,14 +224,15 @@ export default function Room() {
           className={cn(
             "relative transition-all duration-300 w-full min-h-0 flex-1",
             "flex flex-col"
-            // "flex-1"
-            // showChat ? "sm:mr-80" : ""
           )}
         >
-          {/* Remote Video Grid */}
-          <RemoteVideoGrid status={status} isConnected={isConnected} />
+          {/* Video Stage (scoped above MediaControl so LocalVideoTile never overlaps controls) */}
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            {/* Remote Video Grid */}
+            <RemoteVideoGrid status={status} isConnected={isConnected} />
 
-          <LocalVideoTile localVideoRef={localVideoRef} />
+            <LocalVideoTile localVideoRef={localVideoRef} />
+          </div>
           <MediaControl
             cameras={availableCameras}
             microphones={availableMicrophones}
@@ -254,7 +255,7 @@ export default function Room() {
       </div>
 
       {isHost && requests.length > 0 && (
-        <section aria-label="Pending guest requests" className="fixed left-3 right-3 top-20 z-40 max-h-[35dvh] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-3 shadow-xl dark:border-stone-700 dark:bg-stone-900 sm:left-auto sm:right-4 sm:w-80">
+        <section aria-label="Pending guest requests" className="fixed left-3 right-3 top-[calc(4rem+env(safe-area-inset-top))] z-40 max-h-[35dvh] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-3 shadow-xl dark:border-stone-700 dark:bg-stone-900 sm:left-auto sm:right-4 sm:top-20 sm:w-80">
           <div className="flex flex-col gap-3">
             <JoinRequestList respondToJoinRequest={respondToJoinRequest} />
           </div>
@@ -269,10 +270,10 @@ export default function Room() {
           const last = buttons[buttons.length - 1];
           if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-        }} className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl dark:border-stone-700 dark:bg-stone-900">
+        }} className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl dark:border-stone-700 dark:bg-stone-900 sm:p-6">
           <h2 id="leave-title" className="text-lg font-semibold tracking-tight">Leave this room?</h2>
           <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">You’ll disconnect from this session. You can join again with the room ID.</p>
-          <div className="mt-6 flex justify-end gap-3"><Button autoFocus size="lg" variant="secondary" onClick={() => { setLeaveDialogOpen(false); window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus()); }}>Stay</Button><Button size="lg" className="bg-rose-600 text-white hover:bg-rose-700" onClick={onLeave}>Leave room</Button></div>
+          <div className="mt-6 flex flex-wrap justify-end gap-3"><Button autoFocus size="lg" variant="secondary" onClick={() => { setLeaveDialogOpen(false); window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Leave room"]')?.focus()); }}>Stay</Button><Button size="lg" className="bg-rose-600 text-white hover:bg-rose-700" onClick={onLeave}>Leave room</Button></div>
         </section>
       </div>}
     </div>

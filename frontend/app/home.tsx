@@ -4,8 +4,14 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuidV4 } from "uuid";
-import { ArrowRight, Check, Dices, Link2, Sparkles, Users, Video } from "lucide-react";
+import { ArrowRight, Check, Dices, Link2, Menu, Sparkles, Users, Video } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useUserStore, generateRandomUsername } from "@/lib/stores/userStore";
 import { isValidUUID } from "@/lib/utils";
 import { ThemeToggle } from "@/components/custom/themeToggle";
@@ -85,23 +91,23 @@ export default function Home() {
       <StaticBackground variant="landing" />
 
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 flex h-20 items-center justify-between border-b border-stone-200/60 bg-stone-50/80 px-5 backdrop-blur-md transition-colors dark:border-stone-800/60 dark:bg-stone-950/80 sm:px-10">
-        <div className="flex items-center gap-6 lg:gap-8">
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between gap-2 border-b border-stone-200/60 bg-stone-50/80 px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] backdrop-blur-md transition-colors dark:border-stone-800/60 dark:bg-stone-950/80 sm:h-20 sm:px-6 lg:px-10">
+        <div className="flex min-w-0 items-center gap-4 lg:gap-8">
           <Link
             href="/"
-            className="flex items-center gap-3 font-semibold tracking-tight transition hover:opacity-90 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-amber-400 rounded-xl"
+            className="flex shrink-0 items-center gap-2.5 sm:gap-3 font-semibold tracking-tight transition hover:opacity-90 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-amber-400 rounded-xl"
             aria-label="Pockets home"
           >
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-600 text-white shadow-sm dark:bg-amber-400 dark:text-stone-950">
+            <span className="grid h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-xl bg-amber-600 text-white shadow-sm dark:bg-amber-400 dark:text-stone-950">
               <Video size={19} />
             </span>
-            <span className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
+            <span className="text-lg sm:text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
               Pockets
             </span>
           </Link>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden items-center gap-4 text-sm font-medium text-stone-600 dark:text-stone-400 md:flex">
+          <nav aria-label="Primary navigation" className="hidden items-center gap-2 xl:gap-4 text-sm font-medium text-stone-600 dark:text-stone-400 lg:flex">
             <a
               href="#demo"
               className="inline-flex min-h-11 items-center rounded-lg px-2 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:hover:text-stone-100 dark:focus-visible:ring-amber-400"
@@ -132,7 +138,7 @@ export default function Home() {
         </div>
 
         {/* Global Controls & CTA */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
           <button
             type="button"
             onClick={scrollToEntry}
@@ -149,15 +155,46 @@ export default function Home() {
             onShortcut={handleShortcut}
           />
           <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Open navigation menu"
+                className="grid size-11 shrink-0 place-items-center rounded-xl border border-stone-200 bg-white/80 text-stone-700 backdrop-blur-xl transition-colors hover:bg-stone-200/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:border-stone-700 dark:bg-stone-800/80 dark:text-stone-200 dark:hover:bg-stone-700 dark:focus-visible:ring-amber-400 lg:hidden"
+              >
+                <Menu size={18} aria-hidden="true" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              className="w-52 rounded-2xl border-stone-200/80 bg-white/95 p-1.5 backdrop-blur-xl dark:border-stone-700/80 dark:bg-stone-900/95"
+            >
+              <DropdownMenuItem asChild className="min-h-11 rounded-xl px-3 text-sm font-medium">
+                <a href="#demo">Studio Demo</a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="min-h-11 rounded-xl px-3 text-sm font-medium">
+                <a href="#philosophy">Capabilities</a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="min-h-11 rounded-xl px-3 text-sm font-medium">
+                <a href="#specs">Architecture</a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="min-h-11 rounded-xl px-3 text-sm font-medium">
+                <a href="https://github.com/AatirNadim/pockets" target="_blank" rel="noreferrer">
+                  Docs
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main id="main-content">
         {/* Hero Section: Split Stage */}
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-5rem)] w-full max-w-6xl content-center items-start gap-12 px-5 py-12 lg:grid-cols-[1.1fr_430px] lg:px-10 lg:py-20">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-4rem)] w-full max-w-6xl content-center items-start gap-8 px-4 py-8 sm:min-h-[calc(100dvh-5rem)] sm:gap-12 sm:px-6 sm:py-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,430px)] lg:px-10 lg:py-20">
           {/* Left Column: Brand Statement & Value Pillars */}
-          <section className="max-w-xl">
+          <section className="min-w-0 max-w-xl">
             {/* <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-300/80 bg-amber-100/60 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-stone-800 backdrop-blur-sm dark:border-stone-700 dark:bg-stone-900/80 dark:text-stone-200">
               <span className="relative flex h-2 w-2" aria-hidden="true">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -166,19 +203,19 @@ export default function Home() {
               <span>A small room for your people</span>
             </div> */}
 
-            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl">
+            <h1 className="text-[2.125rem] font-semibold leading-[1.08] tracking-tight text-stone-900 dark:text-stone-100 sm:text-5xl lg:text-6xl">
               Meet, talk, and share in a{" "}
               <span className="text-amber-700 dark:text-amber-400">
                 pocket studio.
               </span>
             </h1>
 
-            <p className="mt-6 text-lg leading-relaxed text-stone-600 dark:text-stone-300 sm:text-xl">
+            <p className="mt-5 text-base leading-relaxed text-stone-600 dark:text-stone-300 sm:mt-6 sm:text-lg lg:text-xl">
               Start an ephemeral workspace for face-to-face video, audio, and direct peer-to-peer file
               sharing. Guests knock with an invite ID and wait for host admission.
             </p>
 
-            <div className="mt-8 grid gap-3.5 sm:grid-cols-3">
+            <div className="mt-7 grid gap-3 sm:mt-8 sm:grid-cols-3 sm:gap-3.5">
               {[
                 { label: "Zero signup", desc: "No cookies or accounts" },
                 { label: "Host approval", desc: "You decide who enters" },
@@ -186,7 +223,7 @@ export default function Home() {
               ].map((pillar) => (
                 <div
                   key={pillar.label}
-                  className="rounded-xl border border-stone-200/90 bg-white/70 p-3 shadow-xs dark:border-stone-800/80 dark:bg-stone-900/60"
+                  className="min-w-0 rounded-xl border border-stone-200/90 bg-white/70 p-3 shadow-xs dark:border-stone-800/80 dark:bg-stone-900/60"
                 >
                   <div className="flex items-center gap-2 font-semibold text-stone-900 dark:text-stone-100 text-sm">
                     <Check
@@ -222,12 +259,12 @@ export default function Home() {
           </section>
 
           {/* Right Column: Room Entry Component */}
-          <div className="w-full self-start lg:min-h-[540px]">
+          <div className="w-full min-w-0 self-start lg:min-h-[540px]">
             <section
               aria-labelledby="entry-title"
-              className="rounded-3xl border border-stone-200 bg-white p-5 shadow-xl shadow-stone-900/5 dark:border-stone-800 dark:bg-stone-900 sm:p-7"
+              className="rounded-3xl border border-stone-200 bg-white p-4 shadow-xl shadow-stone-900/5 dark:border-stone-800 dark:bg-stone-900 sm:p-7"
             >
-              <div className="mb-6">
+              <div className="mb-5 sm:mb-6">
                 <h2 id="entry-title" className="text-xl font-semibold tracking-tight">Come on in</h2>
                 <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">Choose how you want to enter the room.</p>
               </div>
@@ -239,7 +276,7 @@ export default function Home() {
                     role="tab"
                     aria-selected={activeTab === tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`min-h-11 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 ${
+                    className={`min-h-11 rounded-lg px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-400 sm:px-3 sm:text-sm ${
                       activeTab === tab
                         ? "bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-white"
                         : "text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white"
@@ -252,7 +289,7 @@ export default function Home() {
 
               {/* Display Name Input with Randomize Option */}
               <div className="mt-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <label htmlFor="display-name" className="text-sm font-medium text-stone-800 dark:text-stone-200">
                     Display name <span className="font-normal text-stone-600 dark:text-stone-400">(optional)</span>
                   </label>
@@ -296,7 +333,7 @@ export default function Home() {
                       value={roomId || ""}
                       onChange={(e) => setRoomId(e.target.value)}
                       placeholder="Paste the room ID"
-                      className="h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-4 font-mono text-sm outline-none placeholder:font-sans placeholder:text-stone-600 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-400 dark:focus-visible:ring-amber-400"
+                      className="h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-4 font-mono text-base sm:text-sm outline-none placeholder:font-sans placeholder:text-stone-600 focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-400 dark:focus-visible:ring-amber-400"
                     />
                   </div>
                 </div>
@@ -321,16 +358,16 @@ export default function Home() {
           <section
             id="demo"
             aria-labelledby="showcase-title"
-            className="relative z-10 mx-auto w-full max-w-6xl px-5 py-20 lg:px-10"
+            className="relative z-10 mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-10"
           >
-            <div className="mx-auto mb-12 max-w-2xl text-center">
+            <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-stone-600 dark:border-stone-800 dark:bg-stone-900/70 dark:text-stone-300">
                 <Sparkles size={12} className="text-amber-600 dark:text-amber-400" />
                 Inside a Pocket Studio
               </span>
               <h2
                 id="showcase-title"
-                className="mt-4 text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
+                className="mt-4 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl"
               >
                 Feel the tactile rhythm of collaboration.
               </h2>

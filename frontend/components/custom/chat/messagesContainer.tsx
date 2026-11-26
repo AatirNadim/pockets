@@ -247,7 +247,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
             >
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-2 shadow-sm",
+                  "max-w-[88%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[85%] sm:px-4",
                   isOwnMessage
                     ? "bg-amber-600 text-white rounded-br-sm"
                     : "bg-stone-200/80 text-stone-900 dark:bg-stone-800 dark:text-stone-100 rounded-bl-sm"

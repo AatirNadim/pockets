@@ -4,8 +4,8 @@ import { Github, Video, Radio } from "lucide-react";
 
 export function LandingFooter() {
   return (
-    <footer className="relative border-t border-stone-200/90 bg-white/60 py-12 text-sm text-stone-600 backdrop-blur-md dark:border-stone-800 dark:bg-stone-950/60 dark:text-stone-400">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 lg:px-10">
+    <footer className="relative border-t border-stone-200/90 bg-white/60 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] text-sm text-stone-600 backdrop-blur-md dark:border-stone-800 dark:bg-stone-950/60 dark:text-stone-400 sm:py-12">
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 sm:px-6 lg:px-10">
         <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
           <div>
             <div className="flex items-center gap-2.5">
@@ -22,8 +22,8 @@ export function LandingFooter() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex min-h-11 items-center gap-2 rounded-full border border-stone-200 bg-stone-200/75 px-3.5 py-1 text-xs font-mono text-stone-700 dark:border-stone-800 dark:bg-stone-900/80 dark:text-stone-300">
-              <Radio size={12} className="text-emerald-500 animate-pulse" />
+            <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-stone-200 bg-stone-200/75 px-3.5 py-2 text-xs font-mono text-stone-700 dark:border-stone-800 dark:bg-stone-900/80 dark:text-stone-300 sm:rounded-full sm:py-1">
+              <Radio size={12} className="shrink-0 text-emerald-500 animate-pulse" />
               <span>Full Mesh WebRTC</span>
               <span className="text-stone-400">•</span>
               <span>Max 6 Peers</span>
@@ -44,9 +44,9 @@ export function LandingFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-between gap-4 border-t border-stone-200/60 pt-6 text-xs text-stone-600 dark:border-stone-800/60 dark:text-stone-400 sm:flex-row">
+        <div className="flex flex-col items-center justify-between gap-4 border-t border-stone-200/60 pt-6 text-center text-xs text-stone-600 dark:border-stone-800/60 dark:text-stone-400 sm:flex-row sm:text-left">
           <p>© {new Date().getFullYear()} Pockets. All media & file transfers run browser-to-browser.</p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 sm:justify-end sm:gap-x-4">
             <span>No tracking cookies</span>
             <span className="text-stone-300 dark:text-stone-700">•</span>
             <span>Zero persistent databases</span>

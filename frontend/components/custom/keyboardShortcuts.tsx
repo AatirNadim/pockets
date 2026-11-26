@@ -94,12 +94,12 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
         aria-keyshortcuts="k ?"
         title="Keyboard shortcuts (K or ?)"
         onClick={() => setOpen(true)}
-        className="h-11 shrink-0 gap-1.5 px-2.5 has-[>svg]:px-2.5"
+        className="size-11 shrink-0 gap-1.5 px-0 sm:w-auto sm:px-2.5 sm:has-[>svg]:px-2.5"
       >
         <Keyboard size={18} aria-hidden="true" />
         <kbd
           aria-hidden="true"
-          className="rounded border border-stone-300 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-stone-700 shadow-2xs dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"
+          className="hidden rounded border border-stone-300 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-stone-700 shadow-2xs dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 sm:inline-block"
         >
           K
         </kbd>
@@ -132,7 +132,7 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
             }}
             className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl dark:border-stone-700 dark:bg-stone-900 sm:p-6"
           >
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h2 id="shortcut-title" className="text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100">Keyboard shortcuts</h2>
                 <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">Available when you are not typing.</p>
@@ -151,9 +151,9 @@ export function KeyboardShortcuts({ shortcuts, onShortcut }: KeyboardShortcutsPr
                 { key: "t", keys: ["T"], label: "Toggle light or dark theme" },
                 { key: "k", keys: ["K", "?"], label: "Show or hide this cheat sheet" },
               ].map(({ key, keys, label }) => (
-                <div key={key} className="flex items-center justify-between gap-4 rounded-xl border border-stone-200/70 bg-stone-50 px-3 py-2.5 dark:border-stone-700/60 dark:bg-stone-800">
-                  <dt className="text-sm text-stone-700 dark:text-stone-200">{label}</dt>
-                  <dd className="flex items-center gap-1.5">
+                <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-stone-200/70 bg-stone-50 px-3 py-2.5 dark:border-stone-700/60 dark:bg-stone-800 sm:gap-4">
+                  <dt className="min-w-0 text-sm text-stone-700 dark:text-stone-200">{label}</dt>
+                  <dd className="flex shrink-0 items-center gap-1.5">
                     {keys.map((k) => (
                       <kbd key={k} className="min-w-8 rounded-md border border-stone-300 bg-white px-2 py-1 text-center font-mono text-xs font-semibold text-stone-700 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200">{k}</kbd>
                     ))}
