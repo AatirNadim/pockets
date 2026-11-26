@@ -16,15 +16,15 @@
   },
   "dependencies": {
     "@pockets/shared": "workspace:*",
-    "dotenv": "^17.2.3",
-    "redis": "^5.10.0",
-    "uuid": "^11.1.0",
-    "ws": "^8.18.0"
+    "dotenv": "^18.0.10",
+    "redis": "^6.3.1",
+    "uuid": "^14.0.3",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@types/uuid": "^10.0.0",
     "@types/webrtc": "^0.0.46",
-    "@types/ws": "^8.5.13",
+    "@types/ws": "^8.18.2",
     "esbuild": "^0.24.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
