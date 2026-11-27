@@ -93,10 +93,9 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
     if (error) toast.error("File cannot be queued", { description: error });
     else if (accepted.length) {
       addFiles(accepted);
-      if (accepted.length === selected.length) toast.info(accepted.length === 1 ? "File attached" : `${accepted.length} files attached`);
     }
     if (selected.length > accepted.length && !error) toast.warning("Queue limit reached", { description: accepted.length ? `Attached ${accepted.length} of ${selected.length} files.` : `Remove an attachment before adding more. The queue holds up to ${MAX_QUEUED_FILES} files.` });
-    if (!selected.length && (event.target.files?.length ?? 0) > 0) toast.info("Those files are already queued.");
+    if (!selected.length && (event.target.files?.length ?? 0) > 0) toast.warning("Those files are already queued.");
     event.target.value = "";
   }, [addFiles, filesToBeSent]);
   const handleFileAction = async (id: string, ownerId: string, name: string) => {
@@ -104,7 +103,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
     fileActionBusyRef.current = true;
     const file = getLocalFile(id);
     if (ownerId === userId && !file) {
-      toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+      toast.warning("This shared file has expired", { description: "Attach the file again to make it available to the room." });
       fileActionBusyRef.current = false;
       return;
     }
@@ -113,7 +112,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       const currentFile = getLocalFile(id);
       if (currentFile) await saveBlobToHandle(currentFile, handle);
       else if (ownerId === userId) {
-        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        toast.warning("This shared file has expired", { description: "Attach the file again to make it available to the room." });
         return;
       }
       else {
@@ -137,8 +136,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
       }
       toast.success(`Saved ${name}`);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") toast.info("Download cancelled");
-      else toast.error("Could not save download", { description: describeSaveError(error) });
+      if (!(error instanceof DOMException && error.name === "AbortError")) toast.error("Could not save download", { description: describeSaveError(error) });
     } finally {
       fileActionBusyRef.current = false;
     }

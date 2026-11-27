@@ -95,9 +95,11 @@ describe("Variable Screen Size & Responsive Layout Verification", () => {
     let html = renderToString(
       React.createElement(RemoteVideoGrid, { status: "Connected", isConnected: true })
     );
-    assert.match(html, /grid-cols-1 auto-rows-\[minmax\(0,1fr\)\]/);
+    assert.match(html, /grid-cols-1/);
+    assert.match(html, /auto-rows-\[12rem\].*sm:auto-rows-\[16rem\]/);
+    assert.match(html, /aria-label="Participant videos"[^>]*tabindex="0"[^>]*overflow-y-auto/);
 
-    // 2 waiting peers -> 1 col mobile, 2 cols sm+
+    // 2 waiting peers retain their row height and the stage can scroll.
     useConnectionStore.setState({
       peers: {
         "peer-1": makePeer("Maya", "connecting"),
@@ -107,9 +109,10 @@ describe("Variable Screen Size & Responsive Layout Verification", () => {
     html = renderToString(
       React.createElement(RemoteVideoGrid, { status: "Connected", isConnected: true })
     );
-    assert.match(html, /grid-cols-1 sm:grid-cols-2 auto-rows-\[minmax\(11rem,1fr\)\]/);
+    assert.match(html, /grid-cols-2/);
+    assert.match(html, /overflow-y-auto/);
 
-    // 5 waiting peers -> 1 col mobile, 2 cols sm+, 3 cols xl+
+    // 5 waiting peers -> 2 columns, expanding to 3 on wide screens.
     useConnectionStore.setState({
       peers: {
         "peer-1": makePeer("P1", "connected"),
@@ -124,7 +127,7 @@ describe("Variable Screen Size & Responsive Layout Verification", () => {
     );
     assert.match(
       html,
-      /grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 auto-rows-\[minmax\(11rem,1fr\)\]/
+      /grid-cols-2 xl:grid-cols-3/
     );
   });
 

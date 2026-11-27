@@ -65,9 +65,9 @@ export default function Room() {
   const {
     userType,
     userId,
-    initializeUserAsHost,
     initializeUserAsGuest,
     setRoomId,
+    roomId: storedRoomId,
   } = useUserStore();
 
   const router = useRouter();
@@ -93,6 +93,9 @@ export default function Room() {
   } = useSocket();
   const { requests } = useJoinRequestStore();
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [entryReady, setEntryReady] = useState(false);
+  const [needsName, setNeedsName] = useState(false);
+  const [guestName, setGuestName] = useState("");
   const didValidateEntry = useRef(false);
   const isHost = userType === UserType.HOST;
 
@@ -107,25 +110,13 @@ export default function Room() {
       router.push("/");
       return;
     }
-    if (!userId) {
-      const searchParams = new URLSearchParams(window.location.search);
-      const name = searchParams.get("name") || undefined;
-      const isHostParam = searchParams.get("host") === "true";
-      setRoomId(roomId);
-      if (isHostParam) {
-        initializeUserAsHost(name);
-      } else {
-        initializeUserAsGuest(name);
-      }
-      return;
-    }
+    if (userId && storedRoomId === roomId) setEntryReady(true);
+    else setNeedsName(true);
   }, [
     router,
     roomId,
     userId,
-    initializeUserAsHost,
-    initializeUserAsGuest,
-    setRoomId,
+    storedRoomId,
   ]);
 
   // cleanupref will always have latest cleanUp function
@@ -150,11 +141,12 @@ export default function Room() {
   }, [leaveDialogOpen]);
 
   useEffect(() => {
-    if (!isValidUUID(roomId) || !userId) return;
+    if (!entryReady || !isValidUUID(roomId) || !userId) return;
     void connectToRoomRef.current();
-  }, [roomId, userId]);
+  }, [entryReady, roomId, userId]);
 
   useEffect(() => {
+    if (!entryReady) return;
     // 1. Handler to prompt the user before reloading/closing
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       console.log("Before unload event triggered, cleaning up...");
@@ -180,23 +172,21 @@ export default function Room() {
       // 3. Run cleanup on component unmount (SPA navigation)
       cleanUpRef.current();
     };
-  }, []);
+  }, [entryReady]);
 
   const onLeave = useCallback(() => {
     cleanUpRef.current();
-    toast.info("You left the room");
     router.push("/");
   }, [router]);
 
   const onToggleSpeaker = useCallback(() => {
     toggleSpeakerOff();
-    toast.info(useMediaStore.getState().isSpeakerOff ? "Room audio muted" : "Room audio unmuted", { id: "room-speaker" });
   }, [toggleSpeakerOff]);
 
   const handleShortcut = useCallback((key: string) => {
-    if (key === "m" && availableMicrophones.length) {
+    if (key === "m") {
       void updateAudioSendStateForPeers(!isMicrophoneMuted);
-    } else if (key === "v" && availableCameras.length) {
+    } else if (key === "v") {
       void updateVideoSendStateForPeers(!isVideoOff);
     } else if (key === "s") {
       onToggleSpeaker();
@@ -207,7 +197,30 @@ export default function Room() {
     } else if (key === "l") {
       setLeaveDialogOpen(true);
     }
-  }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, onToggleSpeaker, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
+  }, [isMicrophoneMuted, isVideoOff, toggleShowChat, onToggleSpeaker, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
+
+  if (!entryReady) return needsName ? (
+    <main className="grid min-h-dvh place-items-center bg-stone-50 p-4 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+      <section role="dialog" aria-modal="true" aria-labelledby="join-title" aria-describedby="join-description" className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl dark:border-stone-800 dark:bg-stone-900 sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400">Room invitation</p>
+        <h1 id="join-title" className="mt-3 text-2xl font-semibold tracking-tight">What should we call you?</h1>
+        <p id="join-description" className="mt-2 text-sm leading-6 text-stone-600 dark:text-stone-300">The host will see your name when you ask to join.</p>
+        <form className="mt-6" onSubmit={(event) => {
+          event.preventDefault();
+          const name = guestName.trim();
+          if (!name) return;
+          setRoomId(roomId);
+          initializeUserAsGuest(name);
+          setNeedsName(false);
+          setEntryReady(true);
+        }}>
+          <label htmlFor="guest-name" className="text-sm font-medium">Display name</label>
+          <input id="guest-name" autoFocus required maxLength={40} autoComplete="nickname" value={guestName} onChange={(event) => setGuestName(event.target.value)} placeholder="e.g. Maya" className="mt-2 h-12 w-full rounded-xl border border-stone-300 bg-white px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-950 dark:focus-visible:ring-amber-400" />
+          <div className="mt-6 flex gap-3"><Button type="button" variant="secondary" className="min-h-11 flex-1" onClick={() => router.push("/")}>Cancel</Button><Button type="submit" disabled={!guestName.trim()} className="min-h-11 flex-1 bg-amber-700 text-white hover:bg-amber-800 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300">Request to join</Button></div>
+        </form>
+      </section>
+    </main>
+  ) : null;
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">

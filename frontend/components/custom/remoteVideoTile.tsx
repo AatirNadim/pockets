@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { PeerConnectionStatus } from "@/lib/stores/connectionStore";
 
 type RemoteVideoTileProps = {
-  stream: MediaStream;
+  stream: MediaStream | null;
   userName?: string;
   userId: string;
   videoEnabled: boolean;
@@ -71,7 +71,7 @@ const RemoteVideoTile = ({
 
   return (
     <div
-      className={`relative min-h-44 rounded-2xl overflow-hidden border border-stone-200/50 bg-stone-900/60 shadow-xl transition-all duration-200 dark:border-stone-700/50 sm:min-h-52 ${
+      className={`relative min-h-0 min-w-0 rounded-2xl overflow-hidden border border-stone-200/50 bg-stone-900/60 shadow-xl transition-all duration-200 dark:border-stone-700/50 ${
         isSpeaking
           ? "ring-2 ring-amber-400 drop-shadow-[0_0_18px_rgba(255,141,104,0.35)]"
           : ""
@@ -91,7 +91,7 @@ const RemoteVideoTile = ({
         autoPlay
         playsInline
         muted
-        className={`w-full h-full object-cover ${
+        className={`absolute inset-0 h-full w-full object-contain ${
           videoEnabled && !isVideoHiddenForMe && !connectionInterrupted ? "opacity-100" : "opacity-0"
         }`}
       />

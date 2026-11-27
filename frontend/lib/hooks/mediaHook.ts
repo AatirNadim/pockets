@@ -437,25 +437,25 @@ const useMedia = () => {
     }
 
     try {
-      if (
-        typeof navigator === "undefined" ||
-        !navigator.mediaDevices?.getUserMedia
-      ) {
+      const { isMicrophoneMuted, isVideoOff } = useMediaStore.getState();
+      if (isMicrophoneMuted && isVideoOff) {
+        localStream.current = new MediaStream();
+        setMediaError(null);
+        return localStream.current;
+      }
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
         throw new Error("Media devices API unavailable");
       }
 
-      // if no selected devices, get default devices
       const constraints: MediaStreamConstraints = {
-        audio: selectedMicrophoneId
+        audio: isMicrophoneMuted ? false : selectedMicrophoneId
           ? { deviceId: { exact: selectedMicrophoneId } }
           : true,
-        video: selectedCameraId
+        video: isVideoOff ? false : selectedCameraId
           ? { deviceId: { exact: selectedCameraId } }
           : true,
       };
 
-      // creating both audio and video tracks
-      // media tracks are created regardless of whether they are muted or not
       try {
         localStream.current = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (captureError) {
@@ -464,6 +464,7 @@ const useMedia = () => {
         const tracks: MediaStreamTrack[] = [];
         const failures: string[] = [];
         for (const kind of ["audio", "video"] as const) {
+          if ((kind === "audio" && isMicrophoneMuted) || (kind === "video" && isVideoOff)) continue;
           try {
             const stream = await navigator.mediaDevices.getUserMedia(kind === "audio" ? { audio: true, video: false } : { audio: false, video: true });
             tracks.push(...stream.getTracks());
@@ -482,16 +483,20 @@ const useMedia = () => {
         localVideoRef.current.srcObject = localStream.current;
       }
 
+      if (!localStream.current.getAudioTracks().length) setMicrophoneMuted(true);
+      if (!localStream.current.getVideoTracks().length) setIsVideoOff(true);
       captureDeviceIdsFromStream(localStream.current);
       localStream.current.getTracks().forEach(watchLocalTrack);
       await populateAvailableDevices();
       if (localStream.current.getTracks().length) setMediaError(null);
       return localStream.current;
     } catch (error) {
+      setMicrophoneMuted(true);
+      setIsVideoOff(true);
       console.error("Error accessing media devices:", error);
       const reason = error instanceof DOMException ? error.name : "";
       const message = reason === "NotAllowedError" || reason === "SecurityError"
-        ? "Camera or microphone access was denied. You can continue without media; update browser permissions and rejoin to enable it."
+        ? "Camera or microphone access was denied. You can continue without media; update browser permissions and try turning it on."
         : reason === "NotFoundError"
         ? "No camera or microphone was found. You can continue without media."
         : "Camera and microphone could not start. Check device access and try again.";

@@ -90,7 +90,7 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
   const tile = (
     <div
       ref={tileRef}
-      className={`absolute z-30 bg-white/80 dark:bg-stone-900/80 rounded-2xl overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm transition-all duration-300 ${
+      className={`absolute z-30 max-h-full max-w-full bg-white/80 dark:bg-stone-900/80 rounded-2xl overflow-hidden shadow-xl border border-stone-200/50 dark:border-stone-700/50 backdrop-blur-sm transition-all duration-300 ${
         isMobile
           ? "top-0 left-0 touch-none cursor-grab active:cursor-grabbing"
           : "bottom-5 right-6 lg:bottom-6 lg:right-8"
@@ -111,7 +111,7 @@ const LocalVideoTile = ({ localVideoRef }: LocalVideoTileProps) => {
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain bg-stone-900"
       />
       {!isMinimized && (
         <div className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-full bg-stone-900/80 px-2.5 py-0.5 text-xs font-medium text-white shadow-lg backdrop-blur-sm dark:bg-stone-800/90 sm:bottom-3 sm:left-3 sm:px-3 sm:py-1 sm:text-sm">

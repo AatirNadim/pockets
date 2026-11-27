@@ -251,17 +251,8 @@ export const useSocket = () => {
 
   useEffect(() => {
     if (!roomId || !userId || !hasReceivedRoomRoster.current) return;
-
-    if (isMicrophoneMuted) {
-      sendWsMessage({ roomId, userId, type: "audio-mute" } as AudioMuteMessage);
-    } else {
-      sendWsMessage({
-        roomId,
-        userId,
-        type: "audio-unmute",
-      } as AudioUnmuteMessage);
-    }
-  }, [roomId, userId, isMicrophoneMuted]);
+    sendWsMessage({ type: "media-state", roomId, userId, audioEnabled: !isMicrophoneMuted, videoEnabled: !isVideoOff });
+  }, [roomId, userId, isMicrophoneMuted, isVideoOff]);
 
   const switchCamera = (deviceId: string) => {
     switchCameraForPeers(deviceId, peerConnections.current);
@@ -335,14 +326,12 @@ export const useSocket = () => {
       }
 
       setMicrophoneMuted(true);
-      toast.info("Microphone muted", { id: "room-microphone" });
       return;
     }
 
     if (!await replaceLocalTrackForPeers("audio", peerConnections.current)) return;
 
     setMicrophoneMuted(false);
-    toast.info("Microphone unmuted", { id: "room-microphone" });
 
     console.log("sending audio-unmute message to the room...");
   };
@@ -363,7 +352,6 @@ export const useSocket = () => {
       if (!await replaceLocalTrackForPeers("video", peerConnections.current)) return;
       setIsVideoOff(false);
     }
-    toast.info(toDisable ? "Camera off" : "Camera on", { id: "room-camera" });
   };
 
   const registerListenersForSocket = (socket: WebSocket) => {
@@ -382,6 +370,8 @@ export const useSocket = () => {
           userId,
           userName,
           userType,
+          audioEnabled: !useMediaStore.getState().isMicrophoneMuted,
+          videoEnabled: !useMediaStore.getState().isVideoOff,
         };
 
         console.log("Joining room with message: ", msg);
@@ -520,12 +510,18 @@ export const useSocket = () => {
           toast.success(userType === UserType.HOST ? "Room created" : "You joined the room");
         }
         hasReceivedRoomRoster.current = true;
+        if (roomId && userId) {
+          const media = useMediaStore.getState();
+          sendWsMessage({ type: "media-state", roomId, userId, audioEnabled: !media.isMicrophoneMuted, videoEnabled: !media.isVideoOff });
+        }
         if (admissionRosterTimeout.current) clearTimeout(admissionRosterTimeout.current);
         admissionRosterTimeout.current = null;
         setStatus(message.users.length ? "Connecting to participants…" : "Waiting for other users…");
         for (const user of message.users) {
           if (!user?.id || user.id === userId || !user.name) continue;
           addRemoteUser(user.id, user.name, user.type);
+          setRemoteTrackEnabled(user.id, TrackType.AUDIO, user.audioEnabled ?? true);
+          setRemoteTrackEnabled(user.id, TrackType.VIDEO, user.videoEnabled ?? true);
           setPeerStatus(user.id, {
             userName: user.name,
             userType: user.type,
@@ -542,10 +538,12 @@ export const useSocket = () => {
         console.log(
           "a new user has joined the room, creating a peer connection..."
         );
-        if (userType !== UserType.HOST && !useUserStore.getState().remoteUsers[message.userId]) {
+        if (message.userId !== userId && !useUserStore.getState().remoteUsers[message.userId]) {
           toast.info(`${message.userName} joined the room`);
         }
         addRemoteUser(message.userId, message.userName, message.userType);
+        setRemoteTrackEnabled(message.userId, TrackType.AUDIO, message.audioEnabled ?? true);
+        setRemoteTrackEnabled(message.userId, TrackType.VIDEO, message.videoEnabled ?? true);
         createPeerConnection(
           message.userId,
           message.userName,
@@ -613,18 +611,17 @@ export const useSocket = () => {
         break;
 
       case "join-request":
-        if (userType === UserType.GUEST && message.guest?.id === userId) {
-          toast.info("Join request sent", { description: "Waiting for the host to respond." });
-        }
         if (userType === UserType.HOST && message.guest) {
-          addJoinRequest({
+          const added = addJoinRequest({
             roomId: message.roomId,
             guestId: message.guest.id,
             guestName: message.guest.name,
           });
-          toast.info("Join Request", {
-            description: `${message.guest.name} wants to join the room.`,
-          });
+          if (added) {
+            toast.info("Join Request", {
+              description: `${message.guest.name} wants to join the room.`,
+            });
+          }
         }
         break;
 
@@ -662,8 +659,12 @@ export const useSocket = () => {
         }
         if (userType === UserType.HOST) {
           removeJoinRequestFromStore(message.guestUserId);
-          toast.info(message.guestName ? `Declined ${message.guestName}’s request` : "Join request declined", { id: `join-decision-${message.guestUserId}` });
         }
+        break;
+
+      case "media-state":
+        setRemoteTrackEnabled(message.userId, TrackType.AUDIO, message.audioEnabled);
+        setRemoteTrackEnabled(message.userId, TrackType.VIDEO, message.videoEnabled);
         break;
 
       case "audio-mute":
@@ -791,7 +792,6 @@ export const useSocket = () => {
       });
       return;
     }
-    toast.info("Sending your decision…", { id: `join-decision-${guestId}` });
   };
 
   const registerPCEventHandlers = (
@@ -942,14 +942,10 @@ export const useSocket = () => {
 
       addMediaStream(remoteUserId, track, trackType);
 
-      const setState = (enabled: boolean) =>
-        setRemoteTrackEnabled(remoteUserId, trackType, enabled);
 
-      setState(!track.muted && track.readyState === "live");
 
       const handleMute = () => {
         console.log("remote track ", track, "muted for user:", remoteUserId);
-        setState(false);
         if (trackType === TrackType.AUDIO) {
           markAudioAsSilentForUser(remoteUserId);
         }
@@ -957,7 +953,7 @@ export const useSocket = () => {
 
       const handleUnmute = () => {
         console.log("remote track ", track, "unmuted for user:", remoteUserId);
-        setState(true);
+
       };
 
       const detachTrackListeners = () => {
@@ -1133,6 +1129,13 @@ export const useSocket = () => {
 
       console.debug("Creating offer for remote user:", remoteUserId);
 
+      // Reserve senders for devices that were disabled before joining.
+      if (!audioSendersRef.current[remoteUserId]) {
+        audioSendersRef.current[remoteUserId] = pc.addTransceiver("audio", { direction: "sendrecv" }).sender;
+      }
+      if (!videoSendersRef.current[remoteUserId]) {
+        videoSendersRef.current[remoteUserId] = pc.addTransceiver("video", { direction: "sendrecv" }).sender;
+      }
       const offer = await pc.createOffer();
 
       console.debug("Setting local description with offer:", offer);
@@ -1189,6 +1192,11 @@ export const useSocket = () => {
       console.log("Received offer:", offer);
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      for (const transceiver of pc.getTransceivers()) {
+        const kind = transceiver.receiver.track.kind;
+        if (kind === "audio" && !audioSendersRef.current[fromUserId]) audioSendersRef.current[fromUserId] = transceiver.sender;
+        if (kind === "video" && !videoSendersRef.current[fromUserId]) videoSendersRef.current[fromUserId] = transceiver.sender;
+      }
       const peer = useConnectionStore.getState().peers[fromUserId];
       if (peer) {
         setPeerStatus(fromUserId, {
@@ -1684,9 +1692,6 @@ export const useSocket = () => {
     }
 
     if (ownerId === userId) {
-      toast.info("File already available", {
-        description: "You already own this file.",
-      });
       return false;
     }
 
@@ -1711,8 +1716,6 @@ export const useSocket = () => {
 
     if (!delivered) {
       clearDownloadProgress(fileIds);
-    } else {
-      toast.info(fileIds.length === 1 ? "Download requested" : "Downloads requested");
     }
 
     return delivered;

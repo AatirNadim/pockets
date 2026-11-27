@@ -1,6 +1,6 @@
 # Pockets frontend
 
-Set `NEXT_PUBLIC_SITE_URL` to the canonical public origin for sitemap and social metadata. Vercel's deployment hostname is used when this is unset; local development falls back to `http://localhost:3000`.
+Set `NEXT_PUBLIC_SITE_URL` to override the canonical public origin for sitemap and social metadata. When unset, production uses `https://pockets.aatirnadim.dev` and local development uses `http://localhost:3000`.
 
 The frontend is a Next.js 15 App Router application using React 19. It provides the landing and room experiences, obtains browser media, establishes WebRTC connections, and manages room chat and file transfers.
 
@@ -29,7 +29,7 @@ The app uses public STUN by default. Configure `TURN_CREDENTIALS_URL` on the Nex
 - Chat messages can go to everyone or to a selected set of connected peers. Selecting recipients sends directly to those peers' data channels; the signaling server does not receive the message.
 - Keyboard help is available with `K` or `?`. On the landing page, `Enter` creates/joins the selected room, `N` creates a room, and `J` selects join. In a room, `M` toggles the microphone, `V` toggles the camera, `S` toggles speaker audio, `C` opens/closes chat and files, `I` copies the invite, and `L` opens the leave confirmation. `T` switches theme. Shortcuts pause while an editable control is focused.
 
-The root layout generates the favicon, Apple touch icon, Open Graph card, and Twitter large-image card. Set `NEXT_PUBLIC_SITE_URL` to the canonical public site URL; Vercel's deployment hostname is used when unset, and local development falls back to `http://localhost:3000`. Room pages are excluded from indexing.
+The root layout generates the favicon, Apple touch icon, Open Graph card, and Twitter large-image card. The homepage has a canonical URL and room pages are excluded from indexing. Set `NEXT_PUBLIC_SITE_URL` to override the production canonical origin.
 
 Start with the [root README](../README.md) for the workspace overview and quick start. See [architecture and feature flows](../docs/README.md) for the complete room and peer connection diagrams, [the server README](../server/README.md) for signaling behavior, and [local development and deployment](../LOCAL_DEVELOPMENT.md) for setup and HTTPS.
 
@@ -74,7 +74,7 @@ Copy `frontend/.env.example` to `frontend/.env.local` for development.
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_SERVER_PATH` | Browser-reachable signaling hostname and port. The client selects `ws://` or `wss://` from the page protocol; a `ws://` or `wss://` prefix can override this. Defaults to `localhost:8080`. |
-| `NEXT_PUBLIC_SITE_URL` | Canonical public site origin used for sitemap and social metadata. On Vercel, `VERCEL_URL` is used if this is unset. |
+| `NEXT_PUBLIC_SITE_URL` | Optional canonical public origin for sitemap and social metadata. Production defaults to `https://pockets.aatirnadim.dev`. |
 | `TURN_CREDENTIALS_URL` | Optional URL fetched by the Next.js server for short-lived ICE/TURN credentials. Accepts `{ "iceServers": [...] }` or `[...]`. |
 | `TURN_CREDENTIALS_TOKEN` | Optional bearer token sent server-to-server to `TURN_CREDENTIALS_URL`. Keep it private; do not rename it with `NEXT_PUBLIC_`. |
 | `TURN_CREDENTIALS_METHOD` | Optional HTTP method for `TURN_CREDENTIALS_URL` (`GET` by default, or `POST` for providers such as Cloudflare TURN). |

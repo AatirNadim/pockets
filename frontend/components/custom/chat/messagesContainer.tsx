@@ -58,7 +58,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
   const saveAttachment = useCallback(async (attachment: FileAttachment) => {
     try {
       if (attachment.ownerId === userId && !getLocalFile(attachment.id)) {
-        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        toast.warning("This shared file has expired", { description: "Attach the file again to make it available to the room." });
         return;
       }
       const handle = await pickFileDestination(attachment.name);
@@ -66,7 +66,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
       const localFile = state === AttachmentState.LOCAL ? getLocalFile(attachment.id) : undefined;
       if (localFile) await saveBlobToHandle(localFile, handle);
       else if (attachment.ownerId === userId) {
-        toast.info("This shared file has expired", { description: "Attach the file again to make it available to the room." });
+        toast.warning("This shared file has expired", { description: "Attach the file again to make it available to the room." });
         return;
       }
       else {
@@ -91,8 +91,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
       }
       toast.success(`Saved ${attachment.name}`);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") toast.info("Download cancelled");
-      else toast.error("Could not save download", { description: describeSaveError(error) });
+      if (!(error instanceof DOMException && error.name === "AbortError")) toast.error("Could not save download", { description: describeSaveError(error) });
     }
   }, [deriveAttachmentState, getLocalFile, onRequestFile, onCheckAvailability, onPromptReupload, onRequestReupload, userId]);
 
@@ -154,7 +153,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
             onRequestReupload(files.map((file) => file.id), ownerId, files.map((file) => file.name));
           }
         }
-        if (unavailable.some((file) => file.ownerId === userId)) toast.info("Attach expired files again", { description: "Your own shared copy expired from room memory and must be selected again." });
+        if (unavailable.some((file) => file.ownerId === userId)) toast.warning("Attach expired files again", { description: "Your own shared copy expired from room memory and must be selected again." });
         unavailable.forEach(({ id }) => clearDownloadDestination(id));
         const failedSaves: string[] = [];
         const expiredLocalFiles: string[] = [];
@@ -171,7 +170,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
             console.error(`Could not save ${attachment.name}`, error);
           }
         }
-        if (expiredLocalFiles.length) toast.info("Attach expired files again", { description: expiredLocalFiles.join(", ") });
+        if (expiredLocalFiles.length) toast.warning("Attach expired files again", { description: expiredLocalFiles.join(", ") });
         if (failedSaves.length) toast.error("Some files could not be saved", { description: failedSaves.join(", ") });
         for (const [ownerId, fileIds] of availableByOwner) {
           fileIds.forEach((id) => { const handle = destinations.get(id); if (handle) setDownloadDestination(id, handle); });
@@ -193,8 +192,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
       }
       await finish(false);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") toast.info("Download cancelled");
-      else toast.error("Could not save files", { description: describeSaveError(error) });
+      if (!(error instanceof DOMException && error.name === "AbortError")) toast.error("Could not save files", { description: describeSaveError(error) });
     } finally {
       actionBusyRef.current = false;
     }
