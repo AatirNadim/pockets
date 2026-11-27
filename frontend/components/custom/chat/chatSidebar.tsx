@@ -15,6 +15,7 @@ const ChatComponent = dynamic(() => import("./chatComponent"), {
 type ChatSidebarProps = {
   sendChatMessage: (message: string, recipientIds?: string[]) => boolean;
   requestFileDownload: (fileIds: string[], ownerId: string) => boolean;
+  cancelFileDownloads: (fileIds: string[]) => void;
   requestFileAvailability: (fileIds: string[], ownerId: string) => Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>;
   requestFileReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
 };
@@ -22,6 +23,7 @@ type ChatSidebarProps = {
 const ChatSidebar = ({
   sendChatMessage,
   requestFileDownload,
+  cancelFileDownloads,
   requestFileAvailability,
   requestFileReupload,
 }: ChatSidebarProps) => {
@@ -48,6 +50,7 @@ const ChatSidebar = ({
       <ChatComponent
         onSendMessage={sendChatMessage}
         onRequestFile={requestFileDownload}
+        onCancelDownloads={cancelFileDownloads}
         onCheckAvailability={requestFileAvailability}
         onRequestReupload={requestFileReupload}
         onClose={toggleShowChat}

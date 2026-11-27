@@ -121,7 +121,7 @@ For a message with multiple attachments, **Download All** asks the browser to ch
 
 1. Separates files already available on this device from files owned by other participants.
 2. Checks remote availability with each owner in parallel. An owner that does not respond within 12 seconds causes the bulk action to stop before saving or requesting files.
-3. Saves available local files to the selected folder and groups available remote file requests by owner.
+3. Saves available local files to the selected folder and requests each available remote file separately.
 4. If files are unavailable, offers to send their owner a chat request to attach/re-share them. Files originally shared by the current user must be attached again locally.
 
 The browser’s folder picker and write permissions apply. Files can be saved locally even if a different owner’s availability check fails; the operation is not a transaction across all participants.
@@ -131,6 +131,8 @@ The browser’s folder picker and write permissions apply. Files can be saved lo
 The owner keeps the queued file in a client-side catalog for ten minutes after the attachment is successfully sent in chat. A per-file timer removes expired entries from that catalog, and the transfer sender rechecks expiry before sending. Expiry does not delete the attachment reference from chat history, or any copy already downloaded by another participant. Expired entries show as unavailable; the owner must attach the file again for it to be shared again. Leaving or closing the room resets the local file store and cancels active transfers.
 
 ### Failure and retry behavior
+
+- While remote files are being downloaded, each file offers a cancel control, and the group action cancels the remaining active downloads in that message. Cancelling closes the partial writable file so the browser can keep the bytes already written. A partial file is not resumable and may be incomplete.
 
 - A download request is rejected or marked unavailable if the owner no longer has every requested file. The requester clears its pending progress state; the UI may offer an owner reupload request.
 - A channel can fail because of a peer disconnect, a malformed or out-of-order chunk, a size mismatch, a local save/write error, a stalled receive, or a sender-side error. The client closes the affected transfer channel, clears its partial destination/progress, and reports the failure.

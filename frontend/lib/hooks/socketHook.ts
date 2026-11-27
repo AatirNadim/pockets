@@ -54,6 +54,8 @@ export const useSocket = () => {
   const peerTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
   const pendingAvailability = useRef(new Map<string, (result: { availableFileIds: string[]; unavailableFileIds: string[] } | null) => void>());
+  const downloadRequests = useRef(new Map<string, { requestId: string; ownerId: string }>());
+  const cancelledUploads = useRef(new Set<string>());
   const connectAttempt = useRef<Promise<void> | null>(null);
   const roomLifecycleGeneration = useRef(0);
   const roomCleanupComplete = useRef(false);
@@ -219,10 +221,11 @@ export const useSocket = () => {
     clearRequests: clearJoinRequests,
   } = useJoinRequestStore();
 
-  const { sendFile, sendFilesToUser, registerIncomingTransferChannel, cancelIncomingTransfers } =
+  const { sendFile, sendFilesToUser, registerIncomingTransferChannel, cancelIncomingTransfers, cancelIncomingFile } =
     useFile({
       peerConnections,
       dataChannelMap,
+      isRequestActive: (requestId) => Array.from(downloadRequests.current.entries()).some(([fileId, request]) => request.requestId === requestId && Boolean(useFileStore.getState().downloadProgress[fileId])),
     });
 
   useEffect(() => {
@@ -1459,10 +1462,11 @@ export const useSocket = () => {
 
       // initiate file transfer
       console.log("sending file to requester:", payload.requesterId);
-      if (!await sendFilesToUser(senderId, payload.fileIds)) {
+      if (!await sendFilesToUser(senderId, payload.fileIds, payload.requestId)) {
         throw new Error("Requested file transfer did not complete.");
       }
     } catch (error) {
+      if (payload.requestId && cancelledUploads.current.delete(payload.requestId)) return;
       console.error("Failed to fulfill download request", error);
       sendEnvelope(
         {
@@ -1497,6 +1501,8 @@ export const useSocket = () => {
       });
       return;
     }
+
+    if (payload.requestId && !payload.fileIds.some((id) => downloadRequests.current.get(id)?.requestId === payload.requestId)) return;
 
     if (payload.status === "accepted(all)") {
       toast.info("File available to download", {
@@ -1577,6 +1583,13 @@ export const useSocket = () => {
             case "file-download-request":
               if (remoteUserId && isValidFileRequest(envelope.payload, remoteUserId)) {
                 handleDownloadRequest(envelope.payload, remoteUserId);
+              }
+              break;
+            case "file-download-cancel":
+              if (remoteUserId && isValidFileRequest(envelope.payload, remoteUserId) && envelope.payload.ownerId === userId && envelope.payload.requestId) {
+                const requestId = envelope.payload.requestId;
+                const session = uploadSessionRegistry.getSessionsForPeer(remoteUserId).find((item) => item.requestId === requestId);
+                if (session) { cancelledUploads.current.add(requestId); session.cancel(); }
               }
               break;
             case "file-download-response":
@@ -1698,27 +1711,36 @@ export const useSocket = () => {
     if (!fileIds.length || fileIds.length > MAX_QUEUED_FILES ||
       fileIds.some((id) => typeof id !== "string" || id.length > 128)) return false;
 
-    markDownloadRequested(fileIds, ownerId);
-
-    console.log("sending file download request for file:", fileIds);
-
-    const delivered = sendEnvelope(
-      {
-        kind: "file-download-request",
-        payload: {
-          fileIds,
-          ownerId,
-          requesterId: userId,
-        },
-      },
-      ownerId
-    );
-
-    if (!delivered) {
-      clearDownloadProgress(fileIds);
+    let deliveredAll = true;
+    for (const fileId of fileIds) {
+      const requestId = uuidv4();
+      downloadRequests.current.set(fileId, { requestId, ownerId });
+      markDownloadRequested([fileId], ownerId);
+      const delivered = sendEnvelope({ kind: "file-download-request", payload: {
+        fileIds: [fileId], ownerId, requesterId: userId, requestId,
+      } }, ownerId);
+      if (!delivered) {
+        deliveredAll = false;
+        downloadRequests.current.delete(fileId);
+        clearDownloadProgress([fileId]);
+        clearDownloadDestination(fileId);
+      }
     }
+    return deliveredAll;
+  };
 
-    return delivered;
+  const cancelFileDownloads = (fileIds: string[]) => {
+    for (const fileId of fileIds) {
+      const request = downloadRequests.current.get(fileId);
+      if (!request || !useFileStore.getState().downloadProgress[fileId] || !userId) continue;
+      downloadRequests.current.delete(fileId);
+      cancelIncomingFile(request.requestId);
+      clearDownloadProgress([fileId]);
+      clearDownloadDestination(fileId);
+      sendEnvelope({ kind: "file-download-cancel", payload: {
+        fileIds: [fileId], ownerId: request.ownerId, requesterId: userId, requestId: request.requestId,
+      } }, request.ownerId);
+    }
   };
 
   const requestFileAvailability = (fileIds: string[], ownerId: string) => new Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>((resolve) => {
@@ -1811,6 +1833,8 @@ export const useSocket = () => {
     activeRoomId.current = null;
     runCleanupStep("stop local media", cleanUpMediaDevices);
     runCleanupStep("clear download destinations", clearAllDownloadDestinations);
+    downloadRequests.current.clear();
+    cancelledUploads.current.clear();
     runCleanupStep("clear chat messages", clearChatMessages);
     runCleanupStep("clear unread count", resetUnreadCount);
     runCleanupStep("reset file store", resetFileStore);
@@ -1838,6 +1862,7 @@ export const useSocket = () => {
     sendFile,
     sendChatMessage,
     requestFileDownload,
+    cancelFileDownloads,
     requestFileAvailability,
     requestFileReupload,
     createPeerConnection,

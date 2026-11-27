@@ -88,6 +88,7 @@ export default function Room() {
     respondToJoinRequest,
     sendChatMessage,
     requestFileDownload,
+    cancelFileDownloads,
     requestFileAvailability,
     requestFileReupload,
   } = useSocket();
@@ -269,6 +270,7 @@ export default function Room() {
         <ChatSidebar
           sendChatMessage={sendChatMessage}
           requestFileDownload={requestFileDownload}
+          cancelFileDownloads={cancelFileDownloads}
           requestFileAvailability={requestFileAvailability}
           requestFileReupload={requestFileReupload}
         />

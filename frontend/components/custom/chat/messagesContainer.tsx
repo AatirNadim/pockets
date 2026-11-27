@@ -7,7 +7,7 @@ import { useUserStore } from "@/lib/stores/userStore";
 import type { ChatMessage, FileAttachment } from "@pockets/shared";
 import { cn, formatBytes, formatTimestamp, resolveSender } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, Paperclip } from "lucide-react";
+import { Download, Paperclip, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
 import DownloadIndicator from "../downloadIndicator";
 import { clearDownloadDestination, describeSaveError, pickFileDestination, pickFolderDestinations, saveBlobToHandle, setDownloadDestination } from "@/lib/utils/fileSaving";
@@ -22,12 +22,13 @@ const groupByOwner = <T extends { ownerId: string }>(files: T[]) => {
 
 type MessagesContainerProps = {
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
+  onCancelDownloads: (fileIds: string[]) => void;
   onCheckAvailability: (fileIds: string[], ownerId: string) => Promise<{ availableFileIds: string[]; unavailableFileIds: string[] } | null>;
   onRequestReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
   onPromptReupload: (files: Array<{ id: string; name: string }>, onFinish: (request: boolean) => void) => void;
 };
 
-const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReupload, onPromptReupload }: MessagesContainerProps) => {
+const MessagesContainer = ({ onRequestFile, onCancelDownloads, onCheckAvailability, onRequestReupload, onPromptReupload }: MessagesContainerProps) => {
   const { chatMessages } = useChatStore();
 
   const { userId } = useUserStore();
@@ -277,7 +278,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                           : expired
                           ? "Expired"
                           : isDownloading
-                          ? "Downloading"
+                          ? "Cancel download"
                           : "Request";
                       const total = tracker?.totalBytes ?? 1;
                       const percent = tracker
@@ -295,18 +296,17 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                         <button
                           key={attachment.id}
                           type="button"
-                          onClick={() => handleAttachmentAction([attachment])}
+                          onClick={() => isDownloading ? onCancelDownloads([attachment.id]) : handleAttachmentAction([attachment])}
+                          aria-label={isDownloading ? `Cancel download of ${attachment.name}` : `Download ${attachment.name}`}
                           disabled={
-                            state === AttachmentState.REMOTE && (isDownloading || expired)
+                            state === AttachmentState.REMOTE && expired
                           }
                           className={cn(
                             "w-full rounded-xl border px-3 py-2 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2",
                             isOwnMessage
                               ? "border-white/30 bg-white/15 hover:bg-white/25 focus-visible:ring-white/60"
                               : "border-stone-300/80 bg-white/80 text-stone-900 hover:bg-white focus-visible:ring-amber-600 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-100 dark:hover:bg-stone-900 dark:focus-visible:ring-amber-400",
-                            state === AttachmentState.REMOTE &&
-                              isDownloading &&
-                              "cursor-not-allowed opacity-80"
+                            isDownloading && "opacity-80"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -320,6 +320,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                                 <>
                                   {renderDownloadIndicator(attachment.id)}
                                   <span>{percent}%</span>
+                                  <X className="h-4 w-4" aria-hidden="true" />
                                 </>
                               ) : (
                                 <Download className="h-3.5 w-3.5 opacity-80" />
@@ -336,8 +337,9 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                     {msg.attachments.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => handleAttachmentAction(msg.attachments!)}
-                        disabled={msg.attachments.some((attachment) => Boolean(downloadProgress[attachment.id]))}
+                        onClick={() => msg.attachments!.some((attachment) => Boolean(downloadProgress[attachment.id]))
+                          ? onCancelDownloads(msg.attachments!.map((attachment) => attachment.id))
+                          : handleAttachmentAction(msg.attachments!)}
                         className={cn(
                           "group flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50",
                           isOwnMessage
@@ -345,8 +347,7 @@ const MessagesContainer = ({ onRequestFile, onCheckAvailability, onRequestReuplo
                             : "border-stone-300/80 bg-white/80 text-stone-900 hover:bg-white focus-visible:ring-amber-600 disabled:hover:bg-white/80 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-100 dark:hover:bg-stone-900 dark:focus-visible:ring-amber-400 dark:disabled:hover:bg-stone-900/70"
                         )}
                       >
-                        <Download className="h-3.5 w-3.5 opacity-80 transition-opacity group-hover:opacity-100" />
-                        <span>Download All</span>
+                        {msg.attachments.some((attachment) => Boolean(downloadProgress[attachment.id])) ? <><X className="h-3.5 w-3.5" /><span>Cancel downloads</span></> : <><Download className="h-3.5 w-3.5 opacity-80 transition-opacity group-hover:opacity-100" /><span>Download All</span></>}
                       </button>
                     )}
                   </div>
