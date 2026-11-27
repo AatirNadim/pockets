@@ -1,9 +1,6 @@
 name: Render Keep-Alive Ping
 
 on:
-  schedule:
-    # Trigger every 12 minutes (UTC)
-    - cron: "*/12 * * * *"
   workflow_dispatch: # Allows manual trigger from GitHub UI / CLI
 
 concurrency:
