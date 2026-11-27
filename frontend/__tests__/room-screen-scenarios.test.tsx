@@ -165,20 +165,22 @@ describe("Room Screen & Active Session Scenarios", () => {
 
     it("de-duplicates multiple knock requests from the same guestId", () => {
       const store = useJoinRequestStore.getState();
-      store.addRequest({
+      assert.strictEqual(store.addRequest({
         roomId: "test-room-uuid",
         guestId: "guest-101",
         guestName: "Alex",
-      });
-      store.addRequest({
+      }), true);
+      assert.strictEqual(store.addRequest({
         roomId: "test-room-uuid",
         guestId: "guest-101",
         guestName: "Alex (Duplicate Knock)",
-      });
+      }), false);
 
       const requests = useJoinRequestStore.getState().requests;
       assert.strictEqual(requests.length, 1, "Must not create duplicate knock entry");
       assert.strictEqual(requests[0].guestName, "Alex");
+      store.removeRequest("guest-101");
+      assert.strictEqual(store.addRequest({ roomId: "test-room-uuid", guestId: "guest-101", guestName: "Alex" }), true, "A new request after a decision is allowed");
     });
 
     it("removes knocking guest when admitted or declined by host", () => {

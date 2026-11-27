@@ -7,6 +7,7 @@ import {
   Mic,
   MicOff,
   PhoneOff,
+  Settings,
   Video,
   VideoOff,
   Volume2,
@@ -221,21 +222,47 @@ const MediaControl = ({
           )}
         </Button>
 
-        <DeviceDropdown
+        <div className="hidden sm:block"><DeviceDropdown
           label="Camera"
           icon={<Camera className="w-4 h-4" />}
           devices={cameras}
           selectedId={selectedCameraId}
           onSelect={onCameraChange}
-        />
+        /></div>
 
-        <DeviceDropdown
+        <div className="hidden sm:block"><DeviceDropdown
           label="Microphone"
           icon={<Mic className="w-4 h-4" />}
           devices={microphones}
           selectedId={selectedMicrophoneId}
           onSelect={onMicrophoneChange}
-        />
+        /></div>
+
+        <div className="sm:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="lg" aria-label="Device settings" className="size-11 shrink-0 rounded-2xl bg-stone-200/80 text-stone-800 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700">
+                <Settings className="h-5 w-5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" side="top" sideOffset={12} className="max-h-[min(24rem,60dvh)] w-64 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-2xl border-stone-200/50 bg-white/95 dark:border-stone-700/50 dark:bg-stone-900/95">
+              {[
+                { label: "Camera", devices: cameras, selectedId: selectedCameraId, onSelect: onCameraChange },
+                { label: "Microphone", devices: microphones, selectedId: selectedMicrophoneId, onSelect: onMicrophoneChange },
+              ].map(({ label, devices, selectedId, onSelect }) => (
+                <div key={label} role="group" aria-label={label}>
+                  <DropdownMenuLabel className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</DropdownMenuLabel>
+                  {devices.length ? devices.map((device) => (
+                    <DropdownMenuItem key={device.deviceId} onSelect={() => { void onSelect(device.deviceId); }} className={cn("flex items-center justify-between gap-3 rounded-xl", selectedId === device.deviceId && "text-amber-600 dark:text-amber-400")}>
+                      <span className="truncate text-sm">{device.label}</span>
+                      {selectedId === device.deviceId && <Check className="h-4 w-4 shrink-0" aria-label="Selected" />}
+                    </DropdownMenuItem>
+                  )) : <div className="px-2 py-3 text-sm text-stone-500 dark:text-stone-400">No devices detected</div>}
+                </div>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <Button
           onClick={toggleShowChat}

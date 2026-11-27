@@ -617,14 +617,16 @@ export const useSocket = () => {
           toast.info("Join request sent", { description: "Waiting for the host to respond." });
         }
         if (userType === UserType.HOST && message.guest) {
-          addJoinRequest({
+          const added = addJoinRequest({
             roomId: message.roomId,
             guestId: message.guest.id,
             guestName: message.guest.name,
           });
-          toast.info("Join Request", {
-            description: `${message.guest.name} wants to join the room.`,
-          });
+          if (added) {
+            toast.info("Join Request", {
+              description: `${message.guest.name} wants to join the room.`,
+            });
+          }
         }
         break;
 

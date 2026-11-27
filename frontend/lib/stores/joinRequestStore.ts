@@ -8,20 +8,24 @@ export type PendingJoinRequest = {
 
 interface JoinRequestState {
   requests: PendingJoinRequest[];
-  addRequest: (request: PendingJoinRequest) => void;
+  addRequest: (request: PendingJoinRequest) => boolean;
   removeRequest: (guestId: string) => void;
   clearRequests: () => void;
 }
 
 export const useJoinRequestStore = create<JoinRequestState>((set) => ({
   requests: [],
-  addRequest: (request) =>
+  addRequest: (request) => {
+    let added = false;
     set((state) => {
-      if (state.requests.some((pending) => pending.guestId === request.guestId)) {
+      if (state.requests.some((pending) => pending.roomId === request.roomId && pending.guestId === request.guestId)) {
         return state;
       }
+      added = true;
       return { requests: [...state.requests, request] };
-    }),
+    });
+    return added;
+  },
   removeRequest: (guestId) =>
     set((state) => ({
       requests: state.requests.filter((request) => request.guestId !== guestId),
