@@ -326,14 +326,12 @@ export const useSocket = () => {
       }
 
       setMicrophoneMuted(true);
-      toast.info("Microphone muted", { id: "room-microphone" });
       return;
     }
 
     if (!await replaceLocalTrackForPeers("audio", peerConnections.current)) return;
 
     setMicrophoneMuted(false);
-    toast.info("Microphone unmuted", { id: "room-microphone" });
 
     console.log("sending audio-unmute message to the room...");
   };
@@ -354,7 +352,6 @@ export const useSocket = () => {
       if (!await replaceLocalTrackForPeers("video", peerConnections.current)) return;
       setIsVideoOff(false);
     }
-    toast.info(toDisable ? "Camera off" : "Camera on", { id: "room-camera" });
   };
 
   const registerListenersForSocket = (socket: WebSocket) => {
@@ -541,7 +538,7 @@ export const useSocket = () => {
         console.log(
           "a new user has joined the room, creating a peer connection..."
         );
-        if (userType !== UserType.HOST && !useUserStore.getState().remoteUsers[message.userId]) {
+        if (message.userId !== userId && !useUserStore.getState().remoteUsers[message.userId]) {
           toast.info(`${message.userName} joined the room`);
         }
         addRemoteUser(message.userId, message.userName, message.userType);
@@ -614,9 +611,6 @@ export const useSocket = () => {
         break;
 
       case "join-request":
-        if (userType === UserType.GUEST && message.guest?.id === userId) {
-          toast.info("Join request sent", { description: "Waiting for the host to respond." });
-        }
         if (userType === UserType.HOST && message.guest) {
           const added = addJoinRequest({
             roomId: message.roomId,
@@ -665,7 +659,6 @@ export const useSocket = () => {
         }
         if (userType === UserType.HOST) {
           removeJoinRequestFromStore(message.guestUserId);
-          toast.info(message.guestName ? `Declined ${message.guestName}’s request` : "Join request declined", { id: `join-decision-${message.guestUserId}` });
         }
         break;
 
@@ -799,7 +792,6 @@ export const useSocket = () => {
       });
       return;
     }
-    toast.info("Sending your decision…", { id: `join-decision-${guestId}` });
   };
 
   const registerPCEventHandlers = (
@@ -1700,9 +1692,6 @@ export const useSocket = () => {
     }
 
     if (ownerId === userId) {
-      toast.info("File already available", {
-        description: "You already own this file.",
-      });
       return false;
     }
 
@@ -1727,8 +1716,6 @@ export const useSocket = () => {
 
     if (!delivered) {
       clearDownloadProgress(fileIds);
-    } else {
-      toast.info(fileIds.length === 1 ? "Download requested" : "Downloads requested");
     }
 
     return delivered;

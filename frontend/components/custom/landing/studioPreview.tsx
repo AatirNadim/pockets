@@ -331,7 +331,6 @@ export function StudioPreview() {
             type="button"
             onClick={() => {
               setMicActive(!micActive);
-              toast.info(micActive ? "Microphone muted (preview)" : "Microphone unmuted (preview)");
             }}
             title={micActive ? "Mute microphone" : "Unmute microphone"}
             aria-label={micActive ? "Mute microphone" : "Unmute microphone"}
@@ -349,7 +348,6 @@ export function StudioPreview() {
             type="button"
             onClick={() => {
               setCameraActive(!cameraActive);
-              toast.info(cameraActive ? "Camera disabled (preview)" : "Camera enabled (preview)");
             }}
             title={cameraActive ? "Disable camera" : "Enable camera"}
             aria-label={cameraActive ? "Disable camera" : "Enable camera"}
@@ -367,7 +365,6 @@ export function StudioPreview() {
             type="button"
             onClick={() => {
               setScreenSharing(!screenSharing);
-              toast.info(screenSharing ? "Screen sharing stopped in the preview" : "Screen sharing started in the preview");
             }}
             title="Screen share preview"
             aria-label="Screen share preview"
@@ -385,7 +382,6 @@ export function StudioPreview() {
             type="button"
             onClick={() => {
               setShowSettings(!showSettings);
-              toast.info("Audio & camera devices configured dynamically in live room.");
             }}
             title="Device settings preview"
             aria-label="Device settings preview"
@@ -397,7 +393,6 @@ export function StudioPreview() {
           {/* Leave Button */}
           <button
             type="button"
-            onClick={() => toast.info("In a live session, leaving destroys your local WebRTC peer connections.")}
             className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-rose-200/90 bg-rose-50 px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
           >
             <span>Leave</span>

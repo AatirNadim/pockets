@@ -176,13 +176,11 @@ export default function Room() {
 
   const onLeave = useCallback(() => {
     cleanUpRef.current();
-    toast.info("You left the room");
     router.push("/");
   }, [router]);
 
   const onToggleSpeaker = useCallback(() => {
     toggleSpeakerOff();
-    toast.info(useMediaStore.getState().isSpeakerOff ? "Room audio muted" : "Room audio unmuted", { id: "room-speaker" });
   }, [toggleSpeakerOff]);
 
   const handleShortcut = useCallback((key: string) => {

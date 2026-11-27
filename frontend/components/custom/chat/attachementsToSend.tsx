@@ -1,7 +1,6 @@
 import { QueuedFile } from "@/lib/stores/fileStore";
 import { X } from "lucide-react";
 import React from "react";
-import { toast } from "sonner";
 
 type AttachementsProps = {
   filesToBeSent: QueuedFile[];
@@ -31,7 +30,6 @@ const AttachementsToSend = ({
             type="button"
             onClick={() => {
               handleRemoveQueuedFile(entry.id);
-              toast.info(`Removed ${entry.file.name}`);
             }}
             className="rounded-full bg-white/80 p-1.5 text-stone-700 transition hover:bg-white hover:text-stone-900 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600"
             aria-label={`Remove ${entry.file.name}`}

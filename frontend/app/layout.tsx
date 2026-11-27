@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/custom/theme-provider";
-import { siteDescription, siteName, siteUrl } from "@/lib/site";
+import { siteDescription, siteName, siteTitle, siteUrl } from "@/lib/site";
 import { ServiceWorkerRegistration } from "@/components/custom/service-worker-registration";
 
 const sohne = localFont({
@@ -29,11 +29,10 @@ export const metadata: Metadata = {
   applicationName: siteName,
   appleWebApp: { capable: true, title: siteName, statusBarStyle: "default" },
   title: {
-    default: "Pockets — Meet in a pocket studio",
+    default: siteTitle,
     template: "%s | Pockets",
   },
   description: siteDescription,
-  alternates: { canonical: "/" },
   icons: {
     icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }],
     apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
@@ -41,14 +40,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName,
-    title: "Pockets — Meet in a pocket studio",
+    title: siteTitle,
     description: siteDescription,
     url: "/",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pockets — Meet in a pocket studio",
+    title: siteTitle,
     description: siteDescription,
   },
 };

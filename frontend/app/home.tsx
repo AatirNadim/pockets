@@ -65,7 +65,6 @@ export default function Home() {
   const handleGenerateAlias = useCallback(() => {
     const alias = generateRandomUsername();
     setDisplayName(alias);
-    toast.info(`Assigned alias: ${alias}`);
   }, [setDisplayName]);
 
   const handleShortcut = useCallback((key: string) => {
