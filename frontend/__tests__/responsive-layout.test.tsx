@@ -16,6 +16,8 @@ import Home from "../app/home";
 import RemoteVideoGrid from "../app/room/[room]/remoteVideoGrid";
 import MediaControl from "../components/custom/mediaControl";
 import ChatSidebar from "../components/custom/chat/chatSidebar";
+import MessagesContainer from "../components/custom/chat/messagesContainer";
+import { useFileStore } from "../lib/stores/fileStore";
 import { useConnectionStore, type PeerConnectionStatus } from "../lib/stores/connectionStore";
 import { useMediaStore } from "../lib/stores/mediaStore";
 import { useUserStore } from "../lib/stores/userStore";
@@ -156,12 +158,30 @@ describe("Variable Screen Size & Responsive Layout Verification", () => {
       React.createElement(ChatSidebar, {
         sendChatMessage: () => true,
         requestFileDownload: () => true,
+        cancelFileDownloads: () => {},
         requestFileAvailability: async () => null,
         requestFileReupload: () => true,
       })
     );
     assert.match(html, /sm:left-auto sm:right-4/);
     assert.match(html, /max-h-\[calc\(100dvh-9\.5rem-env\(safe-area-inset-top\)-env\(safe-area-inset-bottom\)\)\]/);
+  });
+
+  it("offers individual and group cancellation while files download", () => {
+    const attachments = ["one", "two"].map((id) => ({ id, name: `${id}.txt`, ownerId: "peer", size: 100, type: "text/plain" }));
+    useChatStore.setState({ chatMessages: [{ id: "message", userId: "peer", userName: "Peer", message: "", timestamp: 1, attachments }] });
+    useFileStore.setState({ downloadProgress: { one: { status: "in-progress", receivedBytes: 50, totalBytes: 100, startedAt: 1, lastActivityAt: 1, ownerId: "peer" } } });
+    const html = renderToString(React.createElement(MessagesContainer, {
+      onRequestFile: () => true,
+      onCancelDownloads: () => {},
+      onCheckAvailability: async () => null,
+      onRequestReupload: () => true,
+      onPromptReupload: () => {},
+    }));
+    assert.match(html, /aria-label="Cancel download of one.txt"/);
+    assert.match(html, /Cancel downloads/);
+    assert.match(html, /aria-label="Download two.txt"/);
+    useFileStore.setState({ downloadProgress: {} });
   });
 
   it("scopes LocalVideoTile inside the video stage above MediaControl in room page", () => {

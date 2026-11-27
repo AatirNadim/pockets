@@ -42,6 +42,7 @@ export class FileTransferSession {
   public readonly sessionId: string;
   public readonly remoteUserId: string;
   public readonly ownerId: string;
+  public readonly requestId?: string;
 
   private _status: TransferSessionStatus = "pending";
   private _sentBytes = 0;
@@ -60,7 +61,8 @@ export class FileTransferSession {
     remoteUserId: string,
     files: QueuedFile[],
     ownerId: string,
-    callbacks: TransferSessionCallbacks = {}
+    callbacks: TransferSessionCallbacks = {},
+    requestId?: string
   ) {
     this.sessionId = uuidv4();
     this.pc = pc;
@@ -68,6 +70,7 @@ export class FileTransferSession {
     this.files = files;
     this.ownerId = ownerId;
     this.callbacks = callbacks;
+    this.requestId = requestId;
 
     this._totalBytes = files.reduce((acc, entry) => acc + entry.file.size, 0);
   }
@@ -275,6 +278,7 @@ export class FileTransferSession {
               protocolVersion: 1,
               sessionId: this.sessionId,
               channelLabel: channel.label,
+              requestId: this.requestId,
               fileCount: queue.length,
               totalBytes: queueTotalBytes,
             } as ChannelSetupPayload,

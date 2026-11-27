@@ -23,12 +23,13 @@ const AttachementsToSend = dynamic(() => import("./attachementsToSend"), { ssr: 
 type ChatComponentProps = {
   onSendMessage: (message: string, recipientIds?: string[]) => boolean;
   onRequestFile: (fileIds: string[], ownerId: string) => boolean;
+  onCancelDownloads: (fileIds: string[]) => void;
   onCheckAvailability: (fileIds: string[], ownerId: string) => Promise<AvailabilityResult>;
   onRequestReupload: (fileIds: string[], ownerId: string, names: string[]) => boolean;
   onClose?: () => void;
 };
 
-const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRequestReupload, onClose }: ChatComponentProps) => {
+const ChatComponent = ({ onSendMessage, onRequestFile, onCancelDownloads, onCheckAvailability, onRequestReupload, onClose }: ChatComponentProps) => {
   const { filesToBeSent, downloadProgress, addFiles, removeFile, getLocalFile } = useFileStore();
   const { chatMessages } = useChatStore();
   const { userId } = useUserStore();
@@ -153,7 +154,7 @@ const ChatComponent = ({ onSendMessage, onRequestFile, onCheckAvailability, onRe
     </div>
 
     <div className={activeTab === "chat" ? "flex min-h-0 flex-1 flex-col" : "hidden"} role="tabpanel" aria-label="Chat messages">
-      <MessagesContainer onRequestFile={onRequestFile} onCheckAvailability={onCheckAvailability} onRequestReupload={onRequestReupload} onPromptReupload={promptForReupload} />
+      <MessagesContainer onCancelDownloads={onCancelDownloads} onRequestFile={onRequestFile} onCheckAvailability={onCheckAvailability} onRequestReupload={onRequestReupload} onPromptReupload={promptForReupload} />
       <div className="border-t border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
         {filesToBeSent.length > 0 && <AttachementsToSend filesToBeSent={filesToBeSent} handleRemoveQueuedFile={removeFile} formatBytes={formatBytes} />}
         <details className="group mb-2">

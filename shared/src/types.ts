@@ -207,6 +207,7 @@ export type ChatDataEnvelope =
   | { kind: "chat-message"; payload: ChatMessage }
   | { kind: "file-download-request"; payload: FileDownloadRequest }
   | { kind: "file-download-response"; payload: FileDownloadResponse }
+  | { kind: "file-download-cancel"; payload: FileDownloadRequest }
   | { kind: "system"; payload: ChatSystemNotice };
 
 export type FileMetadataPayload = {
@@ -225,6 +226,7 @@ export type ChannelSetupPayload = {
   protocolVersion: 1;
   sessionId: string;
   channelLabel: string;
+  requestId?: string;
   fileCount: number;
   totalBytes: number;
 };
@@ -268,6 +270,7 @@ export type IncomingTransferState = {
   expectedTotalBytes?: number;
   /** Expected file count for this channel */
   expectedFileCount?: number;
+  requestId?: string;
   remoteUserId?: string;
   /** Whether we received the channel-setup signal */
   setupReceived?: boolean;

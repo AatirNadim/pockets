@@ -23,8 +23,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(v
 
 export const useFile = ({
   peerConnections,
+  isRequestActive,
 }: {
   peerConnections: React.RefObject<Record<string, RTCPeerConnection | null>>;
+  isRequestActive?: (requestId: string) => boolean;
   dataChannelMap: React.RefObject<Record<string, RTCDataChannel | null>>;
 }) => {
   const {
@@ -44,6 +46,9 @@ export const useFile = ({
     {}
   );
 
+  const activeCancelHandlers = useRef(new Map<string, () => void>());
+  const cancelIncomingFile = (requestId: string) => activeCancelHandlers.current.get(requestId)?.();
+
   const cancelIncomingTransfers = (remoteUserId?: string) => {
     for (const [channelLabel, transfer] of Object.entries(incomingTransfersRef.current)) {
       if (remoteUserId && transfer.remoteUserId !== remoteUserId) continue;
@@ -55,6 +60,7 @@ export const useFile = ({
         clearDownloadProgress([fileId]);
         clearDownloadDestination(fileId);
       }
+      if (transfer.requestId) activeCancelHandlers.current.delete(transfer.requestId);
       delete incomingTransfersRef.current[channelLabel];
     }
   };
@@ -114,7 +120,7 @@ export const useFile = ({
    * Sends specific files to a specific user (for file download requests).
    * Creates an isolated FileTransferSession for this transfer.
    */
-  const sendFilesToUser = async (remoteUserId: string, fileIds: string[]) => {
+  const sendFilesToUser = async (remoteUserId: string, fileIds: string[], requestId?: string) => {
     if (!ownerId) {
       toast.error("Cannot send files", {
         description: "User identity missing. Please rejoin the room.",
@@ -170,11 +176,12 @@ export const useFile = ({
       for (const currentBatch of batches) {
         const validationError = validateFileBatch(currentBatch.map((entry) => entry.file));
         if (validationError) throw new Error(validationError);
-        await createAndStartSession(pc, remoteUserId, currentBatch, ownerId);
+        await createAndStartSession(pc, remoteUserId, currentBatch, ownerId, requestId);
       }
       if (peerConnections.current[remoteUserId] === pc) toast.success("File transfer complete");
       return true;
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return false;
       console.error("Targeted file send failed", error);
       if (peerConnections.current[remoteUserId] === pc) {
         toast.error("File transfer failed", { description: "Could not send all requested files." });
@@ -191,7 +198,8 @@ export const useFile = ({
     pc: RTCPeerConnection,
     remoteUserId: string,
     files: QueuedFile[],
-    ownerIdValue: string
+    ownerIdValue: string,
+    requestId?: string
   ): Promise<void> => {
     const validationError = validateFileBatch(files.map((entry) => entry.file));
     if (validationError) throw new Error(validationError);
@@ -234,7 +242,8 @@ export const useFile = ({
           endUploadSession(session.sessionId);
           uploadSessionRegistry.remove(session.sessionId);
         },
-      }
+      },
+      requestId
     );
 
     // Register session in store and registry
@@ -251,7 +260,12 @@ export const useFile = ({
 
     // Start the session (blocks until complete or error)
     console.log("Starting file transfer session:", session.sessionId);
-    await session.start();
+    try {
+      await session.start();
+    } catch (error) {
+      if (session.status === "cancelled") throw new DOMException("Transfer cancelled", "AbortError");
+      throw error;
+    }
   };
 
   const registerIncomingTransferChannel = (
@@ -281,6 +295,7 @@ export const useFile = ({
 
     // Set up a stale transfer timeout - if we don't receive a complete signal
     // within STALE_TRANSFER_TIMEOUT_MS, we'll check if the transfer is complete
+    let cancelled = false;
     const refreshStaleTimeout = () => {
       const current = incomingTransfersRef.current[channel.label];
       if (!current) return;
@@ -320,7 +335,7 @@ export const useFile = ({
     let receiveQueue = Promise.resolve();
     const receiveMessage = async (event: MessageEvent) => {
       const transfer = incomingTransfersRef.current[channel.label];
-      if (!transfer) return;
+      if (!transfer || cancelled) return;
 
       // Handle JSON envelopes (metadata or complete signal)
       if (typeof event.data === "string") {
@@ -344,6 +359,30 @@ export const useFile = ({
               return;
             }
 
+            if (payload.requestId && isRequestActive && !isRequestActive(payload.requestId)) {
+              channel.close();
+              return;
+            }
+            transfer.requestId = payload.requestId;
+            if (payload.requestId) {
+              const requestId = payload.requestId;
+              activeCancelHandlers.current.set(requestId, () => {
+                cancelled = true;
+                void receiveQueue.then(async () => {
+                  const current = incomingTransfersRef.current[channel.label];
+                  if (!current) return;
+                  if (current.timeoutId) clearTimeout(current.timeoutId as number);
+                  const file = current.currentFile;
+                  if (file?.writable) {
+                    try { await (file.writable as { close: () => Promise<void> }).close(); }
+                    catch (error) { toast.error("Could not keep partial file", { description: describeSaveError(error) }); }
+                  }
+                  delete incomingTransfersRef.current[channel.label];
+                  activeCancelHandlers.current.delete(requestId);
+                  channel.close();
+                });
+              });
+            }
             transfer.setupReceived = true;
             transfer.expectedTotalBytes = payload.totalBytes;
             transfer.expectedFileCount = payload.fileCount;
@@ -449,6 +488,7 @@ export const useFile = ({
           });
         }
       }
+      if (cancelled) return;
       transfer.currentFile.receivedBytes += chunkBuffer.byteLength;
       transfer.totalReceivedBytes += chunkBuffer.byteLength;
       channel.send(JSON.stringify({ kind: "chunk-ack", payload: { offset: transfer.currentFile.receivedBytes } }));
@@ -510,6 +550,7 @@ export const useFile = ({
         if (!current.failed && current.expectedFileCount !== undefined && (current.receivedFileCount !== current.expectedFileCount || current.totalReceivedBytes !== current.expectedTotalBytes || current.declaredBytes !== current.expectedTotalBytes)) {
           toast.error("Download interrupted", { description: "The transfer ended before all files arrived." });
         }
+        if (current.requestId) activeCancelHandlers.current.delete(current.requestId);
         delete incomingTransfersRef.current[channel.label];
       };
       void finishClose().catch((error) => console.error(`[${channel.label}] Close cleanup failed`, error));
@@ -580,5 +621,6 @@ export const useFile = ({
     sendFilesToUser,
     registerIncomingTransferChannel,
     cancelIncomingTransfers,
+    cancelIncomingFile,
   };
 };
