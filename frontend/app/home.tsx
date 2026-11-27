@@ -30,7 +30,7 @@ import {
 
 export default function Home() {
   const router = useRouter();
-  const { roomId, setRoomId, initializeUserAsGuest, initializeUserAsHost } = useUserStore();
+  const { roomId, setRoomId, clearUser, initializeUserAsGuest, initializeUserAsHost } = useUserStore();
   const { isMicrophoneMuted, isVideoOff, setMicrophoneMuted, setIsVideoOff } = useMediaStore();
   const [displayName, setDisplayName] = useState("");
   const [activeTab, setActiveTab] = useState<"create" | "join">("create");
@@ -57,9 +57,10 @@ export default function Home() {
       return;
     }
     setBusy(true);
-    initializeUserAsGuest(displayName.trim());
+    if (displayName.trim()) initializeUserAsGuest(displayName.trim());
+    else clearUser();
     router.push(`/room/${id}`);
-  }, [displayName, initializeUserAsGuest, roomId, router]);
+  }, [clearUser, displayName, initializeUserAsGuest, roomId, router]);
 
   const handleGenerateAlias = useCallback(() => {
     const alias = generateRandomUsername();
@@ -320,7 +321,7 @@ export default function Home() {
                   />
                 </div>
                 <p id="display-name-help" className="mt-2 text-xs text-stone-600 dark:text-stone-400">
-                  Seen by peers in the room. If empty, a friendly alias is assigned automatically.
+                  {activeTab === "create" ? "Seen by peers in the room. If empty, a friendly alias is assigned automatically." : "Seen by the host when you ask to join. You can also enter it on the next screen."}
                 </p>
               </div>
 
