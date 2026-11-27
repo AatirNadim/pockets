@@ -23,8 +23,9 @@ const RemoteVideoGrid = ({ status, isConnected }: { status: string; isConnected:
   const peers = useConnectionStore((state) => state.peers);
   const { userType, remoteUsers } = useUserStore();
   const entries = Object.entries(mediaStreams);
-  const waitingPeers = Object.entries(peers).filter(([id]) => !mediaStreams[id]);
-  const tileCount = entries.length + waitingPeers.length;
+  const mediaOnlyPeers = Object.entries(peers).filter(([id]) => !mediaStreams[id] && remoteTrackState[id]?.audioEnabled === false && remoteTrackState[id]?.videoEnabled === false);
+  const waitingPeers = Object.entries(peers).filter(([id]) => !mediaStreams[id] && !mediaOnlyPeers.some(([peerId]) => peerId === id));
+  const tileCount = entries.length + mediaOnlyPeers.length + waitingPeers.length;
   const gridColumnsClass =
     tileCount <= 1
       ? "grid-cols-1"
@@ -55,6 +56,9 @@ const RemoteVideoGrid = ({ status, isConnected }: { status: string; isConnected:
                 />
               );
             })}
+            {mediaOnlyPeers.map(([remoteId, peer]) => (
+              <RemoteVideoTile key={remoteId} stream={null} userId={remoteId} userName={peer.userName} isHost={peer.userType === UserType.HOST} videoEnabled={false} audioEnabled={false} connectionPhase={peer.phase} connectionIssue={peer.issue} />
+            ))}
             {waitingPeers.map(([remoteId, peer]) => {
               const failed = peer.phase === "failed";
               const reconnecting = peer.phase === "reconnecting";

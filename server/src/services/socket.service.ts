@@ -12,6 +12,7 @@ import {
   type JoinRequestMessage,
   type JoinRoomMessage,
   type LeaveRoomMessage,
+  type MediaStateMessage,
   type OfferMessage,
   type RoomFullMessage,
   type User,
@@ -32,8 +33,10 @@ type Session = {
   state: "pending" | "active";
   generation: number;
   closing: boolean;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
 };
-type ClientMessage = JoinRoomMessage | LeaveRoomMessage | OfferMessage | AnswerMessage | IceCandidateMessage | JoinRequestDecisionMessage | AudioMuteMessage | AudioUnmuteMessage;
+type ClientMessage = JoinRoomMessage | LeaveRoomMessage | OfferMessage | AnswerMessage | IceCandidateMessage | JoinRequestDecisionMessage | AudioMuteMessage | AudioUnmuteMessage | MediaStateMessage;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -47,7 +50,11 @@ function validateClientMessage(input: unknown): ClientMessage {
   switch (input.type) {
     case "join-room":
       if (!room() || !identity() || !boundedString(input.userName, 80) || !isUserType(input.userType)) throw new Error("Invalid join request");
+      if ((input.audioEnabled !== undefined && typeof input.audioEnabled !== "boolean") || (input.videoEnabled !== undefined && typeof input.videoEnabled !== "boolean")) throw new Error("Invalid media state");
       return input as unknown as JoinRoomMessage;
+    case "media-state":
+      if (!room() || !identity() || typeof input.audioEnabled !== "boolean" || typeof input.videoEnabled !== "boolean") throw new Error("Invalid media state");
+      return input as unknown as MediaStateMessage;
     case "leave-room":
     case "audio-mute":
     case "audio-unmute":
@@ -146,8 +153,14 @@ export class SocketService {
         case "join-request-rejected":
           await this.decideAdmission(session, message);
           break;
+        case "media-state":
+          session.audioEnabled = message.audioEnabled;
+          session.videoEnabled = message.videoEnabled;
+          await this.broadcast(session.roomId, message, session.userId);
+          break;
         case "audio-mute":
         case "audio-unmute":
+          session.audioEnabled = message.type === "audio-unmute";
           await this.broadcast(session.roomId, { type: message.type, roomId: session.roomId, userId: session.userId });
           break;
         default:
@@ -183,7 +196,7 @@ export class SocketService {
         await this.userService.deleteUser(user.id);
         throw error;
       }
-      this.attachSession(socket, user, message.roomId, "active");
+      this.attachSession(socket, user, message.roomId, "active", message);
       this.send(socket, { type: "room-roster", roomId: message.roomId, users: [] });
       return;
     }
@@ -203,7 +216,7 @@ export class SocketService {
       else this.sendError(socket, admission === "duplicate" ? "This participant is already in the room." : "This room is no longer available.");
       return;
     }
-    this.attachSession(socket, user, message.roomId, "pending");
+    this.attachSession(socket, user, message.roomId, "pending", message);
     const request: JoinRequestMessage = { type: "join-request", roomId: message.roomId, guest: user };
     this.send(host.socket, request);
     this.send(socket, request);
@@ -212,8 +225,8 @@ export class SocketService {
     }
   }
 
-  private attachSession(socket: WebSocket, user: User, roomId: string, state: Session["state"]) {
-    const session: Session = { socket, userId: user.id, roomId, userName: user.name, userType: user.type, state, generation: ++this.generation, closing: false };
+  private attachSession(socket: WebSocket, user: User, roomId: string, state: Session["state"], media: JoinRoomMessage) {
+    const session: Session = { socket, userId: user.id, roomId, userName: user.name, userType: user.type, state, audioEnabled: media.audioEnabled ?? true, videoEnabled: media.videoEnabled ?? true, generation: ++this.generation, closing: false };
     this.sessions.set(socket, session);
     this.sessionByUser.set(user.id, session);
   }
@@ -260,9 +273,9 @@ export class SocketService {
     this.send(guest.socket, { type: "join-request-accepted", roomId: host.roomId, hostUserId: host.userId, guestUserId: guest.userId, hostName: host.userName, guestName: guest.userName } satisfies JoinRequestDecisionMessage);
     const roster = [...this.sessionByUser.values()]
       .filter((session) => session.roomId === host.roomId && session.state === "active" && session !== guest)
-      .map((session) => ({ id: session.userId, name: session.userName, type: session.userType }));
+      .map((session) => ({ id: session.userId, name: session.userName, type: session.userType, audioEnabled: session.audioEnabled, videoEnabled: session.videoEnabled }));
     this.send(guest.socket, { type: "room-roster", roomId: host.roomId, users: roster });
-    const joined: UserJoinedMessage = { type: "user-joined", roomId: host.roomId, userId: guest.userId, userName: guest.userName, userType: guest.userType };
+    const joined: UserJoinedMessage = { type: "user-joined", roomId: host.roomId, userId: guest.userId, userName: guest.userName, userType: guest.userType, audioEnabled: guest.audioEnabled, videoEnabled: guest.videoEnabled };
     this.send(host.socket, { ...message, hostUserId: host.userId, guestName: guest.userName });
     await this.broadcast(host.roomId, joined, guest.userId);
   }

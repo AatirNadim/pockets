@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { PeerConnectionStatus } from "@/lib/stores/connectionStore";
 
 type RemoteVideoTileProps = {
-  stream: MediaStream;
+  stream: MediaStream | null;
   userName?: string;
   userId: string;
   videoEnabled: boolean;

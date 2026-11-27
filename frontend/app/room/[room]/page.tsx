@@ -194,9 +194,9 @@ export default function Room() {
   }, [toggleSpeakerOff]);
 
   const handleShortcut = useCallback((key: string) => {
-    if (key === "m" && availableMicrophones.length) {
+    if (key === "m") {
       void updateAudioSendStateForPeers(!isMicrophoneMuted);
-    } else if (key === "v" && availableCameras.length) {
+    } else if (key === "v") {
       void updateVideoSendStateForPeers(!isVideoOff);
     } else if (key === "s") {
       onToggleSpeaker();
@@ -207,7 +207,7 @@ export default function Room() {
     } else if (key === "l") {
       setLeaveDialogOpen(true);
     }
-  }, [availableCameras.length, availableMicrophones.length, isMicrophoneMuted, isVideoOff, toggleShowChat, onToggleSpeaker, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
+  }, [isMicrophoneMuted, isVideoOff, toggleShowChat, onToggleSpeaker, updateAudioSendStateForPeers, updateVideoSendStateForPeers]);
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">

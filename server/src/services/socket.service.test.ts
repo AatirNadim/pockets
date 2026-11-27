@@ -94,3 +94,26 @@ test("atomically caps pending guests and removes sessions on disconnect", async 
   await service.shutdown();
   assert.equal(await persistence.getRoomById(roomId), null);
 });
+
+test("shares initial and updated media state with admitted peers and later arrivals", async () => {
+  const service = new SocketService(new InMemoryPersistenceClient());
+  const roomId = id(100);
+  const host = new FakeSocket();
+  const guest = new FakeSocket();
+  const later = new FakeSocket();
+  await service.handleMessage(host as unknown as WebSocket, { ...join(roomId, id(101), UserType.HOST), audioEnabled: false, videoEnabled: false });
+  await service.handleMessage(guest as unknown as WebSocket, { ...join(roomId, id(102), UserType.GUEST), audioEnabled: false, videoEnabled: false });
+  await service.handleMessage(host as unknown as WebSocket, { type: "join-request-accepted", roomId, hostUserId: id(101), guestUserId: id(102) });
+  assert.deepEqual(host.take("user-joined").at(-1), { type: "user-joined", roomId, userId: id(102), userName: "Guest", userType: UserType.GUEST, audioEnabled: false, videoEnabled: false });
+  const roster = guest.take("room-roster")[0] as { users: Array<{ audioEnabled: boolean; videoEnabled: boolean }> };
+  assert.equal(roster.users[0].audioEnabled, false);
+  assert.equal(roster.users[0].videoEnabled, false);
+  const update = { type: "media-state", roomId, userId: id(102), audioEnabled: true, videoEnabled: false };
+  await service.handleMessage(guest as unknown as WebSocket, update);
+  assert.deepEqual(host.take("media-state").at(-1), update);
+  await service.handleMessage(later as unknown as WebSocket, join(roomId, id(103), UserType.GUEST));
+  await service.handleMessage(host as unknown as WebSocket, { type: "join-request-accepted", roomId, hostUserId: id(101), guestUserId: id(103) });
+  const laterRoster = later.take("room-roster")[0] as { users: Array<{ id: string; audioEnabled: boolean; videoEnabled: boolean }> };
+  assert.deepEqual(laterRoster.users.find((user) => user.id === id(102)), { id: id(102), name: "Guest", type: UserType.GUEST, audioEnabled: true, videoEnabled: false });
+  await service.shutdown();
+});

@@ -4,6 +4,8 @@ export type User = {
   id: string;
   name: string;
   type: UserType;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
 };
 
 export type Room = {
@@ -40,7 +42,8 @@ export type WebSocketMessage =
   | HostClosedRoomMessage
   | RoomFullMessage
   | AudioMuteMessage
-  | AudioUnmuteMessage;
+  | AudioUnmuteMessage
+  | MediaStateMessage;
 
 export type JoinRoomMessage = {
   type: "join-room";
@@ -48,6 +51,16 @@ export type JoinRoomMessage = {
   userId: string;
   userName: string;
   userType: UserType;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
+};
+
+export type MediaStateMessage = {
+  type: "media-state";
+  roomId: string;
+  userId: string;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
 };
 
 export type LeaveRoomMessage = {
@@ -105,6 +118,8 @@ export type UserJoinedMessage = {
   userId: string;
   userName: string;
   userType: UserType;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
 };
 
 /** Current active peers sent only to a guest after host approval. */

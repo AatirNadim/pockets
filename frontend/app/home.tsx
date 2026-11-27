@@ -4,14 +4,16 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuidV4 } from "uuid";
-import { ArrowRight, Check, Dices, Link2, Menu, Sparkles, Users, Video } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Dices, Link2, Menu, Mic, MicOff, Sparkles, Users, Video, VideoOff } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useMediaStore } from "@/lib/stores/mediaStore";
 import { useUserStore, generateRandomUsername } from "@/lib/stores/userStore";
 import { isValidUUID } from "@/lib/utils";
 import { ThemeToggle } from "@/components/custom/themeToggle";
@@ -29,6 +31,7 @@ import {
 export default function Home() {
   const router = useRouter();
   const { roomId, setRoomId, initializeUserAsGuest, initializeUserAsHost } = useUserStore();
+  const { isMicrophoneMuted, isVideoOff, setMicrophoneMuted, setIsVideoOff } = useMediaStore();
   const [displayName, setDisplayName] = useState("");
   const [activeTab, setActiveTab] = useState<"create" | "join">("create");
   const [busy, setBusy] = useState(false);
@@ -339,14 +342,40 @@ export default function Home() {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={activeTab === "create" ? createRoom : joinRoom}
-                disabled={busy}
-                className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 font-semibold text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300 dark:focus-visible:ring-amber-400"
-              >
-                {busy ? "Opening room…" : activeTab === "create" ? <>Create room <ArrowRight size={18} /></> : <>Request to join <Users size={18} /></>}
-              </button>
+              <div className="mt-6 flex w-full">
+                <button
+                  type="button"
+                  onClick={activeTab === "create" ? createRoom : joinRoom}
+                  disabled={busy}
+                  className="flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-l-xl bg-amber-700 px-4 font-semibold text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300 dark:focus-visible:ring-amber-400"
+                >
+                  {busy ? "Opening room…" : activeTab === "create" ? <>Create room <ArrowRight size={18} /></> : <>Request to join <Users size={18} /></>}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label="Choose microphone and camera settings"
+                      className="flex min-h-12 min-w-12 items-center justify-center rounded-r-xl border-l border-white/25 bg-amber-700 px-3 text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-70 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:border-stone-950/20 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300 dark:focus-visible:ring-amber-400"
+                    >
+                      <ChevronDown size={18} aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" sideOffset={8} className="w-64 rounded-2xl border-stone-200 bg-white p-2 text-stone-900 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+                    <p className="px-3 pb-1 pt-2 text-xs font-semibold text-stone-600 dark:text-stone-400">Join with</p>
+                    <DropdownMenuCheckboxItem checked={!isMicrophoneMuted} onCheckedChange={(checked) => setMicrophoneMuted(!checked)} onSelect={(event) => event.preventDefault()} className="min-h-11 rounded-xl pr-3">
+                      {isMicrophoneMuted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+                      Microphone {isMicrophoneMuted ? "off" : "on"}
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={!isVideoOff} onCheckedChange={(checked) => setIsVideoOff(!checked)} onSelect={(event) => event.preventDefault()} className="min-h-11 rounded-xl pr-3">
+                      {isVideoOff ? <VideoOff aria-hidden="true" /> : <Video aria-hidden="true" />}
+                      Camera {isVideoOff ? "off" : "on"}
+                    </DropdownMenuCheckboxItem>
+                    <p className="px-3 pb-2 pt-1 text-xs leading-5 text-stone-600 dark:text-stone-400">You can change these inside the room.</p>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               <p className="mt-4 text-center text-xs leading-5 text-stone-600 dark:text-stone-400">Room entry and peer connections depend on network availability. File downloads are requested by each recipient.</p>
             </section>
           </div>
