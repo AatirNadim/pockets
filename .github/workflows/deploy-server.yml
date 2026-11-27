@@ -28,7 +28,6 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '[
-              {"key": "NODE_ENV", "value": "production"},
               {"key": "PORT", "value": "10000"},
               {"key": "REDIS_URL", "value": "${{ secrets.REDIS_URL }}"},
               {"key": "ROOM_TTL_SECONDS", "value": "${{ vars.ROOM_TTL_SECONDS }}"}
