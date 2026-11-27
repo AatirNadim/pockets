@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/custom/theme-provider";
 import { siteDescription, siteName, siteUrl } from "@/lib/site";
+import { ServiceWorkerRegistration } from "@/components/custom/service-worker-registration";
 
 const sohne = localFont({
   src: [
@@ -20,11 +21,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#A10054",
 };
 
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   applicationName: siteName,
+  appleWebApp: { capable: true, title: siteName, statusBarStyle: "default" },
   title: {
     default: "Pockets — Meet in a pocket studio",
     template: "%s | Pockets",
@@ -60,6 +63,7 @@ export default function RootLayout({
       <body
         className={`${sohne.variable} antialiased`}
       >
+        <ServiceWorkerRegistration />
         <ThemeProvider>
           {children}
           <Toaster
